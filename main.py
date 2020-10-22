@@ -5,19 +5,21 @@ from flask import Flask, escape, request
 import processing
 
 #need to import all the packages here in the main file because of dill-ed ipython model
-import tensorflow as tf
-import tensorflow.keras as keras
+#import tensorflow as tf
+#import tensorflow.keras as keras
+
+import torch, torchvision
 
 import numpy as np
 arange = np.arange
-import skimage.io as skio
-import skimage.draw as skdraw
-import skimage.transform as sktransform
-import skimage.measure as skmeasure
-import skimage.morphology as skmorph
-import sklearn.svm as sksvm
-import sklearn.model_selection as skms
-import sklearn.utils as skutils
+#import skimage.io as skio
+#import skimage.draw as skdraw
+#import skimage.transform as sktransform
+#import skimage.measure as skmeasure
+#import skimage.morphology as skmorph
+#import sklearn.svm as sksvm
+#import sklearn.model_selection as skms
+#import sklearn.utils as skutils
 
 import PIL
 PIL.Image.MAX_IMAGE_PIXELS = None #Needed to open large images
@@ -64,7 +66,7 @@ def process_image(imgname):
     image        = processing.load_image(fullpath)
     result       = processing.process_image(image, processing.progress_callback_for_image(imgname))
 
-    processing.write_as_png(os.path.join(TEMPFOLDER.name, 'segmented_'+imgname+'.png'), result)
+    processing.write_image(os.path.join(TEMPFOLDER.name, 'segmented_'+imgname+'.png'), result)
     return flask.jsonify({'labels':[]})
 
 @app.route('/processing_progress/<imgname>')
@@ -88,7 +90,7 @@ def custom_patch(imgname):
     fullpath = os.path.join(TEMPFOLDER.name, imgname)
     image    = processing.load_image(fullpath)
     patch    = processing.extract_patch(image, (y,x))
-    processing.write_as_jpeg(os.path.join(TEMPFOLDER.name, 'patch_%i_%s'%(index,imgname)), patch)
+    processing.write_image(os.path.join(TEMPFOLDER.name, f'patch_{index}_{imgname}.jpeg'), patch)
     return 'OK'
 
 @app.route('/settings', methods=['GET', 'POST'])
@@ -98,6 +100,9 @@ def settings():
         return 'OK'
     elif request.method=='GET':
         return flask.jsonify(processing.get_settings())
+
+
+
 
 
 is_debug = sys.argv[0].endswith('.py')
