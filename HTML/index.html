@@ -8,11 +8,12 @@
   <script src="http://ajax.microsoft.com/ajax/jquery.templates/beta1/jquery.tmpl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.js"></script>
   <script src="/static/script.js"></script>
+  <script src="/static/settings.js"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
 
-  <script src="/static/magnifier.js"></script>
-  <link rel="stylesheet" href="/static/styles.css">
+  
+  
 
 
   <script id="filetable-item-template" type="text/x-jQuery-tmpl">
@@ -32,7 +33,7 @@
           <img class="ui image"       src="/images/${filename}"
                id="image_${filename}">
           <div class="ui image">
-            <div class="ui dimmer" id='dimmer_${filename}'>
+            <div class="ui dimmer">
                   <div class="content">
                     <div class="ui primary button" filename="${filename}"
                           onclick='on_process_image(event)'>
@@ -40,7 +41,11 @@
                     </div>
                   </div>
             </div>
-            <img src="/images/${filename}" id="segmented_${filename}">
+            <img src="/images/${filename}" class="segmented">
+            <div class="ui top right attached label icon" style="border-top-right-radius: 0;">
+              <i class="zoom-in icon" style="cursor:pointer; display:none;" onclick="on_zoom_button(event)" title="Zoom"></i>
+              <i class="play link blue icon process-single-image" onclick="on_process_image(event)"  title="Process Image"></i>
+            </div>
           </div>
       </div>
 
