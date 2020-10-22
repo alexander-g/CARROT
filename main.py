@@ -1,4 +1,7 @@
 import webbrowser, os, tempfile, io, sys
+os.environ['PYTORCH_JIT']='0' #needed for packaging
+
+
 import flask
 from flask import Flask, escape, request
 
