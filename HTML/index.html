@@ -10,6 +10,7 @@
   <script src="/static/script.js"></script>
   <script src="/static/settings.js"></script>
   <script src="/static/util.js"></script>
+  <script src="/static/download.js"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
 
@@ -109,47 +110,63 @@
 
 
 <body onload="init()">
-<div class="ui container segment" style="margin-top:5px">
 
-  <div>
-     <label for="input_images" class="ui icon button">
-        <i class="images icon"></i>
-        Select Input Images
-     </label>
-     <input type="file" id="input_images" style="display:none"
-           onchange="on_inputfiles_select(event)" accept="image/*" multiple>
+<div class="ui container menu">
 
-     <label for="input_folder" class="ui icon button">
-        <i class="folder icon"></i>
-        Select Input Folder
-     </label>
-     <input type="file" id="input_folder" style="display:none"
-           onchange="on_inputfolder_select(this)"  webkitdirectory directory multiple>
+    <div class="ui simple dropdown item">
+      <span class="text">Files</span>
+      <i class="dropdown icon"></i>
+      <div class="ui menu">
+        <label for="input_images" class="ui icon item">
+          <i class="images outline icon"></i>
+          Select Input Images
+        </label>
+        <input type="file" id="input_images" style="display:none"
+              onchange="on_inputfiles_select(event)" accept="image/*" multiple>
+        
+        <label for="input_folder" class="ui icon item">
+          <i class="folder outline icon"></i>
+          Select Input Folder
+        </label>
+        <input type="file" id="input_folder" style="display:none"
+              onchange="on_inputfolder_select(this)"  webkitdirectory directory multiple>
+        
+      </div>
+    </div>
 
-     <label class="ui primary button" onclick="process_all()" id="process-all-button">
-         <i class="play icon"></i>
-         Process All Images
-     </label>
-     <label class="ui red button" onclick="cancel_processing()" id="cancel-processing-button" style="display: none;">
-         <i class="x icon"></i>
-         Cancel
-     </label>
+    <div class="item">
+    <div class="buttons">
+    <label class="ui primary button" onclick="process_all()" id="process-all-button">
+        <i class="play icon"></i>
+        Process All Images
+    </label>
+    <label class="ui violet button" onclick="on_retrain()" id="retrain-button" style="display:none;">
+      <i class="redo alternate icon"></i>
+      Retrain
+    </label>
+    <label class="ui red button" onclick="on_cancel()" id="cancel-button" style="display:none;">
+        <i class="x icon"></i>
+        Cancel
+    </label>
+    </div>
+    </div>
+    
 
-     <label class="ui icon button right floated column" onclick="on_settings()"
-            id="settings-button" data-tooltip="Settings" data-position="bottom center">
-         <i class="wrench icon"></i>
-     </label>
-
-     <!--<label class="ui icon button right floated column" onclick="on_metadata()"
-            id="metadata-button" data-tooltip="Metadata" data-position="bottom center">
-         <i class="list icon"></i>
-     </label>
-
-     <label class="ui icon button right floated column" onclick="on_download_csv()"
-            id="download-csv-button" data-tooltip="Download CSV" data-position="bottom center">
-         <i class="download icon"></i>
-     </label>-->
-  </div>
+    <div class="ui secondary right menu">
+      <div class="item">
+        <div class="ui buttons">
+        <label class="ui button" onclick="on_download_processed()"
+              id="download-processed-button" data-tooltip="Download Processed Files" 
+              data-position="bottom right">
+          <i class="download icon"></i>
+        </label>
+        <label class="ui button" onclick="on_settings()"
+              id="settings-button" data-tooltip="Settings" data-position="bottom center">
+          <i class="wrench icon"></i>
+        </label>
+        </div>
+      </div>
+    </div>
 </div>
 
 
