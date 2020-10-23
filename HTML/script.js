@@ -87,12 +87,24 @@ function upload_file(file){
 //sets the global.input_files[x].processed variable and updates icons accordingly
 function set_processed(filename, value){
   var $content_element = $(`[filename="${filename}"]`)
-  if(!!value)
+  var $tablerow = $(`.ui.title[filename="${filename}"]`);
+  //var $icon     = $tablerow.find('.image.icon');
+  var $label    = $tablerow.find('label');
+
+  //remove the <b> tag around the label if needed
+  if($label.parent().prop('tagName') == 'B')
+    $label.unwrap();
+
+  if(!!value){
     $content_element.find('.dimmer').dimmer('hide');
-  else
+    $label.wrap($('<b>'));
+  }
+  else{
     $content_element.find('.dimmer').dimmer('show');
+  }
   global.input_files[filename].processed = !!value;
 }
+
 
 function process_file(filename){
   var $process_button = $(`.ui.primary.button[filename="${filename}"]`);

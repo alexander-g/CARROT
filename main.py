@@ -7,9 +7,6 @@ from flask import Flask, escape, request
 
 import processing
 
-#need to import all the packages here in the main file because of dill-ed ipython model
-#import tensorflow as tf
-#import tensorflow.keras as keras
 
 import torch, torchvision
 

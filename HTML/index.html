@@ -20,7 +20,14 @@
 
   <script id="filetable-item-template" type="text/x-jQuery-tmpl">
     <tr class="ui title" filename="${filename}">
-      <td> <i class="dropdown icon"></i>${filename}</td>
+      <td> 
+        <i class="dropdown icon"></i>
+        <i class="icons"  style="font-style: normal;">
+          <i class="image outline icon" title="File not yet processed"></i>
+          <i class="top left corner red add icon has-mask-indicator" style="display:none"></i>
+          <label>${filename}</label>
+        </i>
+      </td>
     </tr>
     <tr style="display:none">
       <td colspan="5" class="ui content" style="padding-bottom:21px" filename="${filename}">
