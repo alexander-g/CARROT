@@ -87,12 +87,13 @@ def maybe_compare_to_groundtruth(input_image_path):
     dirname   = os.path.dirname(input_image_path)
     gt_masks  = glob.glob(os.path.join(dirname, 'GT_'+basename))
     processed = glob.glob(os.path.join(dirname, 'segmented_'+basename+'*.png'))
+
     if len(gt_masks)==1:
         mask   = np.array(PIL.Image.open(gt_masks[0]))[...,-1]
         write_image(os.path.join(dirname,'GT_'+basename+'.png'), mask)
         if len(processed)==1:
             print(f'Comparing result of {input_image_path} with {gt_masks[0]}')
             processed = np.array(PIL.Image.open(processed[0]).convert('L'))
-            print('>>>>>>>>>>',mask.shape, processed.shape)
             vismap    = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed)
+            write_image(os.path.join(dirname, f'vismap_{basename}.png'), vismap)
             return vismap

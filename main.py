@@ -72,8 +72,6 @@ def process_image(imgname):
     processing.write_image(os.path.join(TEMPFOLDER.name, 'segmented_'+imgname+'.png'), result)
     
     vismap   = processing.maybe_compare_to_groundtruth(fullpath)
-    if vismap is not None:
-        processing.write_image(os.path.join(TEMPFOLDER.name, f'vismap_{imgname}.png'), vismap)
     return flask.jsonify({'labels':[]})
 
 @app.route('/processing_progress/<imgname>')
@@ -100,7 +98,8 @@ def settings():
 
 @app.route('/maybecompare/<imgname>')
 def maybecompare(imgname):
-    processing.maybe_compare_to_groundtruth(imgname)
+    fullpath     = os.path.join(TEMPFOLDER.name, imgname)
+    processing.maybe_compare_to_groundtruth(fullpath)
     return 'OK'
 
 
