@@ -19,3 +19,7 @@ function upload_file_to_flask(url, file){
         enctype: 'multipart/form-data'
     });
 }
+
+function rename_file(file, newname){
+    return new File([file], newname, {type: file.type});
+}

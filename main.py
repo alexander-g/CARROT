@@ -71,7 +71,7 @@ def process_image(imgname):
     result       = processing.process_image(image, processing.progress_callback_for_image(imgname))
     processing.write_image(os.path.join(TEMPFOLDER.name, 'segmented_'+imgname+'.png'), result)
     
-    vismap   = processing.maybe_compare_to_groundtruth(result, fullpath)
+    vismap   = processing.maybe_compare_to_groundtruth(fullpath)
     if vismap is not None:
         processing.write_image(os.path.join(TEMPFOLDER.name, f'vismap_{imgname}.png'), vismap)
     return flask.jsonify({'labels':[]})
@@ -89,17 +89,6 @@ def delete_image(imgname):
         os.remove(fullpath)
     return 'OK'
 
-@app.route('/custom_patch/<imgname>')
-def custom_patch(imgname):
-    y,x      = float(request.args.get('y')), float(request.args.get('x'))
-    index    = int(request.args.get('index'))
-    print('CUSTOM PATCH: %s @yx=%.3f,%.3f'%(imgname, y,x))
-    fullpath = os.path.join(TEMPFOLDER.name, imgname)
-    image    = processing.load_image(fullpath)
-    patch    = processing.extract_patch(image, (y,x))
-    processing.write_image(os.path.join(TEMPFOLDER.name, f'patch_{index}_{imgname}.jpeg'), patch)
-    return 'OK'
-
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
     if request.method=='POST':
@@ -109,6 +98,10 @@ def settings():
         return flask.jsonify(processing.get_settings())
 
 
+@app.route('/maybecompare/<imgname>')
+def maybecompare(imgname):
+    processing.maybe_compare_to_groundtruth(imgname)
+    return 'OK'
 
 
 

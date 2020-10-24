@@ -48,7 +48,7 @@ def process_image(image, progress_callback=None):
 
 
 def write_image(path,x):
-    x = PIL.Image.fromarray(x)
+    x = PIL.Image.fromarray(x).convert('RGB')
     x.save(path)
 
 
@@ -82,13 +82,17 @@ def set_settings(s):
     json.dump(dict(active_model=GLOBALS.active_model), open('settings.json','w'))
 
 
-def maybe_compare_to_groundtruth(processed_image, input_image_path):
-    basename = os.path.splitext(os.path.basename(input_image_path))[0]
-    pattern  = os.path.join( os.path.dirname(input_image_path), basename+'*.png' )
-    gt_masks = glob.glob(pattern)
+def maybe_compare_to_groundtruth(input_image_path):
+    basename  = os.path.basename(input_image_path)
+    dirname   = os.path.dirname(input_image_path)
+    gt_masks  = glob.glob(os.path.join(dirname, 'GT_'+basename))
+    processed = glob.glob(os.path.join(dirname, 'segmented_'+basename+'*.png'))
     if len(gt_masks)==1:
-        print(f'Comparing result of {input_image_path} with {gt_masks[0]}')
-        #mask   = np.array(PIL.Image.open(gt_masks[0]))[...,-1]
-        mask   = GLOBALS.model.load_image(gt_masks[0])[...,-1]
-        vismap = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed_image)
-        return vismap
+        mask   = np.array(PIL.Image.open(gt_masks[0]))[...,-1]
+        write_image(os.path.join(dirname,'GT_'+basename+'.png'), mask)
+        if len(processed)==1:
+            print(f'Comparing result of {input_image_path} with {gt_masks[0]}')
+            processed = np.array(PIL.Image.open(processed[0]).convert('L'))
+            print('>>>>>>>>>>',mask.shape, processed.shape)
+            vismap    = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed)
+            return vismap
