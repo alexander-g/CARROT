@@ -77,6 +77,8 @@ function upload_file(file){
     target.html('');
     var content = $("#filelist-item-content-template").tmpl([{filename:file.name}]);
     content.appendTo(target);
+    content.find('.has-popup').popup({hoverable: true});
+    content.find('.radio.checkbox').checkbox({onChange:on_select_mask_image});
     content.find('.ui.dimmer').dimmer({'closable':false}).dimmer('show');
   });
   return result;
@@ -186,8 +188,42 @@ function cancel_processing(){
 
 
 
+function on_groundtruth_select(ev){
+  for(var GT_file of ev.target.files){
+    var basename = filebasename(GT_file.name);
+    for(var inputfile of Object.values(global.input_files)){
+      if(basename.startsWith(filebasename(inputfile.name))){
+        console.log('Matched ground truth mask for input file ',inputfile.name);
+        upload_file_to_flask('/file_upload', GT_file);
+      }
+    }
+  }
+}
 
 
+//Called when user clicks on one of the radio buttons to select what to show in the right image
+function on_select_mask_image(){
+  var index    = $(this).attr('index');
+  var parent   = $(this).closest('[filename]');
+  var filename = parent.attr('filename');
+  var image    = parent.find('img.segmented');
+
+  if(index==0){
+    image.attr('src', `/images/segmented_${filename}.png?=${new Date().getTime()}`);
+    //removing the width attribute, might have been set when loading a vismap
+    image.on('load', ()=>{image.css('width','');});
+  } else if(index==1){
+
+  } else if(index==2){
+    image.attr('src', `/images/vismap_${filename}.png?=${new Date().getTime()}`);
+    image.on('load', ()=>{
+      console.log(image, image.width(), image.height())
+      //resizing because the vismap has a legend and thus wider than the normal images
+      image.css('width', image.width()*(image.width()/image.height()) );
+      image.off('load');
+    });
+  }
+}
 
 
 

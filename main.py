@@ -24,8 +24,12 @@ arange = np.arange
 import PIL
 PIL.Image.MAX_IMAGE_PIXELS = None #Needed to open large images
 
-#import util
+import matplotlib as mpl
+mpl.use('agg')
+print('MPL backend: ', mpl.get_backend())
+import pylab as plt
 
+#import util
 
 
 
@@ -65,8 +69,11 @@ def process_image(imgname):
     fullpath     = os.path.join(TEMPFOLDER.name, imgname)
     image        = processing.load_image(fullpath)
     result       = processing.process_image(image, processing.progress_callback_for_image(imgname))
-
     processing.write_image(os.path.join(TEMPFOLDER.name, 'segmented_'+imgname+'.png'), result)
+    
+    vismap   = processing.maybe_compare_to_groundtruth(result, fullpath)
+    if vismap is not None:
+        processing.write_image(os.path.join(TEMPFOLDER.name, f'vismap_{imgname}.png'), vismap)
     return flask.jsonify({'labels':[]})
 
 @app.route('/processing_progress/<imgname>')

@@ -80,3 +80,15 @@ def set_settings(s):
     if newactivemodel != GLOBALS.active_model:
         load_model(newactivemodel)
     json.dump(dict(active_model=GLOBALS.active_model), open('settings.json','w'))
+
+
+def maybe_compare_to_groundtruth(processed_image, input_image_path):
+    basename = os.path.splitext(os.path.basename(input_image_path))[0]
+    pattern  = os.path.join( os.path.dirname(input_image_path), basename+'*.png' )
+    gt_masks = glob.glob(pattern)
+    if len(gt_masks)==1:
+        print(f'Comparing result of {input_image_path} with {gt_masks[0]}')
+        #mask   = np.array(PIL.Image.open(gt_masks[0]))[...,-1]
+        mask   = GLOBALS.model.load_image(gt_masks[0])[...,-1]
+        vismap = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed_image)
+        return vismap

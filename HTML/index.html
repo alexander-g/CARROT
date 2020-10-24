@@ -52,8 +52,31 @@
             </div>
             <img src="/images/${filename}" class="segmented">
             <div class="ui top right attached label icon" style="border-top-right-radius: 0;">
-              <i class="zoom-in icon" style="cursor:pointer; display:none;" onclick="on_zoom_button(event)" title="Zoom"></i>
               <i class="play link blue icon process-single-image" onclick="on_process_image(event)"  title="Process Image"></i>
+              <i class="ellipsis horizontal link icon has-popup" data-position="right center"></i>
+              <div class="ui popup fluid form">
+                <div class="grouped fields">
+                  <div class="field">
+                    <div class="ui radio checkbox">
+                      <input type="radio" name="0" index="0" class="hidden">
+                      <label>Prediction</label>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <div class="ui radio checkbox">
+                      <input type="radio" name="0" index="1" class="hidden">
+                      <label style="white-space: nowrap;">Ground Truth</label>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <div class="ui radio checkbox">
+                      <input type="radio" name="0" index="2" class="hidden">
+                      <label>Comparison</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
       </div>
@@ -138,6 +161,14 @@
         <input type="file" id="input_folder" style="display:none"
               onchange="on_inputfolder_select(this)"  webkitdirectory directory multiple>
         
+        <div class="divider"></div>
+        <label for="input-groundtruth" class="ui icon item">
+          <i class="violet images icon"></i>
+          Select Ground Truth Masks
+        </label>
+        <input type="file" id="input-groundtruth" style="display:none" 
+               onclick="this.value=null;" onchange="on_groundtruth_select(event)" 
+               accept="image/*" multiple>
       </div>
     </div>
 
