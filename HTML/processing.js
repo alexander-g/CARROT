@@ -68,10 +68,10 @@ function process_all(){
     async function loop_body(){
       if(j>=Object.values(global.input_files).length || global.cancel_requested ){
         $button.html('<i class="play icon"></i>Process All Images');
-        $('#cancel-processing-button').hide();
+        $('#cancel-button').hide();
         return;
       }
-      $('#cancel-processing-button').show();
+      $('#cancel-button').show();
       $button.html(`Processing ${j}/${Object.values(global.input_files).length}`);
   
       var f = Object.values(global.input_files)[j];
@@ -85,6 +85,6 @@ function process_all(){
     setTimeout(loop_body, 1);  //using timeout to refresh the html between iterations
 }
   
-function cancel_processing(){
+function on_cancel(){
     global.cancel_requested = true;
 }
