@@ -3,8 +3,8 @@
 function set_processed(filename, value){
     var $content_element = $(`[filename="${filename}"]`)
     var $tablerow = $(`.ui.title[filename="${filename}"]`);
-    //var $icon     = $tablerow.find('.image.icon');
     var $label    = $tablerow.find('label');
+    var $icon     = $tablerow.find('.image.icon');
   
     //remove the <b> tag around the label if needed
     if($label.parent().prop('tagName') == 'B')
@@ -13,9 +13,14 @@ function set_processed(filename, value){
     if(!!value){
       $content_element.find('.dimmer').dimmer('hide');
       $label.wrap($('<b>'));
+      $icon.removeClass('outline');
+      $icon.attr('title', 'File processed');
+      set_image_to_show(filename, 0);
     }
     else{
       $content_element.find('.dimmer').dimmer('show');
+      $icon.addClass('outline');
+      $icon.attr('title', 'File not yet processed');
     }
     global.input_files[filename].processed = !!value;
 }

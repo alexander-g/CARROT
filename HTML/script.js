@@ -84,7 +84,8 @@ function on_accordion_open(x){
 
 
 
-
+//called when user selects ground truth files from file menu
+//matches them with input files, sends request for comparison if needed
 function on_groundtruth_select(ev){
   for(var GT_file of ev.target.files){
     var basename = filebasename(GT_file.name);
@@ -104,17 +105,20 @@ function on_groundtruth_select(ev){
 //sets global.input_files[].has_groundtruth and updates view
 function set_has_groundtruth(filename, value){
   global.input_files[filename].has_groundtruth = value;
-  $(`[filename="${filename}"]`).find('.disabled.checkbox').removeClass('disabled');
+  
+  if(!!value){
+    $(`[filename="${filename}"]`).find('.disabled.checkbox').removeClass('disabled');
+    $(`tr.ui.title[filename="${filename}"]`).find('i.image.icon').addClass('violet');
+  }
+  else{ /* **TODO** */}
 }
 
 
-//called when user clicks on one of the radio buttons to select what to show in the right image
-function on_select_mask_image(){
-  var index    = $(this).attr('index');
-  var parent   = $(this).closest('[filename]');
-  var filename = parent.attr('filename');
-  var image    = parent.find('img.segmented');
 
+//sets either processed file, ground truth or comparison vismap to show in the right image
+function set_image_to_show(filename, index){
+  var parent   = $(`[filename="${filename}"]`);
+  var image    = parent.find('img.segmented');
   if(index==0){
     image.attr('src', `/images/segmented_${filename}.png?=${new Date().getTime()}`);
     //removing the width attribute, might have been set when loading a vismap
@@ -131,6 +135,17 @@ function on_select_mask_image(){
       image.off('load');
     });
   }
+  //update the radio buttons in case function was called from code
+  //parent.find('.checkbox').checkbox('set checked');
+  parent.find(`input[type="radio"][index="${index}"]`).closest('.checkbox').checkbox('set checked');
+}
+
+//called when user clicks on one of the radio buttons to select what to show in the right image
+function on_select_mask_image(){
+  var index    = $(this).attr('index');
+  var parent   = $(this).closest('[filename]');
+  var filename = parent.attr('filename');
+  set_image_to_show(filename, index);
 }
 
 
