@@ -41,7 +41,7 @@
   <script id="filelist-item-content-template" type="text/x-jQuery-tmpl">
     <div filename="${filename}">
       <div class="ui large images">
-          <img class="ui image" src="/images/${filename}" id="image_${filename}">
+          <img class="ui image" src="/images/${filename}" >
           <div class="ui image">
             <div class="ui dimmer">
                   <div class="content">
@@ -81,56 +81,8 @@
             </div>
           </div>
       </div>
-
-
-      <div class="ui two column stackable grid" id="patches_${filename}">
-          <!-- result-details-template -->
-      </div>
     </div>
   </script>
-
-  <script id="result-details-template" type="text/x-jQuery-tmpl">
-    <div class="column" index="${index}">
-    <div class="ui segment">
-    <a class="ui right corner label" onclick="on_remove_prediction(event)">
-        <i class="close icon" style="cursor:pointer"></i>
-    </a>
-    <img class="ui small image" src="/images/patch_${i}_${filename}?_=${time}">
-              <table class="ui compact table">
-                  <!--checkbox-confidence-template-->
-
-              <tfoot class="full-width">
-               <tr>
-                 <th class="collapsing">
-                    <div class="ui fitted checkbox" index="-1">
-                      <input type="checkbox"> <label></label>
-                    </div>
-                 </th>
-                 <th colspan="4" class="ui tiny form">
-                    <input type="text" name="new-label" placeholder="Other" oninput="on_custom_label_input(event)">
-                 </th>
-               </tr>
-              </tfoot>
-              </table>
-    </div></div>
-  </script>
-
-
-  <script id="checkbox-confidence-template" type="text/x-jQuery-tmpl">
-  <tr>
-    <td class="collapsing">
-      <div class="ui fitted checkbox" index="${index}">
-        <input type="checkbox"> <label></label>
-      </div>
-    </td>
-    <td class="eight wide ">${label}</td>
-    <td><div class="ui small progress" style="margin-bottom: 0px;">
-          <div class="bar"></div>
-        </div>
-    </td>
-  </tr>
-  </script>
-
 </head>
 
 
