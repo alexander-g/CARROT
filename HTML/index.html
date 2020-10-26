@@ -9,6 +9,7 @@
   <script src="/static/thirdparty/semantic.min.js"></script>
   
   <script src="/static/script.js"></script>
+  <script src="/static/processing.js"></script>
   <script src="/static/settings.js"></script>
   <script src="/static/util.js"></script>
   <script src="/static/download.js"></script>
@@ -40,8 +41,7 @@
   <script id="filelist-item-content-template" type="text/x-jQuery-tmpl">
     <div filename="${filename}">
       <div class="ui large images">
-          <img class="ui image"       src="/images/${filename}"
-               id="image_${filename}">
+          <img class="ui image" src="/images/${filename}" id="image_${filename}">
           <div class="ui image">
             <div class="ui dimmer">
                   <div class="content">
@@ -58,19 +58,19 @@
               <div class="ui popup fluid form">
                 <div class="grouped fields">
                   <div class="field">
-                    <div class="ui radio checkbox">
+                    <div class="ui radio checked checkbox">
                       <input type="radio" name="0" index="0" class="hidden">
                       <label>Prediction</label>
                     </div>
                   </div>
                   <div class="field">
-                    <div class="ui radio checkbox">
+                    <div class="ui radio disabled checkbox">
                       <input type="radio" name="0" index="1" class="hidden">
                       <label style="white-space: nowrap;">Ground Truth</label>
                     </div>
                   </div>
                   <div class="field">
-                    <div class="ui radio checkbox">
+                    <div class="ui radio disabled checkbox">
                       <input type="radio" name="0" index="2" class="hidden">
                       <label>Comparison</label>
                     </div>
