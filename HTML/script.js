@@ -27,7 +27,11 @@ function update_inputfiles_list(){
   var $filestable = $('#filetable');
   $filestable.find('tbody').html('');
   for(var f of Object.values(global.input_files)){
-      $("#filetable-item-template").tmpl([{filename:f.name}]).appendTo($filestable.find('tbody'));
+      var content = $("#filetable-item-template").tmpl([{filename:f.name}]);
+      content.appendTo($filestable.find('tbody'));
+      content.find('.has-popup').popup({hoverable: true});
+      content.find('.radio.checkbox').checkbox({onChange:on_select_mask_image});
+      content.find('.ui.dimmer').dimmer({'closable':false}).dimmer('show');
   }
 }
 
@@ -60,48 +64,23 @@ function on_inputfolder_select(input){
 }
 
 
-function upload_file(file){
-  var formData = new FormData();
-  formData.append('files', file );
-  result = $.ajax({
-      url: 'file_upload',      type: 'POST',
-      data: formData,          async: false,
-      cache: false,            contentType: false,
-      enctype: 'multipart/form-data',
-      processData: false,
-  }).done(function (response) {
-    target  = $(`td.content[filename="${file.name}"]`);
-    if(target.html().trim().length>0)
-      //only do this once
-      return;
-
-    target.html('');
-    var content = $("#filelist-item-content-template").tmpl([{filename:file.name}]);
-    content.appendTo(target);
-    content.find('.has-popup').popup({hoverable: true});
-    content.find('.radio.checkbox').checkbox({onChange:on_select_mask_image});
-    content.find('.ui.dimmer').dimmer({'closable':false}).dimmer('show');
-  });
-  return result;
-}
-
 function delete_image(filename){
   $.get(`/delete_image/${filename}`);
 }
 
 
-function on_accordion_open(x){
-  var contentdiv = this.find('.content');
-  if(contentdiv[0].innerHTML.trim())
-    return;
-  var filename   = contentdiv.attr('filename');
-  var file       = global.input_files[filename].file;
-  upload_file(file);
+function load_full_image(filename){
+  var imgelement  = $(`[filename="${filename}"]`).find(`img`)[0];
+  var file        = global.input_files[filename].file;
+  imgelement.src  = URL.createObjectURL(file);
 }
 
 
-
-
+function on_accordion_open(x){
+  var contentdiv = this.find('.content');
+  var filename   = contentdiv.attr('filename');
+  load_full_image(filename);
+}
 
 
 

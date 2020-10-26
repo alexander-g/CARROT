@@ -43,7 +43,7 @@ function process_file(filename){
     setTimeout(progress_polling,1000);
 
 
-    upload_file(global.input_files[filename].file);
+    upload_file_to_flask('/file_upload', global.input_files[filename].file);
     //send a processing request to python update gui with the results
     return $.get(`/process_image/${filename}`).done(function(data){
         var time = new Date().getTime()

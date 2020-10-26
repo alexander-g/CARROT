@@ -33,15 +33,18 @@
     </tr>
     <tr style="display:none">
       <td colspan="5" class="ui content" style="padding-bottom:21px" filename="${filename}">
+        
+        {{tmpl({filename:filename}) "#filelist-item-content-template"}}
 
       </td>
     </tr>
   </script>
 
+
   <script id="filelist-item-content-template" type="text/x-jQuery-tmpl">
     <div filename="${filename}">
       <div class="ui large images">
-          <img class="ui image" src="/images/${filename}" >
+          <img class="ui image input-image" >
           <div class="ui image">
             <div class="ui dimmer">
                   <div class="content">
