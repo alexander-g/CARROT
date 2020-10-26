@@ -9,10 +9,11 @@ global = {
 };
 
 
-const FILE = {name: '',
-              file: undefined,    //javascript file object
-              results: {},
+const FILE = {name     : '',
+              file     : undefined,    //javascript file object
+              results  : {},
               processed: false,
+              has_groundtruth: false,
 };
 
 
@@ -196,10 +197,18 @@ function on_groundtruth_select(ev){
         console.log('Matched ground truth mask for input file ',inputfile.name);
         var renamed = rename_file(GT_file, 'GT_'+inputfile.name);
         upload_file_to_flask('/file_upload', renamed);
+        set_has_groundtruth(inputfile.name, true);
         $.get(`/maybecompare/${inputfile.name}`);
       }
     }
   }
+}
+
+
+//sets global.input_files[].has_groundtruth and updates view
+function set_has_groundtruth(filename, value){
+  global.input_files[filename].has_groundtruth = value;
+
 }
 
 
