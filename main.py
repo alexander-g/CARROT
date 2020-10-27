@@ -15,8 +15,8 @@ arange = np.arange
 #import skimage.io as skio
 #import skimage.draw as skdraw
 #import skimage.transform as sktransform
-#import skimage.measure as skmeasure
-#import skimage.morphology as skmorph
+import skimage.measure as skmeasure
+import skimage.morphology as skmorph
 #import sklearn.svm as sksvm
 #import sklearn.model_selection as skms
 #import sklearn.utils as skutils
