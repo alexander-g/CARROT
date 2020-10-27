@@ -89,13 +89,14 @@ function on_accordion_open(x){
 function on_groundtruth_select(ev){
   for(var GT_file of ev.target.files){
     var basename = filebasename(GT_file.name);
-    for(var inputfile of Object.values(global.input_files)){
+    for(let inputfile of Object.values(global.input_files)){
       if(basename.startsWith(filebasename(inputfile.name))){
         console.log('Matched ground truth mask for input file ',inputfile.name);
         var renamed = rename_file(GT_file, 'GT_'+inputfile.name);
         upload_file_to_flask('/file_upload', renamed);
-        set_has_groundtruth(inputfile.name, true);
-        $.get(`/maybecompare/${inputfile.name}`);
+        $.get(`/maybecompare/${inputfile.name}`).done(()=>{
+          set_has_groundtruth(inputfile.name, true);
+        });
       }
     }
   }

@@ -94,7 +94,12 @@ def maybe_compare_to_groundtruth(input_image_path):
         if len(processed)==1:
             print(f'Comparing result of {input_image_path} with {gt_masks[0]}')
             processed    = np.array(PIL.Image.open(processed[0]).convert('L'))
-            vismap,stats = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed)
+
+            #not sure why (maybe because of matplotlib) but lock seems to be required
+            #otherwise white vismaps are produced
+            with GLOBALS.processing_lock:
+                vismap,stats = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed)
+            
             write_image(os.path.join(dirname, f'vismap_{basename}.png'), vismap)
             open(os.path.join(dirname, f'statistics_{basename}.csv'),'w').write(stats[0])
             open(os.path.join(dirname, f'false_positives_{basename}.csv'),'w').write(stats[1])
