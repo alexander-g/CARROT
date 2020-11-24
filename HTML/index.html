@@ -104,14 +104,14 @@
       <div class="ui menu">
         <label for="input_images" class="ui icon item">
           <i class="images outline icon"></i>
-          Select Input Images
+          Load Input Images
         </label>
         <input type="file" id="input_images" style="display:none"
               onchange="on_inputfiles_select(event)" accept="image/*" multiple>
         
         <label for="input_folder" class="ui icon item">
           <i class="folder outline icon"></i>
-          Select Input Folder
+          Load Input Folder
         </label>
         <input type="file" id="input_folder" style="display:none"
               onchange="on_inputfolder_select(this)"  webkitdirectory directory multiple>
@@ -119,11 +119,18 @@
         <div class="divider"></div>
         <label for="input-groundtruth" class="ui icon item">
           <i class="violet images icon"></i>
-          Select Ground Truth Masks
+          Load Ground Truth Masks
         </label>
         <input type="file" id="input-groundtruth" style="display:none" 
                onclick="this.value=null;" onchange="on_groundtruth_select(event)" 
                accept="image/*" multiple>
+        <label for="input-external-predictions" class="ui icon item">
+          <i class="grey images icon"></i>
+          Load Saved Predictions
+        </label>
+        <input type="file" id="input-external-predictions" style="display:none" 
+                onclick="this.value=null;" onchange="on_external_predictions_select(event)" 
+                accept="image/*" multiple>
       </div>
     </div>
 

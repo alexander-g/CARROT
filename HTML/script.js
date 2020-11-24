@@ -89,6 +89,7 @@ function on_accordion_open(x){
 function on_groundtruth_select(ev){
   for(var GT_file of ev.target.files){
     var basename = filebasename(GT_file.name);
+    //match ground truth files with input files
     for(let inputfile of Object.values(global.input_files)){
       if(basename.startsWith(filebasename(inputfile.name))){
         console.log('Matched ground truth mask for input file ',inputfile.name);
@@ -148,6 +149,33 @@ function on_select_mask_image(){
   var filename = parent.attr('filename');
   set_image_to_show(filename, index);
 }
+
+
+
+
+//
+function on_external_predictions_select(ev){
+  for(var extfile of ev.target.files){
+    var basename = filebasename(extfile.name);
+    //match ground truth files with input files
+    for(let inputfile of Object.values(global.input_files)){
+      if(basename.startsWith(filebasename(inputfile.name))){
+        console.log('Matched external prediction for input file ',inputfile.name);
+        //var url = URL.createObjectURL(extfile);
+        
+        var newname      = `segmented_${inputfile.name}.png`;
+        var renamed_file = rename_file(extfile, newname);
+        upload_file_to_flask('/file_upload', renamed_file);
+        //trigger creation of the comparison vismap
+        $.get(`/maybecompare/${inputfile.name}`)
+        
+        set_processed_image_url(inputfile.name, `/images/segmented_${inputfile.name}.png?=${new Date().getTime()}`);
+      }
+    }
+  }
+}
+
+
 
 
 

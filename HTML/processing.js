@@ -31,6 +31,14 @@ function on_process_image(e){
   }
 
 
+
+function set_processed_image_url(filename, url){
+  var $content_element = $(`[filename="${filename}"]`)
+  $content_element.find('.segmented').attr('src', url);
+  set_processed(filename , true);
+}
+
+
 function process_file(filename){
     var $process_button = $(`.ui.primary.button[filename="${filename}"]`);
     $process_button.html(`<div class="ui active tiny inline loader"></div> Processing...`);
@@ -52,10 +60,8 @@ function process_file(filename){
     //send a processing request to python update gui with the results
     return $.get(`/process_image/${filename}`).done(function(data){
         var time = new Date().getTime()
-        var $content_element = $(`[filename="${filename}"]`)
-        $content_element.find('.segmented').attr('src', `/images/segmented_${filename}.png?_=${time}`);
-        
-        set_processed(filename , true);
+        var url  = `/images/segmented_${filename}.png?_=${time}`;
+        set_processed_image_url(filename, url);
         delete_image(filename);
         });
 }
