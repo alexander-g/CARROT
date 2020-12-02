@@ -65,6 +65,10 @@ def processing_progress(imagename):
 
 def load_settings():
     settings = json.load(open('settings.json'))
+    modelpath = os.path.join('models', settings.get('active_model','')+'.dill')
+    if not os.path.exists(modelpath):
+        print(f'[WARNING] Saved active model {modelpath} does not exist')
+        settings['active_model'] = get_settings()['models'][0]
     set_settings(settings)
 
 def get_settings():
