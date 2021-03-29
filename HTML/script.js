@@ -11,9 +11,9 @@ global = {
 
 const FILE = {name     : '',
               file     : undefined,    //javascript file object
-              results  : {},
-              processed: false,
-              has_groundtruth: false,
+              treering_results: {},
+              processed:        false,
+              has_groundtruth:  false,
 };
 
 
@@ -31,7 +31,7 @@ function update_inputfiles_list(){
       content.appendTo($filestable.find('tbody'));
       content.find('.has-popup').popup({hoverable: true});
       content.find('.radio.checkbox').checkbox({onChange:on_select_mask_image});
-      content.find('.ui.dimmer').dimmer({'closable':false}).dimmer('show');
+      content.find('.segmented-dimmer').dimmer({'closable':false}).dimmer('show');
   }
 }
 
@@ -39,7 +39,7 @@ function update_inputfiles_list(){
 function set_input_files(files){
   global.input_files = {};
   global.metadata    = {};
-  //global.per_file_results = {};
+  
   for(var f of files)
     global.input_files[f.name] = Object.assign({}, deepcopy(FILE), {name: f.name, file: f});
   update_inputfiles_list();
@@ -72,7 +72,11 @@ function delete_image(filename){
 function load_full_image(filename){
   var imgelement  = $(`[filename="${filename}"]`).find(`img`)[0];
   var file        = global.input_files[filename].file;
-  imgelement.src  = URL.createObjectURL(file);
+  var url         = URL.createObjectURL(file);
+  imgelement.src  = url;
+
+  var $content_element = $(`[filename="${filename}"]`)
+  $content_element.find('.segmented').attr('src', url);
 }
 
 

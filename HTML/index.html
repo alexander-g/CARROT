@@ -13,6 +13,7 @@
   <script src="/static/settings.js"></script>
   <script src="/static/util.js"></script>
   <script src="/static/download.js"></script>
+  <script src="/static/treering_overlays.js"></script>
 
   <script src="/static/thirdparty/exif-js"></script>
   <script src="/static/thirdparty/jszip.min.js"></script>
@@ -43,9 +44,32 @@
   <script id="filelist-item-content-template" type="text/x-jQuery-tmpl">
     <div filename="${filename}">
       <div class="ui large images">
-          <img class="ui image input-image" >
+          <!-- left image: input -->
           <div class="ui image">
-            <div class="ui dimmer">
+            <div class="ui dimmer treering-dimmer">
+              <div class="ui loader"></div>
+            </div>
+            <img class="ui image input-image" style="margin:0px;" >
+            <svg  class="treering-overlay-svg"
+                  style="position:absolute; 
+                         top:0px; left:0px; 
+                         width:100%; height:100%;"
+                  viewBox="0 0 1 1">  <!--viewBox will be adjusted in javascript-->
+            </svg>
+            <div class="ui top right attached label icon" style="border-top-right-radius: 0;">
+              <i class="eye slash link icon treerings-toggle-button" 
+                 title="Hide/Show Tree Rings" 
+                 onclick="on_toggle_treerings(event)"
+                 style="display: none;"></i>
+              <i class="play circle link blue icon treerings-single-image" 
+                 onclick="on_process_treerings(event)" 
+                 title="Detect Tree Rings"></i>
+            </div>
+          </div>
+
+          <!-- right image: segmented result -->
+          <div class="ui image">
+            <div class="ui dimmer segmented-dimmer">
                   <div class="content">
                     <div class="ui primary button" filename="${filename}"
                           onclick='on_process_image(event)'>
@@ -186,11 +210,6 @@
 
 <div class="ui container">
 <table class="ui basic celled table accordion" id="filetable">
-    <!--<thead><tr>
-    <th class="six wide">Filename</th>
-    <th class="nine wide">Detected Bats</th>
-    <th class="one wide"></th>
-  </tr></thead>-->
   <tbody>
     <tr class="ui">
       <td>No Files Selected</td>

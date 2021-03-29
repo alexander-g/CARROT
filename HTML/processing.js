@@ -11,14 +11,14 @@ function set_processed(filename, value){
       $label.unwrap();
   
     if(!!value){
-      $content_element.find('.dimmer').dimmer('hide');
+      $content_element.find('.segmented-dimmer').dimmer('hide');
       $label.wrap($('<b>'));
       $icon.removeClass('outline');
       $icon.attr('title', 'File processed');
       set_image_to_show(filename, 0);
     }
     else{
-      $content_element.find('.dimmer').dimmer('show');
+      $content_element.find('.segmented-dimmer').dimmer('show');
       $icon.addClass('outline');
       $icon.attr('title', 'File not yet processed');
     }
@@ -94,3 +94,23 @@ function process_all(){
 function on_cancel(){
     global.cancel_requested = true;
 }
+
+
+function process_treerings(filename){
+  $(`[filename="${filename}"]`).find('.treering-dimmer').dimmer({'closable':false}).dimmer('show');
+
+  upload_file_to_flask('/file_upload', global.input_files[filename].file);
+  //send a processing request to python update gui with the results
+  return $.get(`/process_treerings/${filename}`).done(function(data){
+      $(`[filename="${filename}"]`).find('.treering-dimmer').dimmer('hide');
+      global.input_files[filename].treering_results = data;
+      display_treerings(data, filename);
+      delete_image(filename);
+      });
+}
+
+function on_process_treerings(e){
+  var filename = $(e.target).closest('[filename]').attr('filename');
+  process_treerings(filename);
+}
+

@@ -12,14 +12,8 @@ import torch, torchvision
 
 import numpy as np
 arange = np.arange
-#import skimage.io as skio
-#import skimage.draw as skdraw
-#import skimage.transform as sktransform
 import skimage.measure as skmeasure
 import skimage.morphology as skmorph
-#import sklearn.svm as sksvm
-#import sklearn.model_selection as skms
-#import sklearn.utils as skutils
 
 import PIL
 PIL.Image.MAX_IMAGE_PIXELS = None #Needed to open large images
@@ -77,6 +71,13 @@ def process_image(imgname):
 @app.route('/processing_progress/<imgname>')
 def processing_progress(imgname):
     return str(processing.processing_progress(imgname))
+
+
+@app.route('/process_treerings/<imgname>')
+def process_treerings(imgname):
+    fullpath     = os.path.join(TEMPFOLDER.name, imgname)
+    result       = processing.process_treerings(fullpath)
+    return flask.jsonify(result.measurements)
 
 
 @app.route('/delete_image/<imgname>')
