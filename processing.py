@@ -46,6 +46,14 @@ def process_image(image, progress_callback=None):
         print('Processing file with model', GLOBALS.active_model)
         return GLOBALS.model.process_image(image, progress_callback=progress_callback)
 
+def process_treerings(image_path):
+    with GLOBALS.processing_lock:
+        tree_ring_model_path = 'models_treerings/20210328_10h19m56s_021_treerings.dill'  #FIXME: hardcoded
+        print(f'Processing file {image_path} with model {tree_ring_model_path}')
+        model = dill.load(open(tree_ring_model_path, 'rb'))
+        image = model.load_image(image_path)
+        return model.process_image(image)
+
 
 def write_image(path,x):
     x = PIL.Image.fromarray(x).convert('RGB')
