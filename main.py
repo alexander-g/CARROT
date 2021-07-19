@@ -9,6 +9,7 @@ import processing
 
 
 import torch, torchvision
+import onnxruntime as ort
 
 import numpy as np
 arange = np.arange
@@ -91,7 +92,7 @@ def delete_image(imgname):
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
     if request.method=='POST':
-        processing.set_settings(request.args)
+        processing.set_settings(request.get_json(force=True))
         return 'OK'
     elif request.method=='GET':
         return flask.jsonify(processing.get_settings())

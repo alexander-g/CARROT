@@ -75,8 +75,10 @@ function load_full_image(filename){
   var url         = URL.createObjectURL(file);
   imgelement.src  = url;
 
-  var $content_element = $(`[filename="${filename}"]`)
-  $content_element.find('.segmented').attr('src', url);
+  if(!global.input_files[filename].processed){
+    var $content_element = $(`[filename="${filename}"]`)
+    $content_element.find('.segmented').attr('src', url);
+  }
 }
 
 
@@ -137,7 +139,8 @@ function set_image_to_show(filename, index){
     image.attr('src', `/images/vismap_${filename}.png?=${new Date().getTime()}`);
     image.on('load', ()=>{
       //resizing because the vismap has a legend and thus wider than the normal images
-      image.css('width', image.width()*(image.width()/image.height()) );
+      var inputimage = parent.find('img.input-image');
+      image.css('width', image.width()*(inputimage.height() / image.height()) );
       image.off('load');
     });
   }

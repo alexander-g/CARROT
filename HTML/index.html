@@ -81,7 +81,7 @@
             <div class="ui top right attached label icon" style="border-top-right-radius: 0;">
               <i class="play link blue icon process-single-image" onclick="on_process_image(event)"  title="Process Image"></i>
               <i class="ellipsis horizontal link icon has-popup" data-position="right center"></i>
-              <div class="ui popup fluid form">
+              <div class="ui popup fluid form right-side-image-selection">
                 <div class="grouped fields">
                   <div class="field">
                     <div class="ui radio checked checkbox">
@@ -248,8 +248,19 @@
         <div class="item" data-value="0">20200522_conifer</div>
       </div>
     </div>
+    </div>
+
+    <div class="ui divider"></div>
+
+    <div class="field">
+      <label>Comparisons</label>
+      <div class="ui right labeled input" id="settings-ignore-buffer">
+        <input type="number" step="1" min="0" style="width: 5ch;" value="0" id='settings-ignore-buffer-input'>
+        <div class="ui basic label"> px </div>
+        <label style="padding:10px">Ignore cells within this distance from the border</label>
+      </div>
+    </div>
   </div>
-</div>
 
   <div class="actions">
       <div class="ui negative button">

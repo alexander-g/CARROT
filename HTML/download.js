@@ -62,7 +62,7 @@ async function on_download_comparisons(){
     if(f.processed && f.has_groundtruth){
       console.log(fname, ' has ground truth and is processed')
 
-      var basename = filebasename(fname);
+      var basename = filebasename(fname);   //TODO: user {fname} also inside the zip
       data[ basename+`/cell_statistics.csv`] = GET_as_blob(`/images/statistics_${fname}.csv`);
       data[ basename+`/false_positives.csv`] = GET_as_blob(`/images/false_positives_${fname}.csv`);
       data[ basename+`/prediction.png` ]     = GET_as_blob(`/images/segmented_${fname}.png`);

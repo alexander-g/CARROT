@@ -1,26 +1,30 @@
-import os
+import os,sys
 #restrict gpu usage
 os.environ["CUDA_VISIBLE_DEVICES"]=""
 
+sys.path.append('tools')
+
 import glob
-import dill
+import dill, cloudpickle
 dill._dill._reverse_typemap['ClassType'] = type
 
 import numpy as np
-import itertools
-import threading
-import glob
-import json
+import itertools, threading, glob, json
 
 import torch, torchvision
 print('PyTorch version: %s'%torch.__version__)
 print('Torchvision version: %s'%torchvision.__version__)
+
+import onnxruntime as ort
+print(f'ONNX runtime version: {ort.__version__}')
 
 import PIL
 
 class GLOBALS:
     model               = None
     active_model        = ''                #modelname
+    ignore_buffer_px    = 0
+
     processing_progress = dict()            #filename:percentage
     processing_lock     = threading.Lock()
 
@@ -80,10 +84,11 @@ def load_settings():
     set_settings(settings)
 
 def get_settings():
-    modelfiles = glob.glob('models/*.dill')
+    modelfiles = sorted(glob.glob('models/*.dill'))
     modelnames = [os.path.splitext(os.path.basename(fname))[0] for fname in modelfiles]
     s = dict( models       = modelnames,
-              active_model = GLOBALS.active_model )
+              active_model = GLOBALS.active_model,
+              ignore_buffer_px = GLOBALS.ignore_buffer_px )
     return s
 
 def set_settings(s):
@@ -91,7 +96,8 @@ def set_settings(s):
     newactivemodel = s.get('active_model')
     if newactivemodel != GLOBALS.active_model:
         load_model(newactivemodel)
-    json.dump(dict(active_model=GLOBALS.active_model), open('settings.json','w'))
+    GLOBALS.ignore_buffer_px = int( s.get('ignore_buffer_px',0) )
+    json.dump(dict(active_model=GLOBALS.active_model, ignore_buffer_px=GLOBALS.ignore_buffer_px), open('settings.json','w'))
 
 
 def maybe_compare_to_groundtruth(input_image_path):
@@ -110,7 +116,7 @@ def maybe_compare_to_groundtruth(input_image_path):
             #not sure why (maybe because of matplotlib) but lock seems to be required
             #otherwise white vismaps are produced
             with GLOBALS.processing_lock:
-                vismap,stats = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed)
+                vismap,stats = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed, GLOBALS.ignore_buffer_px)
             
             write_image(os.path.join(dirname, f'vismap_{basename}.png'), vismap)
             open(os.path.join(dirname, f'statistics_{basename}.csv'),'w').write(stats[0])
