@@ -15,7 +15,7 @@ function set_processed(filename, value){
       $label.wrap($('<b>'));
       $icon.removeClass('outline');
       $icon.attr('title', 'File processed');
-      set_image_to_show(filename, 0);
+      //set_image_to_show(filename, 0);
     }
     else{
       $content_element.find('.segmented-dimmer').dimmer('show');
@@ -35,35 +35,70 @@ function on_process_image(e){
 function set_processed_image_url(filename, url){
   var $content_element = $(`[filename="${filename}"]`)
   $content_element.find('.segmented').attr('src', url);
-  set_processed(filename , true);
 }
 
 
 function process_file(filename){
+    set_processed(filename, false);
     var $process_button = $(`.ui.primary.button[filename="${filename}"]`);
     $process_button.html(`<div class="ui active tiny inline loader"></div> Processing...`);
-    set_processed(filename, false);
 
+    let _current_progress_status = 'Processing...'
     function progress_polling(){
         $.get(`/processing_progress/${filename}`, function(data) {
             //console.log(filename, data);
             var $process_button = $(`.ui.primary.button[filename="${filename}"]`);
-            $process_button.html(`<div class="ui active tiny inline loader"></div> Processing...${Math.round(data*100)}%`);
-            if(!global.input_files[filename].processed)
-            setTimeout(progress_polling,1000);
+            $process_button.html(`<div class="ui active tiny inline loader"></div> ${_current_progress_status} ${Math.round(data*100)}%`);
+            if(global.input_files[filename].processed)
+              clearInterval(polling_id);
         });
     }
-    setTimeout(progress_polling,1000);
+    var polling_id = setInterval(progress_polling,1000);
 
 
-    upload_file_to_flask('/file_upload', global.input_files[filename].file);
-    //send a processing request to python update gui with the results
-    return $.get(`/process_image/${filename}`).done(function(data){
+    let promise = upload_file_to_flask('/file_upload', global.input_files[filename].file);
+
+    if(global.settings.cells_enabled){
+      promise = promise.then(function(){
+        _current_progress_status = 'Detecting cells...';
+        return $.get(`/process_image/${filename}`);
+      });
+      promise.done(async function(data){
+        console.log(filename,' finished')
         var time = new Date().getTime()
-        var url  = `/images/segmented_${filename}.png?_=${time}`;
+        var url  = `/images/${data.result}?_=${time}`;
         set_processed_image_url(filename, url);
-        delete_image(filename);
-        });
+      });
+    }
+
+    if(global.settings.treerings_enabled){
+      promise = promise.then(function(){
+        _current_progress_status = 'Detecting tree rings...';
+        return $.get(`/process_treerings/${filename}`);
+      });
+      promise.done(async function(data){
+        $(`[filename="${filename}"]`).find('.treering-dimmer').dimmer('hide');
+        global.input_files[filename].treering_results = data;
+        
+        //set_processed_image_url(filename, `/images/${data.segmentation}?_=${new Date().getTime()}`);
+        //display_treerings(data, filename);
+      })
+    }
+
+    if(global.settings.cells_enabled && global.settings.treerings_enabled){
+      promise = promise.then( () => $.get(`/associate_cells/${filename}`) );
+      promise.done(async function(data){
+        global.input_files[filename].cell_results = data;
+        set_processed_image_url(filename, `/images/${data.ring_map}?_=${new Date().getTime()}`);
+      })
+    }
+
+    promise = promise.always( () => {
+      set_processed(filename , true);
+      delete_image(filename);
+      clearInterval(polling_id);
+    }).done(()=>console.log('Ultimately succeeded')).fail(()=>console.log('Ultimately failed'));
+    return promise;
 }
 
 
@@ -90,7 +125,7 @@ function process_all(){
     global.cancel_requested = false;
     setTimeout(loop_body, 1);  //using timeout to refresh the html between iterations
 }
-  
+
 function on_cancel(){
     global.cancel_requested = true;
 }

@@ -2,13 +2,16 @@ import os,sys
 #restrict gpu usage
 os.environ["CUDA_VISIBLE_DEVICES"]=""
 
+import warnings
+warnings.simplefilter('ignore') #pytorch is too verbose
+
 sys.path.append('tools')
 
 import glob
 import dill, cloudpickle
 dill._dill._reverse_typemap['ClassType'] = type
 
-import numpy as np
+import numpy as np, scipy
 import itertools, threading, glob, json
 
 import torch, torchvision
@@ -18,7 +21,7 @@ print('Torchvision version: %s'%torchvision.__version__)
 import onnxruntime as ort
 print(f'ONNX runtime version: {ort.__version__}')
 
-import PIL
+import PIL.Image
 
 class GLOBALS:
     model               = None
@@ -28,6 +31,9 @@ class GLOBALS:
     processing_progress = dict()            #filename:percentage
     processing_lock     = threading.Lock()
 
+class CONST:
+    CELL_MODEL_DIR      = os.path.join('models', 'cells')
+    TREERING_MODEL_DIR  = os.path.join('models', 'treerings')
 
 
 def init():
@@ -35,7 +41,7 @@ def init():
 
 
 def load_model(name):
-    filepath             = os.path.join('models', name+'.dill')
+    filepath             = os.path.join(CONST.CELL_MODEL_DIR, name+'.dill')
     print('Loading model', filepath)
     GLOBALS.model        = dill.load(open(filepath, 'rb'))
     GLOBALS.active_model = name
@@ -50,9 +56,14 @@ def process_image(image, progress_callback=None):
         print('Processing file with model', GLOBALS.active_model)
         return GLOBALS.model.process_image(image, progress_callback=progress_callback)
 
+def process_cells(imagefile):
+    with GLOBALS.processing_lock:
+        pass
+
 def process_treerings(image_path):
     with GLOBALS.processing_lock:
-        tree_ring_model_path = 'models_treerings/20210328_10h19m56s_021_treerings.dill'  #FIXME: hardcoded
+        #tree_ring_model_path = 'models_treerings/20210328_10h19m56s_021_treerings.dill'  #FIXME: hardcoded
+        tree_ring_model_path = 'models/treerings/025_oak_treerings.cpkl'  #FIXME: hardcoded
         print(f'Processing file {image_path} with model {tree_ring_model_path}')
         model = dill.load(open(tree_ring_model_path, 'rb'))
         image = model.load_image(image_path)
@@ -60,6 +71,9 @@ def process_treerings(image_path):
 
 
 def write_image(path,x):
+    if np.max(x) <= 1.0:
+        x = x*255
+    x = x.astype('uint8')
     x = PIL.Image.fromarray(x).convert('RGB')
     x.save(path)
 
@@ -77,18 +91,23 @@ def processing_progress(imagename):
 
 def load_settings():
     settings = json.load(open('settings.json'))
-    modelpath = os.path.join('models', settings.get('active_model','')+'.dill')
+    modelpath = os.path.join(CONST.CELL_MODEL_DIR, settings.get('active_model','')+'.dill')
     if not os.path.exists(modelpath):
         print(f'[WARNING] Saved active model {modelpath} does not exist')
         settings['active_model'] = get_settings()['models'][0]
     set_settings(settings)
 
 def get_settings():
-    modelfiles = sorted(glob.glob('models/*.dill'))
+    modelfiles = sorted(glob.glob(CONST.CELL_MODEL_DIR+'/*.dill'))
     modelnames = [os.path.splitext(os.path.basename(fname))[0] for fname in modelfiles]
-    s = dict( models       = modelnames,
-              active_model = GLOBALS.active_model,
-              ignore_buffer_px = GLOBALS.ignore_buffer_px )
+    treering_models = sorted(glob.glob(CONST.TREERING_MODEL_DIR+'/*'))
+    treering_models = [os.path.splitext(os.path.basename(fname))[0] for fname in treering_models]
+    s = dict(
+        models           = modelnames,
+        active_model     = GLOBALS.active_model,
+        treering_models  = treering_models,
+        ignore_buffer_px = GLOBALS.ignore_buffer_px
+    )
     return s
 
 def set_settings(s):
@@ -122,3 +141,43 @@ def maybe_compare_to_groundtruth(input_image_path):
             open(os.path.join(dirname, f'statistics_{basename}.csv'),'w').write(stats[0])
             open(os.path.join(dirname, f'false_positives_{basename}.csv'),'w').write(stats[1])
             return vismap
+
+
+def associate_cells(cell_map, ring_points):
+    '''Assign a tree ring label to each cell'''
+    import skimage.measure, skimage.draw
+    #intermediate downscaling for faster processsing
+    _scale         = 3
+    ring_map       = np.zeros(np.array(cell_map.shape)//_scale, 'int16')
+    for i,(p0,p1) in enumerate(ring_points):
+        polygon = np.concatenate([p0,p1[::-1]], axis=0) / _scale
+        polygon = skimage.measure.approximate_polygon(polygon, tolerance=5)
+        ring_map[skimage.draw.polygon( polygon[:,0], polygon[:,1] )] = (i+1)
+    #upscale to the original size
+    ring_map       = PIL.Image.fromarray(ring_map).resize(cell_map.shape[::-1], PIL.Image.NEAREST)
+    ring_map       = (ring_map * cell_map).astype(np.int16)
+    ring_map_rgb   = np.zeros(ring_map.shape+(3,), 'uint8')
+    
+    COLORS = [
+        (255,255,255),
+        ( 23,190,207),
+        (255,127, 14),
+        ( 44,160, 44),
+        (214, 39, 40),
+        (148,103,189),
+        (140, 86, 75),
+        (188,189, 34),
+        (227,119,194),
+    ]
+    
+    labeled_cells  = scipy.ndimage.label(cell_map)[0]
+    cells          = []
+    for i,cell_slices in enumerate(scipy.ndimage.find_objects(labeled_cells)):
+        cell_mask            = (labeled_cells[cell_slices] == (i+1))
+        cell_labels, counts  = np.unique(ring_map[cell_slices][cell_mask], return_counts=True)
+        max_label            = cell_labels[counts.argmax()]
+        cells.append([cell_slices, cell_mask, max_label])
+        ring_map[cell_slices][cell_mask] = max_label
+        ring_map_rgb[cell_slices][cell_mask] = COLORS[max_label%len(COLORS)]
+    return cells, ring_map_rgb
+

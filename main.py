@@ -1,9 +1,10 @@
 import webbrowser, os, tempfile, io, sys
 os.environ['PYTORCH_JIT']='0' #needed for packaging
 
+print()
 
 import flask
-from flask import Flask, escape, request
+from flask import Flask, request
 
 import processing
 
@@ -34,9 +35,6 @@ TEMPFOLDER = tempfile.TemporaryDirectory(prefix='wood_cell_detector_')
 print('Temporary Directory: %s'%TEMPFOLDER.name)
 
 
-
-
-
 @app.route('/')
 def root():
     return app.send_static_file('index.html')
@@ -64,10 +62,26 @@ def process_image(imgname):
     fullpath     = os.path.join(TEMPFOLDER.name, imgname)
     image        = processing.load_image(fullpath)
     result       = processing.process_image(image, processing.progress_callback_for_image(imgname))
-    processing.write_image(os.path.join(TEMPFOLDER.name, 'segmented_'+imgname+'.png'), result)
+    outfile      = f'segmented_{imgname}.png'
+    processing.write_image(os.path.join(TEMPFOLDER.name, outfile), result)
     
     vismap   = processing.maybe_compare_to_groundtruth(fullpath)
-    return flask.jsonify({'labels':[]})
+    return flask.jsonify({'result':outfile})
+
+
+@app.route('/process_cells', methods=['POST'])
+def process_cells():
+    results = [processing.process_cells(f) for f in request.files.getlist("files")]
+    #TODO: comparison visualizations?
+    #TODO: combine with cells?
+    return flask.jsonify(results)
+
+"""@app.route('/process_treerings', methods=['POST'])
+def process_treerings():
+    results = [processing.process_treerings(f) for f in request.files.getlist("files")]
+    #TODO: combine with cells?
+    return flask.jsonify(results)"""
+
 
 @app.route('/processing_progress/<imgname>')
 def processing_progress(imgname):
@@ -78,7 +92,27 @@ def processing_progress(imgname):
 def process_treerings(imgname):
     fullpath     = os.path.join(TEMPFOLDER.name, imgname)
     result       = processing.process_treerings(fullpath)
-    return flask.jsonify(result.measurements)
+    seg_path     = os.path.join(TEMPFOLDER.name, imgname+'.treerings.png')
+    processing.write_image(seg_path, result['segmentation']>0)  #TODO:
+    import pickle
+    open(os.path.join(TEMPFOLDER.name, imgname+'.ring_points.pkl'),'wb').write(pickle.dumps(result['ring_points']))
+    return flask.jsonify({'segmentation': os.path.basename(seg_path)})
+
+@app.route('/associate_cells/<imgname>')
+def associate_cells(imgname):
+    path_cells       = os.path.join(TEMPFOLDER.name, f'segmented_{imgname}.png')
+    path_ring_points = os.path.join(TEMPFOLDER.name, imgname+'.ring_points.pkl')
+    import pickle
+    ring_points = pickle.load(open(path_ring_points, 'rb'))
+    cell_map    = PIL.Image.open(path_cells).convert('L') / np.float32(255)
+    cells, ring_map = processing.associate_cells(cell_map, ring_points)
+    ring_path   = os.path.join(TEMPFOLDER.name, imgname+'.ring_map.png')
+    processing.write_image(ring_path, ring_map)
+    return flask.jsonify({
+        'ring_map': os.path.basename(ring_path),
+        'cells': [ { 'id':i, 'year':int(c[2]), 'area':int(np.sum(c[1])) } for i,c in enumerate(cells)]
+    })
+
 
 
 @app.route('/delete_image/<imgname>')
@@ -103,6 +137,16 @@ def maybecompare(imgname):
     fullpath     = os.path.join(TEMPFOLDER.name, imgname)
     processing.maybe_compare_to_groundtruth(fullpath)
     return 'OK'
+
+
+@app.route('/stream')
+def stream():
+    def generator():
+        import time
+        for i in range(1000):
+            time.sleep(9)
+            yield f'data: {time.time():.2f}\n\n'
+    return flask.Response(generator(), mimetype="text/event-stream")
 
 
 

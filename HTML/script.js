@@ -5,13 +5,17 @@ global = {
 
   cancel_requested : false,
 
-  settings    : {}
+  settings    : {
+    cells_enabled:     true,
+    treerings_enabled: true,
+  }
 };
 
 
 const FILE = {name     : '',
               file     : undefined,    //javascript file object
               treering_results: {},
+              cell_results:     {},
               processed:        false,
               has_groundtruth:  false,
 };
