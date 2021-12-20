@@ -76,9 +76,11 @@ function process_file(filename){
       promise.done(async function(data){
         $(`[filename="${filename}"]`).find('.treering-dimmer').dimmer('hide');
         global.input_files[filename].treering_results = data;
-        
+        var years = [...Array(data.ring_points.length).keys()].map(x=>x+1);
+        global.input_files[filename].treering_results.years = years;
+
         //set_processed_image_url(filename, `/images/${data.segmentation}?_=${new Date().getTime()}`);
-        //display_treerings(data, filename);
+        display_treerings(filename, data.ring_points, years);
       })
     }
 
@@ -93,6 +95,7 @@ function process_file(filename){
     promise = promise.always( () => {
       set_processed(filename , true);
       delete_image(filename);
+      //TODO: detach progress callback from event_source
     }).done(()=>console.log('Ultimately succeeded')).fail(()=>console.log('Ultimately failed'));
     return promise;
 }

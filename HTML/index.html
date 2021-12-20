@@ -18,7 +18,11 @@
   <script src="/static/thirdparty/exif-js"></script>
   <script src="/static/thirdparty/jszip.min.js"></script>
   
-  
+  <style>
+    [contenteditable]:focus {
+        outline: 0px solid transparent;
+    }
+  </style>
 
 
   <script id="filetable-item-template" type="text/x-jQuery-tmpl">
@@ -66,8 +70,7 @@
             <svg  class="treering-overlay-svg"
                   style="position:absolute; 
                          top:0px; left:0px; 
-                         width:100%; height:100%;
-                         pointer-events:none;"
+                         width:100%; height:100%;"
                   viewBox="0 0 1 1">  <!--viewBox will be adjusted in javascript-->
             </svg>
             <div class="ui top right attached label icon" style="border-top-right-radius: 0;">

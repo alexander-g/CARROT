@@ -85,7 +85,7 @@ def process_treerings(image_path):
     
     return {
         'segmentation': output_path,
-        'ring_points' : [np.stack([a[::100], b[::100]], axis=1) for a,b in y['ring_points']]
+        'ring_points' : [np.stack([a[::100], b[::100]], axis=1) for a,b in y['ring_points']],  #TODO
     }
 
 
@@ -161,6 +161,7 @@ def maybe_compare_to_groundtruth(input_image_path):
 
 def associate_cells(image_path):
     '''Assign a tree ring label to each cell'''
+    #TODO: check if files exist
     cell_map    = PIL.Image.open(image_path+'.cells.png').convert('L') / np.float32(255)
     ring_points = pickle.load(open(image_path+'.ring_points.pkl','rb'))
 
