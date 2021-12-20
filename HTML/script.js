@@ -6,13 +6,18 @@ global = {
   cancel_requested : false,
 
   settings    : {
-    cells_enabled:     true,
-    treerings_enabled: true,
-  }
+    cells_enabled:          true,
+    treerings_enabled:      true,
+    active_cells_model:     undefined,
+    active_treerings_model: undefined,
+    ignore_buffer_px:       0,
+  },
+
+  event_source : undefined,   //EventSource
 };
 
 
-const FILE = {name     : '',
+var FILE   = {name     : '',
               file     : undefined,    //javascript file object
               treering_results: {},
               cell_results:     {},
@@ -23,6 +28,7 @@ const FILE = {name     : '',
 
 function init(){
   load_settings();
+  setup_sse();
 }
 
 
@@ -188,6 +194,11 @@ function on_external_predictions_select(ev){
 
 
 
-
+//set up server-side events
+function setup_sse(){
+  global.event_source = new EventSource('/stream');
+  //global.event_source.onmessage = (msg => console.log('>>',msg));
+  global.event_source.onerror   = (x) => console.error('SSE Error', x);
+}
 
 //

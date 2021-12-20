@@ -44,16 +44,13 @@ function process_file(filename){
     $process_button.html(`<div class="ui active tiny inline loader"></div> Processing...`);
 
     let _current_progress_status = 'Processing...'
-    function progress_polling(){
-        $.get(`/processing_progress/${filename}`, function(data) {
-            //console.log(filename, data);
-            var $process_button = $(`.ui.primary.button[filename="${filename}"]`);
-            $process_button.html(`<div class="ui active tiny inline loader"></div> ${_current_progress_status} ${Math.round(data*100)}%`);
-            if(global.input_files[filename].processed)
-              clearInterval(polling_id);
-        });
-    }
-    var polling_id = setInterval(progress_polling,1000);
+    $(global.event_source).on('message', function(ev){
+      var data = JSON.parse(ev.originalEvent.data);
+      if(data.image!=filename)
+        return;
+
+      $process_button.html(`<div class="ui active tiny inline loader"></div> ${_current_progress_status} ${Math.round(data.progress*100)}%`);
+    })
 
 
     let promise = upload_file_to_flask('/file_upload', global.input_files[filename].file);
@@ -61,7 +58,7 @@ function process_file(filename){
     if(global.settings.cells_enabled){
       promise = promise.then(function(){
         _current_progress_status = 'Detecting cells...';
-        return $.get(`/process_image/${filename}`);
+        return $.get(`/process_cells/${filename}`);
       });
       promise.done(async function(data){
         console.log(filename,' finished')
@@ -96,7 +93,6 @@ function process_file(filename){
     promise = promise.always( () => {
       set_processed(filename , true);
       delete_image(filename);
-      clearInterval(polling_id);
     }).done(()=>console.log('Ultimately succeeded')).fail(()=>console.log('Ultimately failed'));
     return promise;
 }

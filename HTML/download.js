@@ -91,7 +91,7 @@ function on_download_statistics(){
     var f = global.input_files[fname];
     if(f.processed && !!f.cell_results){
       var csv_text = '#Year,Lumen Area\n';
-      var cells    = f.cell_results.cells;
+      var cells    = f.cell_results.cells.sort( (x,y)=>(x.year-y.year) );
       for(var i in cells){
         if(cells[i].year==0) continue;
 

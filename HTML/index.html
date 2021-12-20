@@ -50,21 +50,6 @@
               <div class="ui loader"></div>
             </div>
             <img class="ui image input-image" style="margin:0px;" >
-            <svg  class="treering-overlay-svg"
-                  style="position:absolute; 
-                         top:0px; left:0px; 
-                         width:100%; height:100%;"
-                  viewBox="0 0 1 1">  <!--viewBox will be adjusted in javascript-->
-            </svg>
-            <div class="ui top right attached label icon" style="border-top-right-radius: 0;">
-              <i class="eye slash link icon treerings-toggle-button" 
-                 title="Hide/Show Tree Rings" 
-                 onclick="on_toggle_treerings(event)"
-                 style="display: none;"></i>
-              <i class="play circle link blue icon treerings-single-image" 
-                 onclick="on_process_treerings(event)" 
-                 title="Detect Tree Rings"></i>
-            </div>
           </div>
 
           <!-- right image: segmented result -->
@@ -78,6 +63,13 @@
                   </div>
             </div>
             <img src="/images/${filename}" class="segmented">
+            <svg  class="treering-overlay-svg"
+                  style="position:absolute; 
+                         top:0px; left:0px; 
+                         width:100%; height:100%;
+                         pointer-events:none;"
+                  viewBox="0 0 1 1">  <!--viewBox will be adjusted in javascript-->
+            </svg>
             <div class="ui top right attached label icon" style="border-top-right-radius: 0;">
               <i class="play link blue icon process-single-image" onclick="on_process_image(event)"  title="Process Image"></i>
               <i class="ellipsis horizontal link icon has-popup" data-position="right center"></i>
@@ -274,8 +266,8 @@
     </div>
     <div class="field" id="settings-treerings-field">
       <label>Tree ring model</label>
-      <div class="ui dropdown selection" id="settings-active-treering-model">
-        <input type="hidden" name="active-treering-model">
+      <div class="ui dropdown selection" id="settings-active-treerings-model">
+        <input type="hidden" name="active-treerings-model">
         <i class="dropdown icon"></i>
         <div class="default text">Select a model</div>
         <div class="menu">

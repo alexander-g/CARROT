@@ -8,7 +8,7 @@ warnings.simplefilter('ignore') #pytorch is too verbose
 sys.path.append('tools')
 
 import glob
-import dill, cloudpickle
+import dill, cloudpickle, pickle
 dill._dill._reverse_typemap['ClassType'] = type
 
 import numpy as np, scipy
@@ -24,12 +24,17 @@ print(f'ONNX runtime version: {ort.__version__}')
 import PIL.Image
 
 class GLOBALS:
-    model               = None
-    active_model        = ''                #modelname
-    ignore_buffer_px    = 0
-
+    model               = None              #object
     processing_progress = dict()            #filename:percentage
     processing_lock     = threading.Lock()
+
+SETTINGS = dict(
+    cells_active           = True,
+    active_cells_model     = '',                #modelname
+    treerings_active       = True,
+    active_treerings_model = '',
+    ignore_buffer_px       = 0,
+)
 
 class CONST:
     CELL_MODEL_DIR      = os.path.join('models', 'cells')
@@ -44,30 +49,44 @@ def load_model(name):
     filepath             = os.path.join(CONST.CELL_MODEL_DIR, name+'.dill')
     print('Loading model', filepath)
     GLOBALS.model        = dill.load(open(filepath, 'rb'))
-    GLOBALS.active_model = name
+    SETTINGS['active_cells_model'] = name
     print('Finished loading', filepath)
 
 
 def load_image(path):
     return GLOBALS.model.load_image(path)
 
-def process_image(image, progress_callback=None):
+def process_cells(image_path):
+    x = GLOBALS.model.load_image(image_path)
     with GLOBALS.processing_lock:
-        print('Processing file with model', GLOBALS.active_model)
-        return GLOBALS.model.process_image(image, progress_callback=progress_callback)
+        print('Processing file with model', SETTINGS['active_cells_model'])
+        y = GLOBALS.model.process_image(
+            x, 
+            progress_callback=lambda x: PubSub.publish({'progress':x, 'image':os.path.basename(image_path), 'stage':'cells'})
+        )
+    output_path = image_path+'.cells.png'
+    write_image(output_path, y)
+    return output_path
 
-def process_cells(imagefile):
-    with GLOBALS.processing_lock:
-        pass
 
 def process_treerings(image_path):
     with GLOBALS.processing_lock:
-        #tree_ring_model_path = 'models_treerings/20210328_10h19m56s_021_treerings.dill'  #FIXME: hardcoded
         tree_ring_model_path = 'models/treerings/025_oak_treerings.cpkl'  #FIXME: hardcoded
         print(f'Processing file {image_path} with model {tree_ring_model_path}')
         model = dill.load(open(tree_ring_model_path, 'rb'))
-        image = model.load_image(image_path)
-        return model.process_image(image)
+        x = model.load_image(image_path)
+        y = model.process_image(
+            x, 
+            progress_callback=lambda x: PubSub.publish({'progress':x, 'image':os.path.basename(image_path), 'stage':'treerings'})
+        )
+    output_path = image_path+'.treerings.png'
+    write_image(output_path, y['segmentation']>0)
+    open(image_path+'.ring_points.pkl','wb').write(pickle.dumps(y['ring_points']))
+    
+    return {
+        'segmentation': output_path,
+        'ring_points' : [np.stack([a[::100], b[::100]], axis=1) for a,b in y['ring_points']]
+    }
 
 
 def write_image(path,x):
@@ -90,11 +109,11 @@ def processing_progress(imagename):
 
 
 def load_settings():
-    settings = json.load(open('settings.json'))
-    modelpath = os.path.join(CONST.CELL_MODEL_DIR, settings.get('active_model','')+'.dill')
+    settings  = json.load(open('settings.json'))
+    modelpath = os.path.join(CONST.CELL_MODEL_DIR, settings.get('active_cells_model','')+'.dill')
     if not os.path.exists(modelpath):
         print(f'[WARNING] Saved active model {modelpath} does not exist')
-        settings['active_model'] = get_settings()['models'][0]
+        settings['active_cells_model'] = get_settings().get('cells_models', [''])[0]
     set_settings(settings)
 
 def get_settings():
@@ -102,21 +121,18 @@ def get_settings():
     modelnames = [os.path.splitext(os.path.basename(fname))[0] for fname in modelfiles]
     treering_models = sorted(glob.glob(CONST.TREERING_MODEL_DIR+'/*'))
     treering_models = [os.path.splitext(os.path.basename(fname))[0] for fname in treering_models]
-    s = dict(
-        models           = modelnames,
-        active_model     = GLOBALS.active_model,
-        treering_models  = treering_models,
-        ignore_buffer_px = GLOBALS.ignore_buffer_px
-    )
+
+    s = dict(SETTINGS)
+    s.update(dict(cells_models=modelnames, treerings_models=treering_models))
     return s
 
 def set_settings(s):
     print('New settings:',s)
-    newactivemodel = s.get('active_model')
-    if newactivemodel != GLOBALS.active_model:
+    newactivemodel = s.get('active_cells_model')
+    if newactivemodel not in [SETTINGS['active_cells_model'], '']:
         load_model(newactivemodel)
-    GLOBALS.ignore_buffer_px = int( s.get('ignore_buffer_px',0) )
-    json.dump(dict(active_model=GLOBALS.active_model, ignore_buffer_px=GLOBALS.ignore_buffer_px), open('settings.json','w'))
+    SETTINGS.update(s)
+    json.dump(s, open('settings.json','w'))
 
 
 def maybe_compare_to_groundtruth(input_image_path):
@@ -135,7 +151,7 @@ def maybe_compare_to_groundtruth(input_image_path):
             #not sure why (maybe because of matplotlib) but lock seems to be required
             #otherwise white vismaps are produced
             with GLOBALS.processing_lock:
-                vismap,stats = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed, GLOBALS.ignore_buffer_px)
+                vismap,stats = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed, SETTINGS['ignore_buffer_px'])
             
             write_image(os.path.join(dirname, f'vismap_{basename}.png'), vismap)
             open(os.path.join(dirname, f'statistics_{basename}.csv'),'w').write(stats[0])
@@ -143,8 +159,11 @@ def maybe_compare_to_groundtruth(input_image_path):
             return vismap
 
 
-def associate_cells(cell_map, ring_points):
+def associate_cells(image_path):
     '''Assign a tree ring label to each cell'''
+    cell_map    = PIL.Image.open(image_path+'.cells.png').convert('L') / np.float32(255)
+    ring_points = pickle.load(open(image_path+'.ring_points.pkl','rb'))
+
     import skimage.measure, skimage.draw
     #intermediate downscaling for faster processsing
     _scale         = 3
@@ -179,5 +198,33 @@ def associate_cells(cell_map, ring_points):
         cells.append([cell_slices, cell_mask, max_label])
         ring_map[cell_slices][cell_mask] = max_label
         ring_map_rgb[cell_slices][cell_mask] = COLORS[max_label%len(COLORS)]
-    return cells, ring_map_rgb
+    
+    output_path = image_path+'.ring_map.png'
+    write_image(output_path, ring_map_rgb)
+    return {
+        'ring_map': os.path.basename(output_path),
+        'cells': [ { 'id':i, 'year':int(c[2]), 'area':int(np.sum(c[1])) } for i,c in enumerate(cells)]  #TODO
+    }
+
+
+
+
+import queue
+
+class PubSub:
+    subscribers = []
+
+    @classmethod
+    def subscribe(cls):
+        q = queue.Queue(maxsize=5)
+        cls.subscribers.append(q)
+        return q
+
+    @classmethod
+    def publish(cls, msg, event='message'):
+        for i in reversed(range(len(cls.subscribers))):
+            try:
+                cls.subscribers[i].put_nowait((event, msg))
+            except queue.Full:
+                del cls.subscribers[i]
 

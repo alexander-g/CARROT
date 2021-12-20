@@ -1,61 +1,47 @@
 
 
-function display_treerings(measurements, filename){
+function display_treerings(ring_points, filename){
+    var  img = $(`[filename="${filename}"] img.input-image`)[0];
     var $svg = $(`[filename="${filename}"]`).find(".treering-overlay-svg");
-    $svg.attr('viewBox', `0 0 ${$svg[0].clientWidth} ${$svg[0].clientHeight}`)
+    $svg.attr('viewBox', `0 0 ${img.naturalWidth} ${img.naturalHeight}`)
     //clear
     $svg.children().remove();
     
-    for(var measurement of measurements){
-        var points = measurement['sampled_points'];
-        
+    for(var points of ring_points){        
         draw_treering_polygon(points, $svg);
-        add_treering_label(points, $svg, measurement['median_distance']);
+        //add_treering_label(points, $svg, measurement['median_distance']);
     }
-
-    var $icon      = $(`[filename="${filename}"]`).find(".treerings-toggle-button");
-    $icon.show();
 }
 
 function draw_treering_polygon(points, $svg){
-    var H = $svg[0].clientHeight;
-    var W = $svg[0].clientWidth;
-
+    const line_attrs = {
+        stroke         : "white",
+        "stroke-width" : "8",
+        fill           : "none",
+    };
 
     //draw first (upper) line
-    var line = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-    var points_str = '';
-    for(var p of points)
-        points_str += `${p[0][1]*W}, ${p[0][0]*H} `;
-    line.setAttribute("points", points_str);
-    line.setAttribute("stroke", "black");
-    line.setAttribute("fill", "none");
-    $svg.append(line);
+    var $line = $(document.createElementNS('http://www.w3.org/2000/svg','polyline'));
+    var points_str = points.map(p => `${p[0][1]}, ${p[0][0]} `)
+    $line.attr(line_attrs).attr("points", points_str);
+    $svg.append($line);
 
     //draw second (lower) line
-    var line = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-    var points_str = '';
-    for(var p of points)
-        points_str += `${p[1][1]*W}, ${p[1][0]*H} `;
-    line.setAttribute("points", points_str);
-    line.setAttribute("stroke", "black");
-    line.setAttribute("fill", "none");
-    $svg.append(line);
+    var $line = $(document.createElementNS('http://www.w3.org/2000/svg','polyline'));
+    var points_str = points.map(p => `${p[1][1]}, ${p[1][0]} `)
+    $line.attr(line_attrs).attr("points", points_str);
+    $svg.append($line);
 
     //draw polygon
-    var polygon = document.createElementNS('http://www.w3.org/2000/svg','polygon');
-    var points_str = '';
-    for(var p of points)
-        points_str += `${p[0][1]*W}, ${p[0][0]*H} `;
-    for(var p of points.reverse())
-        points_str += `${p[1][1]*W}, ${p[1][0]*H} `;
-    polygon.setAttribute("points", points_str);
-    polygon.setAttribute("fill", "rgba(0.0, 0.0, 0.0, 0.3)");
-    $svg.append(polygon);
+    var $polygon = $(document.createElementNS('http://www.w3.org/2000/svg','polygon'));
+    var points_str = points.map(p => `${p[0][1]}, ${p[0][0]} `)
+                   + points.reverse().map(p => `${p[1][1]}, ${p[1][0]} `)
+    $polygon.attr({"points":points_str, "fill":"rgba(255,255,255,0.3)"})
+    $svg.append($polygon);
 
-    $(polygon).hover(
-        function(){ polygon.setAttribute('fill', 'rgba(0.0, 0.0, 0.0, 0.5)'); },
-        function(){ polygon.setAttribute('fill', 'rgba(0.0, 0.0, 0.0, 0.3)'); }
+    $polygon.hover(
+        function(){ $polygon.attr('fill', "rgba(255,255,255,0.5)"); },
+        function(){ $polygon.attr('fill', "rgba(255,255,255,0.3)"); }
     );
 }
 

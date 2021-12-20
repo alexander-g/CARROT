@@ -23,3 +23,9 @@ function upload_file_to_flask(url, file){
 function rename_file(file, newname){
     return new File([file], newname, {type: file.type});
 }
+
+//reload a script file (for debugging/development)
+function reload_js(src) {
+    $(`script[src^="${src}"]`).remove();
+    $('<script>').attr('src', `${src}?cachebuster=${new Date().getTime()}`).appendTo('head');
+}

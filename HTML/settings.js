@@ -1,12 +1,9 @@
 //called when user clicks on save in the settings dialog
 function save_settings(_){
-    global.settings.active_model = $("#settings-active-cells-model").dropdown('get value');
-
-    var ignore_buffer_px = $('#settings-ignore-buffer-input')[0].value;
-    var data = JSON.stringify({
-        active_model:     global.settings.active_model,
-        ignore_buffer_px: ignore_buffer_px,
-    });
+    global.settings.active_cells_model     = $("#settings-active-cells-model").dropdown('get value');
+    global.settings.active_treerings_model = $("#settings-active-treerings-model").dropdown('get value');
+    global.settings.ignore_buffer_px       = $('#settings-ignore-buffer-input')[0].value;
+    var data = JSON.stringify(global.settings);
 
     $('#settings-ok-button').addClass('loading');
     $.post(`/settings`, data,).done((x)=>{
@@ -36,22 +33,19 @@ function on_settings(){
 
 function load_settings(){
     return $.get('/settings').done(function(settings){
-        global.settings.models          = settings.models;
-        global.settings.treering_models = settings.treering_models;
-        global.settings.active_model    = settings.active_model;
-        console.log(global.settings);
-
-        var models_list = []
-        for(modelname of global.settings.models)
-            models_list.push({name:modelname, value:modelname, selected:(modelname==global.settings.active_model)})
+        console.log(settings)
+        global.settings = settings;
         
-        var treering_models = global.settings.treering_models.map(x => {
-            return {name:x, value:x, selected:(x==global.settings.active_model)};
+        var cells_models = settings.cells_models.map(x => {
+            return {name:x, value:x, selected:(x==settings.active_cells_model)};
+        })
+        var treerings_models = settings.treerings_models.map(x => {
+            return {name:x, value:x, selected:(x==settings.active_treerings_model)};
         })
 
-        $("#settings-active-cells-model").dropdown({values: models_list, showOnFocus:false })
+        $("#settings-active-cells-model").dropdown({values: cells_models, showOnFocus:false })
         $('#settings-cells-enable').checkbox(global.settings.cells_enabled? 'check' : 'uncheck');
-        $('#settings-active-treering-model').dropdown({values: treering_models, showOnFocus:false })
+        $('#settings-active-treerings-model').dropdown({values: treerings_models, showOnFocus:false })
         $('#settings-treerings-enable').checkbox(global.settings.treerings_enabled? 'check' : 'uncheck');
         $('#settings-ignore-buffer-input')[0].value = settings.ignore_buffer_px;
     })
