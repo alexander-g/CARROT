@@ -86,6 +86,7 @@ async function on_download_comparisons(){
 //called when user clicks on the download statistics button
 function on_download_statistics(){
   var data = {};
+  const micrometer_factor = global.settings.micrometer_factor;
 
   for(var fname in global.input_files){
     var f     = global.input_files[fname];
@@ -96,10 +97,19 @@ function on_download_statistics(){
       for(var i in cells){
         if(cells[i].year==0) continue;
 
-        csv_text += `${years[cells[i].year-1]}, ${cells[i].area}, ${cells[i].area*global.settings.micrometer_factor}\n`;
+        csv_text += `${years[cells[i].year-1]}, ${cells[i].area}, ${cells[i].area*micrometer_factor}\n`;
       }
-
       data[`${fname}.cell_statistics.csv`] = new Blob([csv_text], {type: 'text/csv'});
+
+
+      var csv_text = '#Year, Mean Tree Ring Width(px), Mean Tree Ring Width(μm)\n';
+      var ring_points = f.treering_results.ring_points;
+      for(var i in ring_points){
+        var sum  = ring_points[i].map( x=>dist(x[0],x[1]) ).reduce( (x,y)=>x+y );
+        var mean = (sum / ring_points[i].length);
+        csv_text += `${years[i]}, ${mean.toFixed(2)}, ${(mean*micrometer_factor).toFixed(2)}\n`
+      }
+      data[`${fname}.tree_ring_statistics.csv`] = new Blob([csv_text], {type: 'text/csv'});
     }
   }
 

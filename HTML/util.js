@@ -8,6 +8,15 @@ function sortObjectByValue(o) {
     return Object.keys(o).sort(function(a,b){return o[b]-o[a]}).reduce((r, k) => (r[k] = o[k], r), {});
 }
 
+function arange(x0,x1=undefined){
+    var start = (x1==undefined)?  0 : x0;
+    var stop  = (x1==undefined)? x0 : x1-start;
+    return [...Array(stop).keys()].map(x=>x+start)
+}
+
+//euclidean distance
+function dist(p0, p1){return Math.sqrt((p0[0]-p1[0])**2 + (p0[1]-p1[1])**2)}
+
 function upload_file_to_flask(url, file){
     var formData = new FormData();
     formData.append('files', file);

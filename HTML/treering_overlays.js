@@ -1,6 +1,8 @@
 
 
-function display_treerings(filename, ring_points, years){
+function display_treerings(filename){
+    var  ring_points = global.input_files[filename].treering_results.ring_points;
+    var  years       = global.input_files[filename].treering_results.years;
     var  img = $(`[filename="${filename}"] img.input-image`)[0];
     var $svg = $(`[filename="${filename}"]`).find(".treering-overlay-svg");
     $svg.attr('viewBox', `0 0 ${img.naturalWidth} ${img.naturalHeight}`)
@@ -57,15 +59,21 @@ function add_treering_label(points, $svg, ring_nr, viewbox_width){
     mean_point[0] /= (points.length*2);
     mean_point[1] /= (points.length*2);
 
+    //ring width
+    var sum  = points.map( x=>dist(x[0],x[1]) ).reduce( (x,y)=>x+y );
+    var mean = ((sum / points.length)*global.settings.micrometer_factor).toFixed(1);
+
     //complicated but needed due to scaling issues
     var $group = $(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
     var $fobj  = $(document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject'));
-    var $label = $(`<div><label>Year: </label><label contenteditable="true">${ring_nr}</label></div>`)
+    var $label = $(`<div><label>Year: </label><label contenteditable="true">${ring_nr}</label></div><label>${mean}μm</label>`)
 
     var scale  = viewbox_width / 300;  //magic number for same text size independent of image size
-    $group.attr({transform:`translate(${mean_point[1]}, ${mean_point[0]})`})
+    $group.attr({transform:`translate(${mean_point[1]-3000/scale }, ${mean_point[0]-3000/scale})`})
     $fobj.attr({x:0, y:0, width:"100%", height:"100%", transform:`scale(${scale},${scale})`}).appendTo($group)
-    $label.css({ color:"white", "white-space":'pre', 'font-weight':'bold' }).appendTo($fobj);
+    $fobj.css({ color:"white", "white-space":'pre', 'font-weight':'bold', "pointer-events":'none' })
+    $label.find('[contenteditable]').css('pointer-events','all');
+    $label.appendTo($fobj);
     $svg.append($group);
 
     $label.find('[contenteditable]').on("keydown", on_year_keydown).on('keyup', on_year_keyup).on('blur', on_year_blur);
@@ -113,7 +121,7 @@ function on_year_blur(e){
         var year     = Number(e.target.innerText);
         var year0    = year - index;
         var n        = global.input_files[filename].treering_results.ring_points.length;
-        var allyears = [...Array(n).keys()].map(x => x+year0)
+        var allyears = arange(year0, year0+n);
         global.input_files[filename].treering_results.years = allyears;
         display_treerings(filename, global.input_files[filename].treering_results.ring_points, allyears);
     }

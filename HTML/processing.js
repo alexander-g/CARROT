@@ -39,6 +39,11 @@ function set_processed_image_url(filename, url){
 
 
 function process_file(filename){
+    //clear cell_results/tree_ring results + svg
+    global.input_files[filename].cell_results     = {};
+    global.input_files[filename].treering_results = {};
+    display_treerings(filename);
+
     set_processed(filename, false);
     var $process_button = $(`.ui.primary.button[filename="${filename}"]`);
     $process_button.html(`<div class="ui active tiny inline loader"></div> Processing...`);
@@ -76,7 +81,7 @@ function process_file(filename){
       promise.done(async function(data){
         $(`[filename="${filename}"]`).find('.treering-dimmer').dimmer('hide');
         global.input_files[filename].treering_results = data;
-        var years = [...Array(data.ring_points.length).keys()].map(x=>x+1);
+        var years = arange(1, 1+data.ring_points.length)
         global.input_files[filename].treering_results.years = years;
 
         //set_processed_image_url(filename, `/images/${data.segmentation}?_=${new Date().getTime()}`);
@@ -96,8 +101,8 @@ function process_file(filename){
       set_processed(filename , true);
       delete_image(filename);
       //TODO: detach progress callback from event_source
-    }).done(()=>console.log('Ultimately succeeded')).fail(()=>console.log('Ultimately failed'));
-    return promise;
+      return promise;
+    }).fail(()=>console.log('Processing failed'));
 }
 
 

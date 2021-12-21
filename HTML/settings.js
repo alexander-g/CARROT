@@ -15,6 +15,8 @@ function save_settings(_){
 
     //re-compare in case ignore buffer changed
     retrigger_comparisons()
+    //update all treerings
+    Object.keys(global.input_files).map(display_treerings);
 
     //do not close the dialog, doing this manually when settings loading is finished
     return false;

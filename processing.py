@@ -71,7 +71,7 @@ def process_cells(image_path):
 
 def process_treerings(image_path):
     with GLOBALS.processing_lock:
-        tree_ring_model_path = 'models/treerings/025_oak_treerings.cpkl'  #FIXME: hardcoded
+        tree_ring_model_path = f'models/treerings/{SETTINGS["active_treerings_model"]}.cpkl'
         print(f'Processing file {image_path} with model {tree_ring_model_path}')
         model = dill.load(open(tree_ring_model_path, 'rb'))
         x = model.load_image(image_path)
