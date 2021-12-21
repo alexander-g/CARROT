@@ -4,6 +4,8 @@ function display_treerings(filename){
     var  ring_points = global.input_files[filename].treering_results.ring_points;
     var  years       = global.input_files[filename].treering_results.years;
     var  img = $(`[filename="${filename}"] img.input-image`)[0];
+    if(img.naturalWidth==0)  //image not yet loaded
+        return;
     var $svg = $(`[filename="${filename}"]`).find(".treering-overlay-svg");
     $svg.attr('viewBox', `0 0 ${img.naturalWidth} ${img.naturalHeight}`)
     //clear
@@ -83,18 +85,16 @@ function add_treering_label(points, $svg, ring_nr, viewbox_width){
     );
 }
 
-function on_toggle_treerings(e){
-    var filename   = $(e.target).closest('[filename]').attr('filename');
-    var $svg       = $(`[filename="${filename}"]`).find(".treering-overlay-svg");
-    var $icon      = $(`[filename="${filename}"]`).find(".treerings-toggle-button");
-    var is_visible = $svg.is(':visible');
-    if(is_visible){
-        $svg.hide();
-        $icon.removeClass('slash');
-    } else {
-        $svg.show();
-        $icon.addClass('slash');
-    }
+function on_show_treerings(visible=undefined){
+    var filename    = $(this).closest('[filename]').attr('filename');
+    show_treerings(filename, $(this).closest('.checkbox').checkbox('is checked'))
+}
+
+function show_treerings(filename, visible=undefined){
+    var $svg       = $(`[filename="${filename}"] .treering-overlay-svg`);
+    if(visible!=undefined)
+        $(`[filename="${filename}"] .show-treerings-checkbox`).checkbox(visible? 'set checked' : 'set unchecked');
+    $svg.toggle(visible)
 }
 
 function on_year_keydown(e){

@@ -59,7 +59,7 @@ def load_image(path):
 def process_cells(image_path):
     x = GLOBALS.model.load_image(image_path)
     with GLOBALS.processing_lock:
-        print('Processing file with model', SETTINGS['active_cells_model'])
+        print(f'Processing file {image_path} with model {SETTINGS["active_cells_model"]}')
         y = GLOBALS.model.process_image(
             x, 
             progress_callback=lambda x: PubSub.publish({'progress':x, 'image':os.path.basename(image_path), 'stage':'cells'})
@@ -89,7 +89,7 @@ def process_treerings(image_path):
     }
 
 
-def write_image(path,x):
+def write_image(path, x):
     if np.max(x) <= 1.0:
         x = x*255
     x = x.astype('uint8')
@@ -139,7 +139,7 @@ def maybe_compare_to_groundtruth(input_image_path):
     basename  = os.path.basename(input_image_path)
     dirname   = os.path.dirname(input_image_path)
     gt_masks  = glob.glob(os.path.join(dirname, 'GT_'+basename))
-    processed = glob.glob(os.path.join(dirname, 'segmented_'+basename+'*.png'))
+    processed = glob.glob(os.path.join(dirname, basename+'.cells.png'))
 
     if len(gt_masks)==1:
         mask   = np.array(PIL.Image.open(gt_masks[0]))[...,-1]
@@ -153,7 +153,7 @@ def maybe_compare_to_groundtruth(input_image_path):
             with GLOBALS.processing_lock:
                 vismap,stats = GLOBALS.model.COMPARISONS.comapare_to_groundtruth(mask, processed, SETTINGS['ignore_buffer_px'])
             
-            write_image(os.path.join(dirname, f'vismap_{basename}.png'), vismap)
+            write_image(os.path.join(dirname, f'{basename}.vismap.png'), vismap)
             open(os.path.join(dirname, f'statistics_{basename}.csv'),'w').write(stats[0])
             open(os.path.join(dirname, f'false_positives_{basename}.csv'),'w').write(stats[1])
             return vismap

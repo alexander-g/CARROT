@@ -65,8 +65,8 @@ async function on_download_comparisons(){
       var basename = filebasename(fname);
       data[ basename+`/${fname}.cell_statistics.csv`] = GET_as_blob(`/images/statistics_${fname}.csv`);
       data[ basename+`/${fname}.false_positives.csv`] = GET_as_blob(`/images/false_positives_${fname}.csv`);
-      data[ basename+`/${fname}.prediction.png` ]     = GET_as_blob(`/images/segmented_${fname}.png`);
-      data[ basename+`/${fname}.error_map.png` ]      = GET_as_blob(`/images/vismap_${fname}.png`);
+      data[ basename+`/${fname}.prediction.png` ]     = GET_as_blob(`/images/${fname}.cells.png`);
+      data[ basename+`/${fname}.error_map.png` ]      = GET_as_blob(`/images/${fname}.vismap.png`);
       data[ basename+`/${fname}.ground_truth.png` ]   = GET_as_blob(`/images/GT_${fname}.png`);
       data[ basename+`/`+fname ]                      = f.file;
     }

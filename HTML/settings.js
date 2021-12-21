@@ -2,8 +2,8 @@
 function save_settings(_){
     global.settings.active_cells_model     = $("#settings-active-cells-model").dropdown('get value');
     global.settings.active_treerings_model = $("#settings-active-treerings-model").dropdown('get value');
-    global.settings.ignore_buffer_px       = $('#settings-ignore-buffer-input')[0].value;
-    global.settings.micrometer_factor      = $('#settings-micrometers-input')[0].value;
+    global.settings.ignore_buffer_px       = Number($('#settings-ignore-buffer-input')[0].value);
+    global.settings.micrometer_factor      = Number($('#settings-micrometers-input')[0].value);
     var data = JSON.stringify(global.settings);
 
     $('#settings-ok-button').addClass('loading');

@@ -35,6 +35,7 @@ function on_process_image(e){
 function set_processed_image_url(filename, url){
   var $content_element = $(`[filename="${filename}"]`)
   $content_element.find('.segmented').attr('src', url);
+  global.input_files[filename].processed_fname = url;
 }
 
 
@@ -103,6 +104,7 @@ function process_file(filename){
       //TODO: detach progress callback from event_source
       return promise;
     }).fail(()=>console.log('Processing failed'));
+    return promise
 }
 
 
@@ -132,24 +134,5 @@ function process_all(){
 
 function on_cancel(){
     global.cancel_requested = true;
-}
-
-
-function process_treerings(filename){
-  $(`[filename="${filename}"]`).find('.treering-dimmer').dimmer({'closable':false}).dimmer('show');
-
-  upload_file_to_flask('/file_upload', global.input_files[filename].file);
-  //send a processing request to python update gui with the results
-  return $.get(`/process_treerings/${filename}`).done(function(data){
-      $(`[filename="${filename}"]`).find('.treering-dimmer').dimmer('hide');
-      global.input_files[filename].treering_results = data;
-      display_treerings(data, filename);
-      delete_image(filename);
-      });
-}
-
-function on_process_treerings(e){
-  var filename = $(e.target).closest('[filename]').attr('filename');
-  process_treerings(filename);
 }
 

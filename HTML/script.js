@@ -23,6 +23,7 @@ var FILE   = {name     : '',
               treering_results: {},
               cell_results:     {},
               processed:        false,
+              processed_fname:  '',
               has_groundtruth:  false,
 };
 
@@ -42,12 +43,16 @@ function update_inputfiles_list(){
       content.appendTo($filestable.find('tbody'));
       content.find('.has-popup').popup({hoverable: true});
       content.find('.radio.checkbox').checkbox({onChange:on_select_mask_image});
+      content.find('.show-treerings-checkbox').checkbox({onChange:on_show_treerings}).checkbox('check')
       content.find('.segmented-dimmer').dimmer({'closable':false}).dimmer('show');
   }
 }
 
 
 function set_input_files(files){
+  if(files.length==0)
+    return;
+  
   global.input_files = {};
   global.metadata    = {};
   
@@ -85,6 +90,7 @@ function load_full_image(filename){
   var file        = global.input_files[filename].file;
   var url         = URL.createObjectURL(file);
   imgelement.src  = url;
+  $(imgelement).one('load', ()=>display_treerings(filename))
 
   if(!global.input_files[filename].processed){
     var $content_element = $(`[filename="${filename}"]`)
@@ -139,21 +145,28 @@ function set_image_to_show(filename, index){
   var parent   = $(`[filename="${filename}"]`);
   var image    = parent.find('img.segmented');
   if(index==0){
-    image.attr('src', `/images/segmented_${filename}.png?=${new Date().getTime()}`);
+    //image.attr('src', `/images/${filename}.cells.png?=${new Date().getTime()}`);
+    image.attr('src', global.input_files[filename].processed_fname);
     //removing the width attribute, might have been set when loading a vismap
     image.on('load', ()=>{image.css('width','');});
+    //show treerings overlays
+    show_treerings(filename, true);
   } else if(index==1){
     image.attr('src', `/images/GT_${filename}.png?=${new Date().getTime()}`);
     //removing the width attribute, might have been set when loading a vismap
     image.on('load', ()=>{image.css('width','');});
+    //hide treerings overlays
+    show_treerings(filename, false);
   } else if(index==2){
-    image.attr('src', `/images/vismap_${filename}.png?=${new Date().getTime()}`);
+    image.attr('src', `/images/${filename}.vismap.png?=${new Date().getTime()}`);
     image.on('load', ()=>{
       //resizing because the vismap has a legend and thus wider than the normal images
       var inputimage = parent.find('img.input-image');
       image.css('width', image.width()*(inputimage.height() / image.height()) );
       image.off('load');
     });
+    //hide treerings overlays
+    show_treerings(filename, false);
   }
   //update the radio buttons in case function was called from code
   //parent.find('.checkbox').checkbox('set checked');
