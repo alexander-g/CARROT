@@ -283,11 +283,18 @@
     <div class="ui divider"></div>
 
     <div class="field">
-      <label>Comparisons</label>
+      <label>Statistics</label>
       <div class="ui right labeled input" id="settings-ignore-buffer">
         <input type="number" step="1" min="0" style="width: 5ch;" value="0" id='settings-ignore-buffer-input'>
-        <div class="ui basic label"> px </div>
-        <label style="padding:10px">Ignore cells within this distance from the border</label>
+        <div class="ui basic label" style="width:12%;"> px </div>
+        <label style="padding:10px; width:65%;">Ignore cells within this distance from the border</label>
+      </div>
+
+      <label></label>
+      <div class="ui right labeled input" id="settings-micrometers">
+        <input type="number" step="0.01" min="0" style="width: 5ch;" value="1.0" id='settings-micrometers-input'>
+        <div class="ui basic label" style="width:12%;"> μm/px </div>
+        <label style="padding:10px; width:65%;">Pixel to micrometer conversion factor</label>
       </div>
     </div>
   </div>

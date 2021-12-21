@@ -11,6 +11,7 @@ global = {
     active_cells_model:     undefined,
     active_treerings_model: undefined,
     ignore_buffer_px:       0,
+    micrometer_factor:      1.0,
   },
 
   event_source : undefined,   //EventSource

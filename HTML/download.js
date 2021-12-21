@@ -88,14 +88,15 @@ function on_download_statistics(){
   var data = {};
 
   for(var fname in global.input_files){
-    var f = global.input_files[fname];
+    var f     = global.input_files[fname];
+    var years = f.treering_results.years;
     if(f.processed && !!f.cell_results){
-      var csv_text = '#Year,Lumen Area\n';
+      var csv_text = '#Year, Lumen Area(px), Lumen Area(μm)\n';
       var cells    = f.cell_results.cells.sort( (x,y)=>(x.year-y.year) );
       for(var i in cells){
         if(cells[i].year==0) continue;
 
-        csv_text += `${cells[i].year},${cells[i].area}\n`;
+        csv_text += `${years[cells[i].year-1]}, ${cells[i].area}, ${cells[i].area*global.settings.micrometer_factor}\n`;
       }
 
       data[`${fname}.cell_statistics.csv`] = new Blob([csv_text], {type: 'text/csv'});

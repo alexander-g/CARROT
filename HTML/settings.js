@@ -3,6 +3,7 @@ function save_settings(_){
     global.settings.active_cells_model     = $("#settings-active-cells-model").dropdown('get value');
     global.settings.active_treerings_model = $("#settings-active-treerings-model").dropdown('get value');
     global.settings.ignore_buffer_px       = $('#settings-ignore-buffer-input')[0].value;
+    global.settings.micrometer_factor      = $('#settings-micrometers-input')[0].value;
     var data = JSON.stringify(global.settings);
 
     $('#settings-ok-button').addClass('loading');
@@ -48,6 +49,7 @@ function load_settings(){
         $('#settings-active-treerings-model').dropdown({values: treerings_models, showOnFocus:false })
         $('#settings-treerings-enable').checkbox(global.settings.treerings_enabled? 'check' : 'uncheck');
         $('#settings-ignore-buffer-input')[0].value = settings.ignore_buffer_px;
+        $('#settings-micrometers-input')[0].value   = settings.micrometer_factor;
     })
 }
 
