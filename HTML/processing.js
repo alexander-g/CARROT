@@ -67,7 +67,7 @@ function process_file(filename){
         return $.get(`/process_cells/${filename}`);
       });
       promise.done(async function(data){
-        console.log(filename,' finished')
+        console.log('Cell detection finished for ', filename)
         var time = new Date().getTime()
         var url  = `/images/${data.result}?_=${time}`;
         set_processed_image_url(filename, url);
@@ -80,6 +80,7 @@ function process_file(filename){
         return $.get(`/process_treerings/${filename}`);
       });
       promise.done(async function(data){
+        console.log('Tree ring detection finished for ', filename)
         $(`[filename="${filename}"]`).find('.treering-dimmer').dimmer('hide');
         global.input_files[filename].treering_results = data;
         var years = arange(1, 1+data.ring_points.length)
@@ -93,6 +94,7 @@ function process_file(filename){
     if(global.settings.cells_enabled && global.settings.treerings_enabled){
       promise = promise.then( () => $.get(`/associate_cells/${filename}`) );
       promise.done(async function(data){
+        console.log('Cell association finished for ', filename)
         global.input_files[filename].cell_results = data;
         set_processed_image_url(filename, `/images/${data.ring_map}?_=${new Date().getTime()}`);
       })

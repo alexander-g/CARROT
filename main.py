@@ -1,4 +1,4 @@
-import webbrowser, os, tempfile, io, sys, json
+import webbrowser, os, tempfile, io, sys, json, glob, shutil
 os.environ['PYTORCH_JIT']='0' #needed for packaging
 
 print()
@@ -28,9 +28,18 @@ import pylab as plt
 
 
 
-app        = Flask('Wood Cell Detector', static_folder=os.path.abspath('./HTML'))
-TEMPFOLDER = tempfile.TemporaryDirectory(prefix='wood_cell_detector_')
-print('Temporary Directory: %s'%TEMPFOLDER.name)
+app        = Flask('DigIT! Wood Anatomy', static_folder=os.path.abspath('./HTML'))
+
+is_debug = sys.argv[0].endswith('.py')
+if os.environ.get('WERKZEUG_RUN_MAIN')=='true' or not is_debug:
+    TEMPPREFIX = 'wood_anatomy_'
+    TEMPFOLDER = tempfile.TemporaryDirectory(prefix=TEMPPREFIX)
+    print('Temporary Directory: %s'%TEMPFOLDER.name)
+    #delete all previous temporary folders if not cleaned up properly
+    for tmpdir in glob.glob( os.path.join(os.path.dirname(TEMPFOLDER.name), TEMPPREFIX+'*') ):
+        if tmpdir != TEMPFOLDER.name:
+            print('Removing ',tmpdir)
+            shutil.rmtree(tmpdir)
 
 
 @app.route('/')

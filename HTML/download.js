@@ -87,17 +87,29 @@ async function on_download_comparisons(){
 function on_download_statistics(){
   var data = {};
   const micrometer_factor = global.settings.micrometer_factor;
+  const ignore_buffer_px  = global.settings.ignore_buffer_px;
 
   for(var fname in global.input_files){
     var f     = global.input_files[fname];
     var years = f.treering_results.years;
     if(f.processed && !!f.cell_results){
-      var csv_text = '#Year, Lumen Area(px), Lumen Area(μm)\n';
+      var csv_text = '#Year, X(px), Y(px), Lumen Area(px), Lumen Area(μm), Position within tree ring(0-100)\n';
       var cells    = f.cell_results.cells.sort( (x,y)=>(x.year-y.year) );
       for(var i in cells){
-        if(cells[i].year==0) continue;
+        if(cells[i].year==0)
+          continue;
+        if(box_distance_from_border(cells[i].box_xy, fname)<ignore_buffer_px)
+          continue;
 
-        csv_text += `${years[cells[i].year-1]}, ${cells[i].area}, ${cells[i].area*micrometer_factor}\n`;
+        var celldata = [
+          years[cells[i].year-1],
+          box_center(cells[i].box_xy)[0].toFixed(0),
+          box_center(cells[i].box_xy)[1].toFixed(0),
+          cells[i].area,
+          cells[i].area*micrometer_factor,
+          Number(cells[i].position_within).toFixed(1),
+        ]
+        csv_text += celldata.join(',')+'\n';
       }
       data[`${fname}.cell_statistics.csv`] = new Blob([csv_text], {type: 'text/csv'});
 
@@ -121,4 +133,16 @@ function on_download_statistics(){
   zip.generateAsync({type:"blob"}).then( blob => {
     downloadBlob(  'statistics.zip', blob  );
   } );
+}
+
+function box_distance_from_border(box_xy, filename){
+  var $img = $(`[filename="${filename}"] img.input-image`);
+  var W    = $img[0].naturalWidth;
+  var H    = $img[0].naturalHeight;
+
+  return Math.min(...box_xy, H-box_xy[3], W-box_xy[2]);
+}
+
+function box_center(box){
+  return [ (box[2]+box[0])/2, (box[3]+box[1])/2 ]
 }

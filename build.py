@@ -16,7 +16,6 @@ os.system(f'''pyinstaller --noupx                                 \
 
 shutil.copytree('HTML',   build_dir+'/HTML')
 shutil.copytree('models', build_dir+'/models')
-shutil.copytree('models_treerings', build_dir+'/models_treerings')
 shutil.copyfile('settings.json',    build_dir+'/settings.json')
 
 if 'linux' in sys.platform:

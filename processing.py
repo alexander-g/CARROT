@@ -73,7 +73,7 @@ def process_treerings(image_path):
     with GLOBALS.processing_lock:
         tree_ring_model_path = f'models/treerings/{SETTINGS["active_treerings_model"]}.cpkl'
         print(f'Processing file {image_path} with model {tree_ring_model_path}')
-        model = dill.load(open(tree_ring_model_path, 'rb'))
+        model = pickle.load(open(tree_ring_model_path, 'rb'))
         x = model.load_image(image_path)
         y = model.process_image(
             x, 
@@ -165,46 +165,16 @@ def associate_cells(image_path):
     cell_map    = PIL.Image.open(image_path+'.cells.png').convert('L') / np.float32(255)
     ring_points = pickle.load(open(image_path+'.ring_points.pkl','rb'))
 
-    import skimage.measure, skimage.draw
-    #intermediate downscaling for faster processsing
-    _scale         = 3
-    ring_map       = np.zeros(np.array(cell_map.shape)//_scale, 'int16')
-    for i,(p0,p1) in enumerate(ring_points):
-        polygon = np.concatenate([p0,p1[::-1]], axis=0) / _scale
-        polygon = skimage.measure.approximate_polygon(polygon, tolerance=5)
-        ring_map[skimage.draw.polygon( polygon[:,0], polygon[:,1] )] = (i+1)
-    #upscale to the original size
-    ring_map       = PIL.Image.fromarray(ring_map).resize(cell_map.shape[::-1], PIL.Image.NEAREST)
-    ring_map       = (ring_map * cell_map).astype(np.int16)
-    ring_map_rgb   = np.zeros(ring_map.shape+(3,), 'uint8')
-    
-    COLORS = [
-        (255,255,255),
-        ( 23,190,207),
-        (255,127, 14),
-        ( 44,160, 44),
-        (214, 39, 40),
-        (148,103,189),
-        (140, 86, 75),
-        (188,189, 34),
-        (227,119,194),
-    ]
-    
-    labeled_cells  = scipy.ndimage.label(cell_map)[0]
-    cells          = []
-    for i,cell_slices in enumerate(scipy.ndimage.find_objects(labeled_cells)):
-        cell_mask            = (labeled_cells[cell_slices] == (i+1))
-        cell_labels, counts  = np.unique(ring_map[cell_slices][cell_mask], return_counts=True)
-        max_label            = cell_labels[counts.argmax()]
-        cells.append([cell_slices, cell_mask, max_label])
-        ring_map[cell_slices][cell_mask] = max_label
-        ring_map_rgb[cell_slices][cell_mask] = COLORS[max_label%len(COLORS)]
+    tree_ring_model_path = f'models/treerings/{SETTINGS["active_treerings_model"]}.cpkl'
+    print(f'Processing file {image_path} with model {tree_ring_model_path}')
+    model = dill.load(open(tree_ring_model_path, 'rb'))
+    cells, ring_map_rgb = model.associate_cells_from_segmentation(cell_map, ring_points)
     
     output_path = image_path+'.ring_map.png'
     write_image(output_path, ring_map_rgb)
     return {
         'ring_map': os.path.basename(output_path),
-        'cells': [ { 'id':i, 'year':int(c[2]), 'area':int(np.sum(c[1])) } for i,c in enumerate(cells)]  #TODO
+        'cells':    cells,
     }
 
 
