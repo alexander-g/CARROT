@@ -39,18 +39,7 @@
     <tr style="display:none">
       <td colspan="5" class="ui content"  style="padding:0px; padding-bottom:10px;" filename="${filename}">
         <div class="ui bottom attached secondary icon menu" style="border-top-width: 0px;">
-
-          <!--<div class="ui dropdown item" onclick="console.error(event)">
-            <i class="play icon"></i>
-            <div class="menu">
-              <div class="item">Process all</div>
-              <div class="divider"></div>
-              <div class="item">Detect cells</div>
-              <div class="item">Detect tree rings</div>
-              <div class="item">Associate cells and tree rings</div>
-            </div>
-          </div>-->
-          <a class="item" onclick="on_process_single(event)"  data-tooltip="Process" data-position="bottom left">
+          <a class="item" onclick="on_process_image(event)"  data-tooltip="Process" data-position="bottom left">
             <i class="play icon"></i>
           </a>
 
@@ -66,20 +55,11 @@
           <script>
             $('.view-menu-button').last().popup({hoverable:true});
             $('.view-menu-popup').last().find('.checkbox').checkbox({onChange:on_show_treerings}).checkbox('check');
-            //$('.dropdown.item').dropdown({on: 'hover'})
           </script>
-
 
           <a class="item" onclick="on_download_single(event)" data-tooltip="Download results" data-position="bottom left">
             <i class="download icon"></i>
           </a>
-
-          <label class="item" for="input-upload-single" data-tooltip="Upload results" data-position="bottom left" style="cursor:pointer">
-            <i class="upload icon"></i>
-          </label>
-          <input type="file" id="input-upload-single" style="display:none" 
-                  onclick="this.value=null;" onchange="on_upload_single(event)" 
-                  accept="*/*" multiple>
 
         </div>
         
@@ -104,8 +84,9 @@
             <div class="ui dimmer segmented-dimmer">
                   <div class="content">
                     <div class="ui primary button" filename="${filename}"
-                          onclick='on_process_image(event)'>
-                         Process Image
+                          onclick='on_process_image(event)' style="display:flex">
+                          <div class="ui active tiny inline loader" style="display:none; margin-right:5px;"></div>
+                          <p>Process Image</p>
                     </div>
                   </div>
             </div>
@@ -117,7 +98,7 @@
                   viewBox="0 0 1 1">  <!--viewBox will be adjusted in javascript-->
             </svg>
             
-            <div class="ui top right attached label icon" style="border-top-right-radius: 0;">
+            <!--<div class="ui top right attached label icon" style="border-top-right-radius: 0;">
               <i class="play link blue icon process-single-image" onclick="on_process_image(event)"  title="Process Image"></i>
               <i class="ellipsis horizontal link icon has-popup" data-position="right center"></i>
               <div class="ui popup fluid form right-side-image-selection">
@@ -150,7 +131,7 @@
                   </div>
                 </div>
               </div>
-            </div>
+            </div>-->
 
           </div>
       </div>
@@ -165,7 +146,8 @@
 
 
 
-<body onload="init()"  ondrop="on_drop(event)" ondragover="on_dragover(event)">
+<body onload="init()"  
+      ondrop="on_drop(event)" ondragover="on_dragover(event)" >
 
 <div class="ui container menu">
 
@@ -188,6 +170,7 @@
               onchange="on_inputfolder_select(this)"  webkitdirectory directory multiple>
         
         <div class="divider"></div>
+        <!--
         <label for="input-groundtruth" class="ui icon item">
           <i class="violet images icon"></i>
           Load Ground Truth Masks
@@ -202,6 +185,20 @@
         <input type="file" id="input-external-predictions" style="display:none" 
                 onclick="this.value=null;" onchange="on_external_predictions_select(event)" 
                 accept="image/*" multiple>
+        -->
+
+        <label class="ui icon item" onclick="on_download_all(event)">
+          <i class="download icon"></i>
+          Download Results
+        </label>
+
+        <label for="input-upload-results" class="ui icon item">
+          <i class="upload icon"></i>
+          Upload Results
+        </label>
+        <input type="file" id="input-upload-results" style="display:none" 
+                onclick="this.value=null;" onchange="on_upload_results(event)" 
+                accept="*/*" multiple>
       </div>
     </div>
 
@@ -226,6 +223,7 @@
     <div class="ui secondary right menu">
       <div class="item">
         <div class="ui buttons">
+        <!--
         <label class="ui button has-popup" id="download-button" data-position="bottom right">
           <i class="download icon"></i>
         </label>
@@ -244,6 +242,7 @@
           </a>
         </div>
         <script>$('#download-button').popup({hoverable:true});</script>
+        -->
 
         <label class="ui button" onclick="on_settings()"
               id="settings-button" data-tooltip="Settings" data-position="bottom center">

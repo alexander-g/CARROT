@@ -48,15 +48,17 @@ function process_file(filename){
 
     set_processed(filename, false);
     var $process_button = $(`.ui.primary.button[filename="${filename}"]`);
-    $process_button.html(`<div class="ui active tiny inline loader"></div> Processing...`);
 
     let _current_progress_status = 'Processing...'
+    $process_button.find('p').text(`${_current_progress_status}`)
     $(global.event_source).on('message', function(ev){
       var data = JSON.parse(ev.originalEvent.data);
       if(data.image!=filename)
         return;
 
-      $process_button.html(`<div class="ui active tiny inline loader"></div> ${_current_progress_status} ${Math.round(data.progress*100)}%`);
+      //$process_button.html(`<div class="ui active tiny inline loader"></div> ${_current_progress_status} ${Math.round(data.progress*100)}%`);
+      $process_button.find('.loader').show()
+      $process_button.find('p').text(`${_current_progress_status} ${Math.round(data.progress*100)}%`)
     })
 
 
@@ -88,13 +90,16 @@ function process_file(filename){
         var years = arange(1, 1+data.ring_points.length)
         global.input_files[filename].treering_results.years = years;
 
-        //set_processed_image_url(filename, `/images/${data.segmentation}?_=${new Date().getTime()}`);
+        set_processed_image_url(filename, `/images/${data.segmentation}?_=${new Date().getTime()}`);
         display_treerings(filename, data.ring_points, years);
       })
     }
 
     if(global.settings.cells_enabled && global.settings.treerings_enabled){
-      promise = promise.then( () => $.get(`/associate_cells/${filename}`) );
+      promise = promise.then( function() {
+        _current_progress_status = 'Postprocessing...';
+        return $.get(`/associate_cells/${filename}`) 
+      });
       promise.done(async function(data){
         console.log('Cell association finished for ', filename)
         global.input_files[filename].associated_results = data;
@@ -140,7 +145,50 @@ function on_cancel(){
     global.cancel_requested = true;
 }
 
-function on_process_single(event){
-  var filename = $(event.target).closest('[filename]').attr('filename')
-  process_file(filename)
+
+function update_association(filename, cells_segmentation_file=undefined, treerings_segmentation_file=undefined){
+  if(cells_segmentation_file==undefined && treerings_segmentation_file==undefined)
+    return;
+  
+  set_processed(filename, false);
+  $(`.ui.primary.button[filename="${filename}"] p`).text(`Postprocessing...`)
+
+  let promise = new $.Deferred(); promise.resolve()  //dummy promise
+  if(cells_segmentation_file){
+      promise = promise.then(function(){
+        cells_segmentation_file = rename_file(cells_segmentation_file, `${filename}.cells.png`)
+        upload_file_to_flask('/file_upload', cells_segmentation_file)
+        global.input_files[filename].cell_results = {result: `${filename}.cells.png`}
+        set_processed_image_url(filename, `/images/${filename}.cells.png?_=${new Date().getTime()}`);
+      });
+  }
+  if(treerings_segmentation_file){
+      promise = promise.then(function(){
+        treerings_segmentation_file = rename_file(treerings_segmentation_file, `${filename}.treerings.png`)
+        upload_file_to_flask('/file_upload', treerings_segmentation_file);
+        global.input_files[filename].treering_results = {segmentation:`${filename}.treerings.png`}
+        set_processed_image_url(filename, `/images/${filename}.treerings.png?_=${new Date().getTime()}`);
+      });
+  }
+
+  var recluster = (!!treerings_segmentation_file)
+  promise = promise.then( () => $.get(`/associate_cells/${filename}`, {recluster:recluster}) );
+  promise.done(async function(data){
+      console.log('Cell association finished for ', filename)
+      global.input_files[filename].associated_results = data;
+      set_processed_image_url(filename, `/images/${data.ring_map}?_=${new Date().getTime()}`);
+      
+      //TODO refactor
+      global.input_files[filename].treering_results.ring_points = data.ring_points;
+      global.input_files[filename].treering_results.years = arange(1, 1+data.ring_points.length);
+      display_treerings(filename);
+  })
+
+  promise = promise.always( () => {
+    set_processed(filename , true);
+    delete_image(filename);
+    //TODO: detach progress callback from event_source
+    return promise;
+  }).fail(()=>console.log('Processing failed'));
+  return promise
 }

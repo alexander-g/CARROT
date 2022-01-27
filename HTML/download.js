@@ -19,6 +19,16 @@ function downloadBlob(filename, blob){
   return downloadURI(filename, URL.createObjectURL(blob));
 }
 
+async function download_as_zip(filename, data){
+  var zip = new JSZip();
+  for(var fname in data){
+      zip.file(fname, await data[fname], {binary:true});
+  }
+
+  zip.generateAsync({type:"blob"}).then( blob => {
+    downloadBlob( filename, blob );
+  } );
+}
 
 
 //called when user clicks on the download processed images button
@@ -53,88 +63,6 @@ function GET_as_blob(uri){
 
 
 
-//called when user clicks on the download comparisons button
-async function on_download_comparisons(){
-  var data = {};
-  
-  for(var fname in global.input_files){
-    var f = global.input_files[fname];
-    if(f.processed && f.has_groundtruth){
-      console.log(fname, ' has ground truth and is processed')
-
-      var basename = filebasename(fname);
-      data[ basename+`/${fname}.cell_statistics.csv`] = GET_as_blob(`/images/statistics_${fname}.csv`);
-      data[ basename+`/${fname}.false_positives.csv`] = GET_as_blob(`/images/false_positives_${fname}.csv`);
-      data[ basename+`/${fname}.prediction.png` ]     = GET_as_blob(`/images/${fname}.cells.png`);
-      data[ basename+`/${fname}.error_map.png` ]      = GET_as_blob(`/images/${fname}.vismap.png`);
-      data[ basename+`/${fname}.ground_truth.png` ]   = GET_as_blob(`/images/GT_${fname}.png`);
-      data[ basename+`/`+fname ]                      = f.file;
-    }
-  }
-
-  var zip = new JSZip();
-  for(var fname in data){
-      zip.file(fname, await data[fname], {binary:true});
-  }
-
-  zip.generateAsync({type:"blob"}).then( blob => {
-    downloadBlob(  'comparisons.zip', blob  );
-  } );
-}
-
-
-//called when user clicks on the download statistics button
-function on_download_statistics(){
-  var data = {};
-  const micrometer_factor = global.settings.micrometer_factor;
-  const ignore_buffer_px  = global.settings.ignore_buffer_px;
-
-  for(var fname in global.input_files){
-    var f     = global.input_files[fname];
-    var years = f.treering_results.years;
-    if(f.processed && !!f.associated_results){   //FIXME: !!{} is always true
-      var csv_text = '#Year, X(px), Y(px), Lumen Area(px), Lumen Area(μm), Position within tree ring(0-100)\n';
-      var cells    = f.associated_results.cells.sort( (x,y)=>(x.year-y.year) );
-      for(var i in cells){
-        if(cells[i].year==0)
-          continue;
-        if(box_distance_from_border(cells[i].box_xy, fname)<ignore_buffer_px)
-          continue;
-
-        var celldata = [
-          years[cells[i].year-1],
-          box_center(cells[i].box_xy)[0].toFixed(0),
-          box_center(cells[i].box_xy)[1].toFixed(0),
-          cells[i].area,
-          cells[i].area / micrometer_factor,
-          Number(cells[i].position_within).toFixed(1),
-        ]
-        csv_text += celldata.join(',')+'\n';
-      }
-      data[`${fname}.cell_statistics.csv`] = new Blob([csv_text], {type: 'text/csv'});
-
-
-      var csv_text = '#Year, Mean Tree Ring Width(px), Mean Tree Ring Width(μm)\n';
-      var ring_points = f.treering_results.ring_points;
-      for(var i in ring_points){
-        var sum  = ring_points[i].map( x=>dist(x[0],x[1]) ).reduce( (x,y)=>x+y );
-        var mean = (sum / ring_points[i].length);
-        csv_text += `${years[i]}, ${mean.toFixed(2)}, ${(mean / micrometer_factor).toFixed(2)}\n`
-      }
-      data[`${fname}.tree_ring_statistics.csv`] = new Blob([csv_text], {type: 'text/csv'});
-    }
-  }
-
-  var zip = new JSZip();
-  for(var fname in data){
-      zip.file(fname, data[fname], {binary:true});
-  }
-
-  zip.generateAsync({type:"blob"}).then( blob => {
-    downloadBlob(  'statistics.zip', blob  );
-  } );
-}
-
 function box_distance_from_border(box_xy, filename){
   var $img = $(`[filename="${filename}"] img.input-image`);
   var W    = $img[0].naturalWidth;
@@ -148,27 +76,89 @@ function box_center(box){
 }
 
 
-//called when user clicks on the download button inside a single image
-async function on_download_single(event){
-  var filename = $(event.target).closest('[filename]').attr('filename')
+function statistics_for_file(filename){
+  var f     = global.input_files[filename];
+  if(!f.processed)
+    return
 
-  var r = global.input_files[filename]
-  if(!r.processed)  //TODO: need to check if individual results (cells/tree rings) are available
-    return;
-  
-  var data = {}
-  data[r.treering_results.segmentation] = GET_as_blob('/images/'+r.treering_results.segmentation)
-  data[r.cell_results.result]           = GET_as_blob('/images/'+r.cell_results.result)
+  var years = f.treering_results.years;
 
-  var zip = new JSZip();
-  for(var fname in data){
-      zip.file(fname, await data[fname], {binary:true});
+  const micrometer_factor = global.settings.micrometer_factor;
+  const ignore_buffer_px  = global.settings.ignore_buffer_px;
+
+  var csv_text = '#Year, X(px), Y(px), Lumen Area(px), Lumen Area(μm), Position within tree ring(0-100)\n';
+  var cells    = f.associated_results.cells.sort( (x,y)=>(x.year-y.year) );
+  for(var i in cells){
+    if(cells[i].year==0)
+      continue;
+    if(box_distance_from_border(cells[i].box_xy, filename)<ignore_buffer_px)
+      continue;
+
+    var celldata = [
+      years[cells[i].year-1],
+      box_center(cells[i].box_xy)[0].toFixed(0),
+      box_center(cells[i].box_xy)[1].toFixed(0),
+      cells[i].area,
+      cells[i].area / micrometer_factor,
+      Number(cells[i].position_within).toFixed(1),
+    ]
+    csv_text += celldata.join(',')+'\n';
   }
+  var cell_stats = csv_text;
+  //data[`${filename}.cell_statistics.csv`] = new Blob([csv_text], {type: 'text/csv'});
 
-  zip.generateAsync({type:"blob"}).then( blob => {
-    downloadBlob(  `${filename}.results.zip`, blob  );
-  } );
+
+  var csv_text = '#Year, Mean Tree Ring Width(px), Mean Tree Ring Width(μm)\n';
+  var ring_points = f.treering_results.ring_points;
+  for(var i in ring_points){
+    var sum  = ring_points[i].map( x=>dist(x[0],x[1]) ).reduce( (x,y)=>x+y );
+    var mean = (sum / ring_points[i].length);
+    csv_text += `${years[i]}, ${mean.toFixed(2)}, ${(mean / micrometer_factor).toFixed(2)}\n`
+  }
+  //data[`${filename}.tree_ring_statistics.csv`] = new Blob([csv_text], {type: 'text/csv'});
+  var tree_ring_stats = csv_text;
+
+  return [cell_stats, tree_ring_stats]
 }
 
 
+function data_for_file(filename, prefix=''){
+  var r = global.input_files[filename]
+  if(!r.processed)  //TODO: need to check if individual results (cells/tree rings) are available
+    return;
+
+  var data = {}
+  data[prefix+r.treering_results.segmentation] = GET_as_blob('/images/'+r.treering_results.segmentation)
+  data[prefix+r.cell_results.result]           = GET_as_blob('/images/'+r.cell_results.result)
+  var stats = statistics_for_file(filename)
+  if(stats!=undefined){
+    data[prefix+`${filename}.cell_statistics.csv`]      = new Blob([stats[0]], {type: 'text/csv'});
+    data[prefix+`${filename}.tree_ring_statistics.csv`] = new Blob([stats[1]], {type: 'text/csv'});
+  }
+  return data
+}
+
+
+//called when user clicks on the download button inside a single image
+async function on_download_single(event){
+  var filename = $(event.target).closest('[filename]').attr('filename')
+  var data     = data_for_file(filename)
+
+  if(Object.keys(data).length>0)
+    download_as_zip(`${filename}.results.zip`, data)
+}
+
+
+//called when user clicks on the download results button in the file menu
+function on_download_all(event){
+  let data = {}
+  for(var filename of Object.keys(global.input_files)){
+    var d = data_for_file(filename, filename+'/')
+    Object.assign(data, d)
+    console.log(filename, d, data)
+  }
+
+  if(Object.keys(data).length>0)
+    download_as_zip('results.zip', data)
+}
 
