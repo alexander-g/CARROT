@@ -63,7 +63,7 @@ function add_treering_label(points, $svg, ring_nr, viewbox_width){
 
     //ring width
     var sum  = points.map( x=>dist(x[0],x[1]) ).reduce( (x,y)=>x+y );
-    var mean = ((sum / points.length)*global.settings.micrometer_factor).toFixed(1);
+    var mean = ((sum / points.length) / global.settings.micrometer_factor).toFixed(1);
 
     //complicated but needed due to scaling issues
     var $group = $(document.createElementNS('http://www.w3.org/2000/svg', 'g'));

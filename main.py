@@ -82,8 +82,10 @@ def process_treerings(imgname):
 @app.route('/associate_cells/<imgname>')
 def associate_cells(imgname):
     fullpath     = os.path.join(TEMPFOLDER.name, imgname)
-    result       = processing.associate_cells(fullpath)
-    result['ring_map'] = os.path.basename(result['ring_map'])
+    recluster    = request.args.get('recluster',False)
+    result       = processing.associate_cells(fullpath, recluster)
+    result['ring_map']    = os.path.basename(result['ring_map'])
+    result['ring_points'] = [rp.tolist() for rp in result['ring_points']]
     return flask.jsonify(result)
 
 @app.route('/delete_image/<imgname>')
@@ -127,4 +129,7 @@ if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not is_debug:  #to avoid fla
         	print('Flask started')
         	webbrowser.open('http://localhost:5000', new=2)
 
-app.run(host='127.0.0.1',port=5000, debug=is_debug)
+#FIXME: ugly ugly
+host = ([x[x.index('=')+1:] for x in sys.argv if x.startswith('--host=')] + ['127.0.0.1'])[0]
+print(f'Host: {host}')
+app.run(host=host,port=5000, debug=is_debug)

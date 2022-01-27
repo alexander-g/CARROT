@@ -13,6 +13,7 @@
   <script src="/static/settings.js"></script>
   <script src="/static/util.js"></script>
   <script src="/static/download.js"></script>
+  <script src="/static/upload.js"></script>
   <script src="/static/treering_overlays.js"></script>
 
   <script src="/static/thirdparty/exif-js"></script>
@@ -25,7 +26,7 @@
   </style>
 
 
-  <script id="filetable-item-template" type="text/x-jQuery-tmpl">
+  <template id="filetable-item-template">
     <tr class="ui title" filename="${filename}">
       <td> 
         <i class="dropdown icon"></i>
@@ -36,16 +37,61 @@
       </td>
     </tr>
     <tr style="display:none">
-      <td colspan="5" class="ui content" style="padding-bottom:21px" filename="${filename}">
+      <td colspan="5" class="ui content"  style="padding:0px; padding-bottom:10px;" filename="${filename}">
+        <div class="ui bottom attached secondary icon menu" style="border-top-width: 0px;">
+
+          <!--<div class="ui dropdown item" onclick="console.error(event)">
+            <i class="play icon"></i>
+            <div class="menu">
+              <div class="item">Process all</div>
+              <div class="divider"></div>
+              <div class="item">Detect cells</div>
+              <div class="item">Detect tree rings</div>
+              <div class="item">Associate cells and tree rings</div>
+            </div>
+          </div>-->
+          <a class="item" onclick="on_process_single(event)"  data-tooltip="Process" data-position="bottom left">
+            <i class="play icon"></i>
+          </a>
+
+          <a class="item view-menu-button" data-position="bottom left">
+            <i class="eye icon"></i>
+          </a>
+          <div class="ui flowing popup view-menu-popup">
+            <div class="ui checkbox">
+              <input type="checkbox">
+              <label>Tree rings</label>
+            </div>
+          </div>
+          <script>
+            $('.view-menu-button').last().popup({hoverable:true});
+            $('.view-menu-popup').last().find('.checkbox').checkbox({onChange:on_show_treerings}).checkbox('check');
+            //$('.dropdown.item').dropdown({on: 'hover'})
+          </script>
+
+
+          <a class="item" onclick="on_download_single(event)" data-tooltip="Download results" data-position="bottom left">
+            <i class="download icon"></i>
+          </a>
+
+          <label class="item" for="input-upload-single" data-tooltip="Upload results" data-position="bottom left" style="cursor:pointer">
+            <i class="upload icon"></i>
+          </label>
+          <input type="file" id="input-upload-single" style="display:none" 
+                  onclick="this.value=null;" onchange="on_upload_single(event)" 
+                  accept="*/*" multiple>
+
+        </div>
         
+
         {{tmpl({filename:filename}) "#filelist-item-content-template"}}
 
       </td>
     </tr>
-  </script>
+  </template>
 
 
-  <script id="filelist-item-content-template" type="text/x-jQuery-tmpl">
+  <template id="filelist-item-content-template">
     <div filename="${filename}">
       <div class="ui large images">
           <!-- left image: input -->
@@ -109,7 +155,7 @@
           </div>
       </div>
     </div>
-  </script>
+  </template>
 </head>
 
 
@@ -119,7 +165,7 @@
 
 
 
-<body onload="init()">
+<body onload="init()"  ondrop="on_drop(event)" ondragover="on_dragover(event)">
 
 <div class="ui container menu">
 
@@ -292,14 +338,14 @@
       <label>Statistics</label>
       <div class="ui right labeled input" id="settings-ignore-buffer">
         <input type="number" step="1" min="0" style="width: 5ch;" value="0" id='settings-ignore-buffer-input'>
-        <div class="ui basic label" style="width:12%;"> px </div>
+        <div class="ui basic label" style="width:15%;"> px </div>
         <label style="padding:10px; width:65%;">Ignore cells within this distance from the border</label>
       </div>
 
       <label></label>
       <div class="ui right labeled input" id="settings-micrometers">
         <input type="number" step="0.01" min="0" style="width: 5ch;" value="1.0" id='settings-micrometers-input'>
-        <div class="ui basic label" style="width:12%;"> μm/px </div>
+        <div class="ui basic label" style="width:15%;"> px/μm </div>
         <label style="padding:10px; width:65%;">Pixel to micrometer conversion factor</label>
       </div>
     </div>

@@ -20,8 +20,9 @@ global = {
 
 var FILE   = {name     : '',
               file     : undefined,    //javascript file object
-              treering_results: {},
-              cell_results:     {},
+              cell_results    : undefined,  //results from cell detection
+              treering_results: {},         //results from tree ring detection
+              associated_results:     {},   //results from cell-ring association
               processed:        false,
               processed_fname:  '',
               has_groundtruth:  false,
@@ -60,11 +61,11 @@ function set_input_files(files){
     global.input_files[f.name] = Object.assign({}, deepcopy(FILE), {name: f.name, file: f});
   update_inputfiles_list();
 
-  for(var f of files){
+  /* for(var f of files){
       EXIF.getData(f, function() {
         global.input_files[this.name].datetime = EXIF.getTag(this, "DateTime");
     });
-  }
+  } */
 }
 
 function on_inputfiles_select(input){

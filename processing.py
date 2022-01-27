@@ -159,15 +159,21 @@ def maybe_compare_to_groundtruth(input_image_path):
             return vismap
 
 
-def associate_cells(image_path):
+def associate_cells(image_path, recluster=False):
     '''Assign a tree ring label to each cell'''
-    #TODO: check if files exist
-    cell_map    = PIL.Image.open(image_path+'.cells.png').convert('L') / np.float32(255)
-    ring_points = pickle.load(open(image_path+'.ring_points.pkl','rb'))
-
     tree_ring_model_path = f'models/treerings/{SETTINGS["active_treerings_model"]}.cpkl'
     print(f'Processing file {image_path} with model {tree_ring_model_path}')
     model = dill.load(open(tree_ring_model_path, 'rb'))
+    
+    #TODO: check if files exist
+    cell_map    = PIL.Image.open(image_path+'.cells.png').convert('L') / np.float32(255)
+    if recluster:
+        treering_segmentation  = PIL.Image.open(image_path+'.treerings.png').convert('L') / np.float32(255)
+        ring_points            = model.segmentation_to_points(treering_segmentation)['ring_points']
+    else:
+        ring_points = pickle.load(open(image_path+'.ring_points.pkl','rb'))
+
+    
     cells, ring_map_rgb = model.associate_cells_from_segmentation(cell_map, ring_points)
     
     output_path = image_path+'.ring_map.png'
@@ -175,6 +181,7 @@ def associate_cells(image_path):
     return {
         'ring_map': os.path.basename(output_path),
         'cells':    cells,
+        'ring_points' : [np.stack([a[::100], b[::100]], axis=1) for a,b in ring_points ],  #TODO
     }
 
 

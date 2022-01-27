@@ -41,8 +41,9 @@ function set_processed_image_url(filename, url){
 
 function process_file(filename){
     //clear cell_results/tree_ring results + svg
-    global.input_files[filename].cell_results     = {};
-    global.input_files[filename].treering_results = {};
+    global.input_files[filename].cell_results       = {};
+    global.input_files[filename].treering_results   = {};
+    global.input_files[filename].associated_results = {};
     display_treerings(filename);
 
     set_processed(filename, false);
@@ -68,6 +69,7 @@ function process_file(filename){
       });
       promise.done(async function(data){
         console.log('Cell detection finished for ', filename)
+        global.input_files[filename].cell_results = data;
         var time = new Date().getTime()
         var url  = `/images/${data.result}?_=${time}`;
         set_processed_image_url(filename, url);
@@ -95,7 +97,7 @@ function process_file(filename){
       promise = promise.then( () => $.get(`/associate_cells/${filename}`) );
       promise.done(async function(data){
         console.log('Cell association finished for ', filename)
-        global.input_files[filename].cell_results = data;
+        global.input_files[filename].associated_results = data;
         set_processed_image_url(filename, `/images/${data.ring_map}?_=${new Date().getTime()}`);
       })
     }
@@ -138,3 +140,7 @@ function on_cancel(){
     global.cancel_requested = true;
 }
 
+function on_process_single(event){
+  var filename = $(event.target).closest('[filename]').attr('filename')
+  process_file(filename)
+}
