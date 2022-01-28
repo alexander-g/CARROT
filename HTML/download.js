@@ -22,7 +22,10 @@ function downloadBlob(filename, blob){
 async function download_as_zip(filename, data){
   var zip = new JSZip();
   for(var fname in data){
-      zip.file(fname, await data[fname], {binary:true});
+      let filedata = undefined;
+      try{ filedata = await data[fname] }
+      catch{ continue; }
+      zip.file(fname, filedata, {binary:true});
   }
 
   zip.generateAsync({type:"blob"}).then( blob => {
@@ -78,7 +81,7 @@ function box_center(box){
 
 function statistics_for_file(filename){
   var f     = global.input_files[filename];
-  if(!f.processed)
+  if(!f.processed || Object.keys(f.associated_results).length==0)
     return
 
   var years = f.treering_results.years;
@@ -128,8 +131,9 @@ function data_for_file(filename, prefix=''){
     return;
 
   var data = {}
-  data[prefix+r.treering_results.segmentation] = GET_as_blob('/images/'+r.treering_results.segmentation)
-  data[prefix+r.cell_results.result]           = GET_as_blob('/images/'+r.cell_results.result)
+  data[prefix+r.treering_results.segmentation] = GET_as_blob(`/images/${r.treering_results.segmentation}?_=${Date.now()}`)
+  data[prefix+r.cell_results.result]           = GET_as_blob(`/images/${r.cell_results.result}?_=${Date.now()}`)
+  data[prefix+r.associated_results.ring_map]   = GET_as_blob(`/images/${r.associated_results.ring_map}?_=${Date.now()}`)
   var stats = statistics_for_file(filename)
   if(stats!=undefined){
     data[prefix+`${filename}.cell_statistics.csv`]      = new Blob([stats[0]], {type: 'text/csv'});

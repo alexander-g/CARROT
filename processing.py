@@ -85,7 +85,6 @@ def process_treerings(image_path):
     
     return {
         'segmentation': output_path,
-        #'ring_points' : [np.stack([a[::100], b[::100]], axis=1) for a,b in y['ring_points']],  #TODO
         'ring_points' : [np.stack([sample_points(a, 64), sample_points(b, 64)], axis=1) for a,b in y['ring_points']],  #TODO
     }
 
@@ -182,7 +181,6 @@ def associate_cells(image_path, recluster=False):
     return {
         'ring_map': os.path.basename(output_path),
         'cells':    cells,
-        #'ring_points' : [np.stack([a[::100], b[::100]], axis=1) for a,b in ring_points ],  #TODO
         'ring_points' : [np.stack([sample_points(a, 64), sample_points(b, 64)], axis=1) for a,b in ring_points ],  #TODO
     }
 
