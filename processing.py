@@ -165,22 +165,25 @@ def associate_cells(image_path, recluster=False):
     print(f'Processing file {image_path} with model {tree_ring_model_path}')
     model = dill.load(open(tree_ring_model_path, 'rb'))
     
-    #TODO: check if files exist
-    cell_map    = PIL.Image.open(image_path+'.cells.png').convert('L') / np.float32(255)
     if recluster:
         treering_segmentation  = PIL.Image.open(image_path+'.treerings.png').convert('L') / np.float32(255)
         ring_points            = model.segmentation_to_points(treering_segmentation)['ring_points']
     else:
-        ring_points = pickle.load(open(image_path+'.ring_points.pkl','rb'))
+        ring_points            = pickle.load(open(image_path+'.ring_points.pkl','rb'))
 
+    cell_path   = image_path+'.cells.png'
+    if os.path.exists(cell_path):
+        cell_map            = PIL.Image.open(cell_path).convert('L') / np.float32(255)
+        cells, ring_map_rgb = model.associate_cells_from_segmentation(cell_map, ring_points)
+        ring_map_output     = image_path+'.ring_map.png'
+        write_image(ring_map_output, ring_map_rgb)
+    else:
+        ring_map_output     = ''
+        cells               = []
     
-    cells, ring_map_rgb = model.associate_cells_from_segmentation(cell_map, ring_points)
-    
-    output_path = image_path+'.ring_map.png'
-    write_image(output_path, ring_map_rgb)
     return {
-        'ring_map': os.path.basename(output_path),
-        'cells':    cells,
+        'ring_map'    : ring_map_output,
+        'cells'       : cells,
         'ring_points' : [np.stack([sample_points(a, 64), sample_points(b, 64)], axis=1) for a,b in ring_points ],  #TODO
     }
 

@@ -176,7 +176,8 @@ function update_association(filename, cells_segmentation_file=undefined, treerin
   promise.done(async function(data){
       console.log('Cell association finished for ', filename)
       global.input_files[filename].associated_results = data;
-      set_processed_image_url(filename, `/images/${data.ring_map}?_=${new Date().getTime()}`);
+      if(data.ring_map)
+        set_processed_image_url(filename, `/images/${data.ring_map}?_=${new Date().getTime()}`);
       
       //TODO refactor
       global.input_files[filename].treering_results.ring_points = data.ring_points;
