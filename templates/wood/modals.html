@@ -1,0 +1,84 @@
+{% macro modal_settings() %}
+
+<div class="ui tiny modal" id="settings-dialog">
+    <i class="close icon"></i>
+    <div class="header"> Settings </div>
+  
+  
+  
+    <div class="ui form content">
+      <!--<h4 class="ui dividing header">Cell Detection</h4>-->
+      <div class="field">
+        <label>Cell detection</label>
+        <div class="ui toggle checkbox" id="settings-cells-enable">
+          <label>Enable detection of cells</label>
+          <input type="checkbox" tabindex="0" class="hidden">
+        </div>
+      </div>
+      <div class="field" id="settings-cells-field">
+        <label>Cell model</label>
+        <div class="ui dropdown selection" id="settings-active-cells-model">
+          <input type="hidden" name="active-model">
+          <i class="dropdown icon"></i>
+          <div class="default text">Select a model</div>
+          <div class="menu">
+            <div class="item" data-value="1">Model_A</div>
+            <div class="item" data-value="0">Model_B</div>
+          </div>
+        </div>
+      </div>
+  
+      <div class="ui divider"></div>
+  
+      <!--<h4 class="ui dividing header">Tree Ring Detection</h4>-->
+      <div class="field">
+        <label>Tree ring detection</label>
+        <div class="ui toggle checkbox" id="settings-treerings-enable">
+          <label>Enable detection of tree rings</label>
+          <input type="checkbox" tabindex="0" class="hidden">
+        </div>
+      </div>
+      <div class="field" id="settings-treerings-field">
+        <label>Tree ring model</label>
+        <div class="ui dropdown selection" id="settings-active-treerings-model">
+          <input type="hidden" name="active-treerings-model">
+          <i class="dropdown icon"></i>
+          <div class="default text">Select a model</div>
+          <div class="menu">
+            <div class="item" data-value="1">Model_C</div>
+            <div class="item" data-value="0">Model_D</div>
+          </div>
+        </div>
+      </div>
+  
+      <div class="ui divider"></div>
+  
+      <div class="field">
+        <label>Statistics</label>
+        <div class="ui right labeled input" id="settings-ignore-buffer">
+          <input type="number" step="1" min="0" style="width: 5ch;" value="0" id='settings-ignore-buffer-input'>
+          <div class="ui basic label" style="width:15%;"> px </div>
+          <label style="padding:10px; width:65%;">Ignore cells within this distance from the border</label>
+        </div>
+  
+        <label></label>
+        <div class="ui right labeled input" id="settings-micrometers">
+          <input type="number" step="0.01" min="0" style="width: 5ch;" value="1.0" id='settings-micrometers-input'>
+          <div class="ui basic label" style="width:15%;"> px/μm </div>
+          <label style="padding:10px; width:65%;">Pixel to micrometer conversion factor</label>
+        </div>
+      </div>
+    </div>
+  
+    <div class="actions">
+        <div class="ui negative button">
+          Cancel
+        </div>
+        <div class="ui positive right labeled icon button">
+          Save
+          <i class="checkmark icon"></i>
+        </div>
+      </div>
+</div>
+
+{% endmacro %}

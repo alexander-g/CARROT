@@ -1,0 +1,84 @@
+<!--{{warning}}-->
+
+{% from   'base/top_menu.html'        import top_menu %}
+{% import 'base/modals.html'          as     base_modals %}
+{% from   'base/main_container.html'  import main_container %}
+{% from   'base/js_templates.html'    import filetable_row_template %}
+{% from   'wood/modals.html'          import modal_settings %}
+
+{% set app = "WoodAnatomyApp" %}
+
+<html>
+    <title>DigIT Wood Anatomy</title>
+<head>
+    {# TODO: indent #}
+    {% include 'base/scripts.html'   %}
+    {% include 'wood/scripts.html'  %}
+
+    {{ filetable_row_template(app)  | indent }}
+</head>
+
+
+<body onload="{{app}}.init()">
+
+    {{ top_menu(app)             | indent }}
+
+    {{ main_container(app)       | indent }}
+
+    {{ modal_settings()          | indent }}
+    {{ base_modals.modal_training_progress()      | indent }}
+    {{ base_modals.modal_loading_files_progress() | indent }}
+
+</body>
+</html>
+
+
+
+
+{#
+
+
+{% extends "base.html" %}
+
+
+{% block htmltitle %}DigIT Wood Anatomy{% endblock %}
+
+
+{% block scripts %}
+<script src="/static/script.js"></script>
+<script src="/static/processing.js"></script>
+<script src="/static/settings.js"></script>
+<script src="/static/util.js"></script>
+<script src="/static/download.js"></script>
+<script src="/static/upload.js"></script>
+<script src="/static/treering_overlays.js"></script>
+
+<script src="/static/thirdparty/exif-js"></script>
+<script src="/static/thirdparty/jszip.min.js"></script>
+
+<style>
+  [contenteditable]:focus {
+      outline: 0px solid transparent;
+  }
+</style>
+{% endblock scripts%}
+
+
+
+
+
+
+{% block    js_templates %}
+{% endblock js_templates %}
+
+
+
+
+
+
+{% block    modals %}
+    {% include 'modals.html' %}
+{% endblock modals %}
+
+
+#}
