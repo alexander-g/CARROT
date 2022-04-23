@@ -1,9 +1,9 @@
 
 
 function display_treerings(filename){
-    var  ring_points = global.input_files[filename].treering_results.ring_points;
-    var  years       = global.input_files[filename].treering_results.years;
-    var  img = $(`[filename="${filename}"] img.input-image`)[0];
+    const ring_points = GLOBAL.files[filename].treering_results.ring_points;
+    const years       = GLOBAL.files[filename].treering_results.years;
+    const img         = $(`[filename="${filename}"] img.input-image`)[0];
     if(img.naturalWidth==0)  //image not yet loaded
         return;
     var $svg = $(`[filename="${filename}"]`).find(".treering-overlay-svg");

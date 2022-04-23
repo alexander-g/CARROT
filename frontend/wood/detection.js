@@ -41,7 +41,6 @@ WoodDetection = class extends BaseDetection {
                 this.set_treering_results(filename, treering_results)
             }
 
-            //TODO: associate
             if(GLOBAL.settings.cells_enabled && GLOBAL.settings.treerings_enabled){
                 const asc_result = await $.get(`/associate_cells/${filename}`)
                 this.set_association_results(filename, asc_result)
@@ -81,9 +80,15 @@ WoodDetection = class extends BaseDetection {
         //TODO: GLOBAL.files[filename].results = results;  //TODO: call it detection_results? cell_results? results['cells']?
     }
 
-    static set_treering_results(filename, results){
-        console.log('Setting treering results', results)
-        console.warn('NOT IMPLEMENTED')
+    static set_treering_results(filename, result){
+        console.log('Setting treering results', result)
+
+        GLOBAL.files[filename].treering_results = result;
+        const years = arange(1, 1+result.ring_points.length)
+        GLOBAL.files[filename].treering_results.years = years;
+
+        //TODO??set_processed_image_url(filename, `/images/${data.segmentation}?_=${new Date().getTime()}`);
+        display_treerings(filename, result.ring_points, years);
     }
 
     static async set_association_results(filename, results){

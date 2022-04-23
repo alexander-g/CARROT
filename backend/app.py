@@ -29,7 +29,7 @@ class App(BaseApp):
 
         @self.route('/associate_cells/<imagename>')
         def associate_cells(imagename):
-            full_path    = self.path_in_cache(imagename, abort_404=True)
+            full_path    = self.path_in_cache(imagename, abort_404=False)
             recluster    = flask.request.args.get('recluster',False)
             result       = backend.processing.associate_cells(full_path, self.settings, recluster)
             result['ring_map']    = os.path.basename(result['ring_map'])
