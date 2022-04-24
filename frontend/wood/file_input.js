@@ -35,10 +35,14 @@ static async load_result(filename, resultfiles){
         await upload_file_to_flask(cells_file);
         await upload_file_to_flask(treerings_file);
         //FIXME: will fail if recluster=false and no ring points provided
-        const asc_result = await $.get(`/associate_cells/${filename}`, {recluster:recluster})
+        const asc_result = await $.get(`/associate_cells/${filename}`, {recluster:recluster}).fail(
+            e => console.error('FIXME: ERROR HANDLING!', e)
+        )
+        console.warn('TODO: ERROR HANDLING')
+        const treering_result = {ring_points: asc_result.ring_points}
+        await App.Detection.set_treering_results(filename, treering_result)
         await App.Detection.set_association_results(filename, asc_result)
     }
 }
 
 }  //end WoodFileInput
-

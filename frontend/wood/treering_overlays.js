@@ -4,52 +4,80 @@ function display_treerings(filename){
     const ring_points = GLOBAL.files[filename].treering_results.ring_points;
     const years       = GLOBAL.files[filename].treering_results.years;
     const img         = $(`[filename="${filename}"] img.input-image`)[0];
-    if(img.naturalWidth==0)  //image not yet loaded
+    if(img.naturalWidth==0){
+        //image not yet loaded, display on load
+        $(img).one( 'load', _ => display_treerings(filename) )
         return;
-    var $svg = $(`[filename="${filename}"]`).find(".treering-overlay-svg");
-    $svg.attr('viewBox', `0 0 ${img.naturalWidth} ${img.naturalHeight}`)
+    }
+        
+    var $svg = $(`[filename="${filename}"] svg.treerings.overlay`)
+    //FIXME: using --imagewidth/height seems wrong
+    const W  = Number($svg.closest('.transform-box').css('--imagewidth')  ?? img.naturalWidth);
+    const H  = Number($svg.closest('.transform-box').css('--imageheight') ?? img.naturalHeight);
+    $svg.attr('viewBox', `0 0 ${W} ${H}`)
     //clear
     $svg.children().remove();
     
     for(var i in ring_points){        
         draw_treering_polygon(ring_points[i], $svg);
-        add_treering_label(ring_points[i], $svg, years[Number(i)], img.naturalWidth);
+        add_treering_label(ring_points[i], $svg, years[Number(i)], W);
     }
 }
 
 function draw_treering_polygon(points, $svg){
-    const line_attrs = {
-        stroke         : "white",
-        "stroke-width" : "8",
-        fill           : "none",
-    };
-
-    //draw first (upper) line
-    var $line = $(document.createElementNS('http://www.w3.org/2000/svg','polyline'));
-    var points_str = points.map(p => `${p[0][1]}, ${p[0][0]} `)
-    $line.attr(line_attrs).attr("points", points_str);
-    $svg.append($line);
-
-    //draw second (lower) line
-    var $line = $(document.createElementNS('http://www.w3.org/2000/svg','polyline'));
-    var points_str = points.map(p => `${p[1][1]}, ${p[1][0]} `)
-    $line.attr(line_attrs).attr("points", points_str);
-    $svg.append($line);
-
-    //draw polygon
-    var $polygon = $(document.createElementNS('http://www.w3.org/2000/svg','polygon'));
-    var points_str = points.map(p => `${p[0][1]}, ${p[0][0]} `)
-                   + points.reverse().map(p => `${p[1][1]}, ${p[1][0]} `)
-    $polygon.attr({"points":points_str, "fill":"rgba(255,255,255,0.0)"})
-    $svg.append($polygon);
-
-    $polygon.hover(
-        function(){ $polygon.attr('fill', "rgba(255,255,255,0.5)"); },
-        function(){ $polygon.attr('fill', "rgba(255,255,255,0.0)"); }
-    );
+    const points_upper = points.map(p => `${p[0][1]}, ${p[0][0]} `)
+    const points_lower = points.map(p => `${p[1][1]}, ${p[1][0]} `)
+    const points_poly  = points_upper
+                       + points.reverse().map(p => `${p[1][1]}, ${p[1][0]} `)
+    const $polygon     = $('#treering-overlay-polygon-template').tmpl({
+        points_upper : points_upper,
+        points_lower : points_lower,
+        points_poly  : points_poly,
+    })
+    $polygon.appendTo($svg)
 }
 
 function add_treering_label(points, $svg, ring_nr, viewbox_width){
+    //ring width
+    const sum  = points.map( x => dist(x[0],x[1]) ).reduce( (a,b) => a+b );
+    const mean = ((sum / points.length) / GLOBAL.settings.micrometer_factor).toFixed(1);
+
+    //median distance as text in the center
+    let mean_point = [0,0];
+    for(const [p0,p1] of points){
+        mean_point[0] += p0[0] + p1[0];
+        mean_point[1] += p0[1] + p1[1];
+    }
+    mean_point[0] /= (points.length*2);
+    mean_point[1] /= (points.length*2);
+
+    //magic number for same text size independent of image size
+    const scale = viewbox_width / 300;
+    const $label = $('#treering-overlay-label-template').tmpl({
+        ring_nr : ring_nr,
+        width   : mean,
+        x       : (mean_point[1]-3000/scale).toFixed(1),
+        y       : (mean_point[0]-3000/scale).toFixed(1),
+        //x       : 0,  //adjusted below
+        //y       : 0,  //adjusted below
+        scale   : scale,
+    })
+    $label.appendTo($svg)
+
+    //adjust x & y to be in centered on the mean point
+    //FIXME: doesnt work
+    /*const labelsize = $label.find('.size-query-div')[0].getBoundingClientRect()
+    $label.attr({
+        x : mean_point[1] - labelsize.width /2,
+        y : mean_point[0] - labelsize.height/2,
+    })*/
+    $label.find('[contenteditable]')
+          .on("keydown", on_year_keydown)
+          .on('keyup',   on_year_keyup)
+          .on('blur',    on_year_blur)
+}
+
+/*function _add_treering_label(points, $svg, ring_nr, viewbox_width){
     //median distance as text in the center
     var mean_point = [0,0];
     for(var p of points){
@@ -63,7 +91,7 @@ function add_treering_label(points, $svg, ring_nr, viewbox_width){
 
     //ring width
     var sum  = points.map( x=>dist(x[0],x[1]) ).reduce( (x,y)=>x+y );
-    var mean = ((sum / points.length) / global.settings.micrometer_factor).toFixed(1);
+    var mean = ((sum / points.length) / GLOBAL.settings.micrometer_factor).toFixed(1);
 
     //complicated but needed due to scaling issues
     var $group = $(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
@@ -83,7 +111,7 @@ function add_treering_label(points, $svg, ring_nr, viewbox_width){
         (e)=> $(e.target).css('background-color', "rgba(255,255,255,0.5)"),
         (e)=> $(e.target).css('background-color', "rgba(255,255,255,0.0)") 
     );
-}
+}*/
 
 function on_show_treerings(visible=undefined){
     var filename    = $(this).closest('[filename]').attr('filename');
@@ -112,17 +140,25 @@ function on_year_keyup(e){
 }
 
 function on_year_blur(e){
-    if(e.target.innerText.trim()=='' || isNaN(Number(e.target.innerText)))
-        e.target.innerText='???';
-    else{
-        var index    = $(e.target).closest('svg').find('g').index( $(e.target).closest('g') )
-        var filename = $(e.target).closest('[filename]').attr('filename');
+    const label = e.target;
+    if(label.innerText.trim()=='' || isNaN(Number(label.innerText)))
+        label.innerText='???';
+    else {
+        const $root    = $(label).closest('[filename]')
+        const $fobects = $root.find('svg.treerings.overlay foreignObject')
+        const index    = $fobects.index( $(label).closest('foreignObject') )
+        if(index < 0)
+            console.error( 'ERROR: Tree ring calculation incorrect!' )
+        const filename = $root.attr('filename');
 
-        var year     = Number(e.target.innerText);
-        var year0    = year - index;
-        var n        = global.input_files[filename].treering_results.ring_points.length;
-        var allyears = arange(year0, year0+n);
-        global.input_files[filename].treering_results.years = allyears;
-        display_treerings(filename, global.input_files[filename].treering_results.ring_points, allyears);
+        const year     = Number(label.innerText);
+        const year0    = year - index;
+        const n        = GLOBAL.files[filename].treering_results.ring_points.length;
+        const allyears = arange(year0, year0+n);
+        GLOBAL.files[filename].treering_results.years = allyears;
+        display_treerings(filename, GLOBAL.files[filename].treering_results.ring_points, allyears);
     }
 }
+
+//euclidean distance
+function dist(p0, p1){return Math.sqrt((p0[0]-p1[0])**2 + (p0[1]-p1[1])**2)}

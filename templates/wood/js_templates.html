@@ -1,0 +1,25 @@
+{% import   'base/js_templates.html'  as base_js_templates %}
+{% import   'wood/treerings.html'     as treerings %}
+
+{% macro display_treerings_checkbox() %}
+<div class="ui item disabled checkbox display-treerings-checkbox">
+    <input type="checkbox">
+    <label>Tree rings</label>
+</div>
+{% endmacro %}
+
+
+{% macro roots_filetable_content(app)%}
+    {{ base_js_templates.filetable_content(
+            app, 
+            view_menu_extras     = display_treerings_checkbox(),
+            content_image_extras = treerings.svg_overlay()
+    ) }}
+{% endmacro %}
+
+
+{% macro filetable_row_template(app) %}
+    {{ base_js_templates.filetable_row_template(app, content=roots_filetable_content) }}
+    {{ treerings.treering_overlay_templates() }}
+{% endmacro %}
+

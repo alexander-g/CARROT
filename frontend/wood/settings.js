@@ -26,6 +26,8 @@ WoodSettings = class extends BaseSettings {
         GLOBAL.settings.treerings_enabled       = $("#settings-treerings_enabled").checkbox('is checked');
         GLOBAL.settings.ignore_buffer_px        = Number($("#settings-ignore-buffer-input")[0].value);
         GLOBAL.settings.micrometer_factor       = Number($("#settings-micrometers-input")[0].value);
+
+        //TODO: update treering widths
     }
 
 }

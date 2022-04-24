@@ -3,7 +3,7 @@
 {% from   'base/top_menu.html'        import top_menu %}
 {% import 'base/modals.html'          as     base_modals %}
 {% from   'base/main_container.html'  import main_container %}
-{% from   'base/js_templates.html'    import filetable_row_template %}
+{% from   'wood/js_templates.html'    import filetable_row_template %}
 {% from   'wood/modals.html'          import modal_settings %}
 
 {% set app = "WoodAnatomyApp" %}
@@ -32,53 +32,3 @@
 </body>
 </html>
 
-
-
-
-{#
-
-
-{% extends "base.html" %}
-
-
-{% block htmltitle %}DigIT Wood Anatomy{% endblock %}
-
-
-{% block scripts %}
-<script src="/static/script.js"></script>
-<script src="/static/processing.js"></script>
-<script src="/static/settings.js"></script>
-<script src="/static/util.js"></script>
-<script src="/static/download.js"></script>
-<script src="/static/upload.js"></script>
-<script src="/static/treering_overlays.js"></script>
-
-<script src="/static/thirdparty/exif-js"></script>
-<script src="/static/thirdparty/jszip.min.js"></script>
-
-<style>
-  [contenteditable]:focus {
-      outline: 0px solid transparent;
-  }
-</style>
-{% endblock scripts%}
-
-
-
-
-
-
-{% block    js_templates %}
-{% endblock js_templates %}
-
-
-
-
-
-
-{% block    modals %}
-    {% include 'modals.html' %}
-{% endblock modals %}
-
-
-#}

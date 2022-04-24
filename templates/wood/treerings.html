@@ -1,0 +1,34 @@
+{% macro svg_overlay() %}
+{# viewBox adjusted in javascript #}
+<svg  class="treerings overlay" viewBox="0 0 1 1" style="/*pointer-events: none;*/">
+
+  {# #treering-overlay-polygon-template inserted here from javascript-- #}
+</svg>
+{% endmacro %}
+
+
+{% macro treering_overlay_templates() %}
+<template id="treering-overlay-polygon-template">
+<svg class="treering-overlay-polygon">
+    <!--points="" adjusted in javascript-->
+    <polyline class="treering-border upper" points="${points_upper}"/>
+    <polyline class="treering-border lower" points="${points_lower}"/>
+    <polygon  class="treering-area"         points="${points_poly}"/>
+</svg>
+</template>
+
+
+<template id="treering-overlay-label-template">
+<svg class="treering-overlay-label" x="${x}" y="${y}">
+    <foreignObject style="--treering-overlay-label-scale:${scale}">
+        <div class="size-query-div" style="width:fit-content;">
+            <div>
+                <label>Year: </label>
+                <label contenteditable="true">${ring_nr}</label>
+            </div>
+            <label>${width}μm</label>
+        </div>
+    </foreignObject>
+</svg>
+</template>
+{% endmacro %}

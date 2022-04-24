@@ -1,0 +1,39 @@
+
+polyline.treering-border {
+    stroke:     white;
+    stroke-width: 8;
+    fill:         none;
+}
+
+polygon.treering-area  {
+    fill:        rgba(255,255,255,0.0)
+}
+
+polygon.treering-area:hover  {
+    fill:        rgba(255,255,255,0.5)
+}
+
+svg.treering-overlay-label foreignObject{
+    width:  100%;
+    height: 100%;
+    /* scale set in javascript */
+    transform: scale(var(--treering-overlay-label-scale));
+
+    color:        white;
+    /*white-space:    pre;*/
+    font-weight:    bold;
+    pointer-events: none;
+}
+
+svg.treering-overlay-label foreignObject [contenteditable]{
+    pointer-events: all;
+    background-color: rgba(255,255,255,0.0);
+}
+
+svg.treering-overlay-label foreignObject [contenteditable]:hover{
+    background-color: rgba(255,255,255,0.5);
+}
+
+svg.treering-overlay-label foreignObject [contenteditable]:focus {
+    outline: 0px solid transparent;
+}
