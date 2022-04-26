@@ -77,7 +77,7 @@ WoodDetection = class extends BaseDetection {
         var $result_overlay = $root.find(`img.overlay`)
         set_image_src($result_overlay, result.cells)
 
-        //TODO: GLOBAL.files[filename].results = results;  //TODO: call it detection_results? cell_results? results['cells']?
+        GLOBAL.files[filename].cell_results = result;
     }
 
     static async set_treering_result(filename, result){

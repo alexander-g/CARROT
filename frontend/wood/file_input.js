@@ -24,9 +24,7 @@ static async load_result(filename, resultfiles){
         await App.Detection.set_cell_result(filename, result)
     }
     if(treerings_file){
-        //TODO
-        //const result = {'ring_points': undefined}
-        //await App.Detection.set_treering_result(filename, result)
+        //set below
     }
     if(cells_file || treerings_file){
         //send association request

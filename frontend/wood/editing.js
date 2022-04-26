@@ -29,31 +29,43 @@ WoodEditing = class {
     static on_edit_treerings_button(event){
         const filename = $(event.target).closest('[filename]').attr('filename')
         this.activate_mode(filename, 'treerings')
+        
+        //TODO: hide overlay, paste segmentation onto canvas
+        const $overlay  = $(`[filename="${filename}"] img.input.overlay`)
+        set_image_src($overlay, GLOBAL.files[filename].treering_results.segmentation)
     }
 
     static async on_edit_apply(event){
+        //TODO: what to do when not yet processed?
+        //TODO: dimmer
         const $root    = $(event.target).closest('[filename]')
         const filename = $root.attr('filename')
-        if(this.is_editing_active(filename) == 'treerings'){
-            const prev_file = GLOBAL.files[filename].treering_results.segmentation;
-            const imgbitmap = await createImageBitmap(prev_file)
-            const canvas    = $root.find('.test-canvas.overlay')[0]
-            const [W,H]     = [canvas.width, canvas.height]
-            const newcanvas = $(`<canvas width="${W}" height="${H}">`)[0]
-            const ctx       = newcanvas.getContext('2d')
-            ctx.drawImage(imgbitmap, 0,0, W,H)
-            ctx.drawImage(canvas, 0,0, W,H)
-            newcanvas.toBlob(blob =>  {
-                const f = new File([blob], prev_file.name);
-                App.FileInput.load_result(filename, [f])
-            }, 'image/png');
+        const mode     = this.is_editing_active(filename)
+        let prev_file;
+        if(mode == 'treerings'){
+            prev_file = GLOBAL.files[filename].treering_results.segmentation;
+        } else if(mode == 'cells'){
+            prev_file = GLOBAL.files[filename].cell_results.cells;
         } else {
-            console.warn('TODO: apply cell corrections')
+            console.warn('on_edit_apply() with unexpected editing mode:', mode)
+            return;
         }
+        const imgbitmap = await createImageBitmap(prev_file)
+        const canvas    = $root.find('.test-canvas.overlay')[0]
+        const [W,H]     = [canvas.width, canvas.height]
+        const newcanvas = $(`<canvas width="${W}" height="${H}">`)[0]
+        const ctx       = newcanvas.getContext('2d')
+        ctx.drawImage(imgbitmap, 0,0, W,H)
+        ctx.drawImage(canvas,    0,0, W,H)
+        newcanvas.toBlob(blob =>  {
+            const f = new File([blob], prev_file.name);
+            App.FileInput.load_result(filename, [f])
+        }, 'image/png');
         this.clear(filename)
     }
 
     static on_edit_clear(event){
+        //TODO: restore to what it was before
         const filename = $(event.target).closest('[filename]').attr('filename')
         this.clear(filename)
     }
@@ -70,7 +82,8 @@ WoodEditing = class {
 
     static on_mousedown(mousedown_event){
         const canvas   = mousedown_event.target;
-        const filename = $(canvas).closest('[filename]').attr('filename')
+        const $root    = $(canvas).closest('[filename]')
+        const filename = $root.attr('filename')
         if(!this.is_editing_active(filename))
             return;
         if(mousedown_event.shiftKey)
@@ -81,7 +94,13 @@ WoodEditing = class {
              mousedown_event.pageX - $(canvas).offset().left,
              mousedown_event.pageY - $(canvas).offset().top,
         ])
-        const ctx = canvas.getContext('2d')
+        const ctx   = canvas.getContext('2d')
+        const clear = mousedown_event.ctrlKey
+        ctx.strokeStyle = clear? "black" : "white";
+        ctx.lineWidth   = $root.find('.brush-size-slider').slider('get value')
+        //double size for easier removing
+        ctx.lineWidth   = clear? ctx.lineWidth*2 : ctx.lineWidth;
+        ctx.lineCap     = 'round';
 
         const _this = this;
         $(document).on('mousemove', function(mousemove_event) {
@@ -96,9 +115,6 @@ WoodEditing = class {
                 mousemove_event.pageY - $(canvas).offset().top,
             ])
 
-            ctx.strokeStyle = "green"
-            ctx.lineWidth   = 16;          //TODO: hard-coded
-            ctx.lineCap     = 'round';
             ctx.beginPath();
             ctx.moveTo(start_xy[0], start_xy[1]);
             ctx.lineTo(end_xy[0],   end_xy[1]  );
