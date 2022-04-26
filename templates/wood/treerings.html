@@ -1,9 +1,11 @@
-{% macro svg_overlay() %}
+{% macro svg_overlay(app) %}
 {# viewBox adjusted in javascript #}
 <svg  class="treerings overlay" viewBox="0 0 1 1" style="/*pointer-events: none;*/">
-
   {# #treering-overlay-polygon-template inserted here from javascript-- #}
 </svg>
+<canvas class="test-canvas overlay" style="pointer-events: none;"
+        onmousedown = "{{app}}.Editing.on_mousedown(event)"
+</canvas>
 {% endmacro %}
 
 
@@ -19,7 +21,7 @@
 
 
 <template id="treering-overlay-label-template">
-<svg class="treering-overlay-label" x="${x}" y="${y}">
+<svg class="treering-overlay-label unselectable" x="${x}" y="${y}">
     <foreignObject style="--treering-overlay-label-scale:${scale}">
         <div class="size-query-div" style="width:fit-content;">
             <div>

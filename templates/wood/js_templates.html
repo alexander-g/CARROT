@@ -1,4 +1,5 @@
 {% import   'base/js_templates.html'  as base_js_templates %}
+{% import   'base/content_menu.html'  as base_content_menu %}
 {% import   'wood/treerings.html'     as treerings %}
 
 {% macro display_treerings_checkbox() %}
@@ -9,12 +10,61 @@
 {% endmacro %}
 
 
+
+{% macro edit_menu_item(app) %}
+<!--------- MACRO edit_menu_item() START---------->
+<div class="ui simple dropdown icon item edit-menu-button">
+    <i class="pen icon"></i>
+    <div class="menu edit_menu">
+        <div class="item edit-cells" onclick="{{app}}.Editing.on_edit_cells_button(event)">
+            <i class="pen icon"></i>
+            Edit cells
+        </div>
+        <div class="item edit-treerings" onclick="{{app}}.Editing.on_edit_treerings_button(event)">
+            <i class="pen icon"></i>
+            Edit tree rings
+        </div>
+        <div class="divider"></div>
+        <div class="item disabled edit-apply" onclick="{{app}}.Editing.on_edit_apply(event)">
+            <i class="check icon"></i>
+            Apply
+        </div>
+        <div class="item disabled edit-clear" onclick="{{app}}.Editing.on_edit_clear(event)">
+            <i class="times icon"></i>
+            Clear
+        </div>
+    </div>
+</div>
+<!--------- MACRO edit_menu_item() END  ---------->
+{% endmacro %}
+
+
 {% macro roots_filetable_content(app)%}
-    {{ base_js_templates.filetable_content(
-            app, 
-            view_menu_extras     = display_treerings_checkbox(),
-            content_image_extras = treerings.svg_overlay()
-    ) }}
+<div class="filetable-content" style="display:none">
+    {{ base_content_menu.content_menu(
+            callback_on_process        = app+".Detection.on_process_image",
+            callback_apply_corrections = None,
+            callback_new_box           = None,
+            callback_download          = app+".Download.on_single_item_download_click",
+            edit_segmentation_item     = edit_menu_item(app),
+            view_menu_extras           = display_treerings_checkbox()
+    ) | indent }}
+
+    <div class="image-container">
+        {{ base_js_templates.content_image(
+            name           = "input",  
+            overlay        = True,  
+            viewcontrols   = app+".ViewControls",
+            extras         = treerings.svg_overlay(app)
+        ) | indent(8) }}
+        {{ base_js_templates.content_image(
+            name           = "result", 
+            overlay        = False, 
+            viewcontrols   = app+".ViewControls"
+        ) | indent(8) }}
+        {{ base_js_templates.progress_dimmer() }}
+    </div>
+</div>
 {% endmacro %}
 
 

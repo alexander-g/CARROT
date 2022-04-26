@@ -33,17 +33,17 @@ WoodDetection = class extends BaseDetection {
             
             if(GLOBAL.settings.cells_enabled){
                 const cell_results = await $.get(`process_cells/${filename}`)
-                this.set_cell_results(filename, cell_results)  //TODO: await??
+                this.set_cell_result(filename, cell_results)  //TODO: await??
             }
 
             if(GLOBAL.settings.treerings_enabled){
                 const treering_results = await $.get(`process_treerings/${filename}`)
-                this.set_treering_results(filename, treering_results)
+                this.set_treering_result(filename, treering_results)
             }
 
             if(GLOBAL.settings.cells_enabled && GLOBAL.settings.treerings_enabled){
                 const asc_result = await $.get(`/associate_cells/${filename}`)
-                this.set_association_results(filename, asc_result)
+                this.set_association_result(filename, asc_result)
             }
 
 
@@ -62,26 +62,29 @@ WoodDetection = class extends BaseDetection {
         }
     }
 
-    static async set_cell_results(filename, results){
-        console.log('Setting cell results', results)
+    static async set_cell_result(filename, result){
+        console.log('Setting cell results', result)
 
-        if(results && is_string(results.cells))
-            results.cells = await fetch_as_file(url_for_image(results.cells))
+        if(result && is_string(result.cells))
+            result.cells = await fetch_as_file(url_for_image(result.cells))
 
         var $root           = $(`#filetable [filename="${filename}"]`)
         var $result_image   = $root.find('img.result-image')
-        set_image_src($result_image, results.cells)
+        set_image_src($result_image, result.cells)
         //$result_image.css('filter',clear? 'contrast(0)' : 'contrast(1)')
         $result_image.css('filter', 'contrast(1)')
 
         var $result_overlay = $root.find(`img.overlay`)
-        set_image_src($result_overlay, results.cells)
+        set_image_src($result_overlay, result.cells)
 
         //TODO: GLOBAL.files[filename].results = results;  //TODO: call it detection_results? cell_results? results['cells']?
     }
 
-    static set_treering_results(filename, result){
+    static async set_treering_result(filename, result){
         console.log('Setting treering results', result)
+
+        if(result && is_string(result.segmentation))
+            result.segmentation = await fetch_as_file(url_for_image(result.segmentation))
 
         GLOBAL.files[filename].treering_results = result;
         const years = arange(1, 1+result.ring_points.length)
@@ -91,20 +94,20 @@ WoodDetection = class extends BaseDetection {
         display_treerings(filename, result.ring_points, years);
     }
 
-    static async set_association_results(filename, results){
-        console.log('Setting association results', results)
+    static async set_association_result(filename, result){
+        console.log('Setting association results', result)
 
-        if(results && is_string(results.ring_map))
-            results.ring_map = await fetch_as_file(url_for_image(results.ring_map))
+        if(result && is_string(result.ring_map))
+            result.ring_map = await fetch_as_file(url_for_image(result.ring_map))
         
         var $root           = $(`#filetable [filename="${filename}"]`)
         var $result_image   = $root.find('img.result-image')
-        set_image_src($result_image, results.ring_map)
+        set_image_src($result_image, result.ring_map)
         //$result_image.css('filter',clear? 'contrast(0)' : 'contrast(1)')
         $result_image.css('filter', 'contrast(1)')
 
         var $result_overlay = $root.find(`img.overlay`)
-        set_image_src($result_overlay, results.ring_map)
+        set_image_src($result_overlay, result.ring_map)
 
         //TODO: GLOBAL.files[filename].results = results;  //TODO: call it detection_results? cell_results? results['cells']?
     }

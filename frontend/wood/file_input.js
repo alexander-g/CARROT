@@ -21,12 +21,12 @@ static async load_result(filename, resultfiles){
     
     if(cells_file){
         const result = {'cells': cells_file}
-        await App.Detection.set_cell_results(filename, result)
+        await App.Detection.set_cell_result(filename, result)
     }
     if(treerings_file){
         //TODO
         //const result = {'ring_points': undefined}
-        //await App.Detection.set_treering_results(filename, result)
+        //await App.Detection.set_treering_result(filename, result)
     }
     if(cells_file || treerings_file){
         //send association request
@@ -39,9 +39,12 @@ static async load_result(filename, resultfiles){
             e => console.error('FIXME: ERROR HANDLING!', e)
         )
         console.warn('TODO: ERROR HANDLING')
-        const treering_result = {ring_points: asc_result.ring_points}
-        await App.Detection.set_treering_results(filename, treering_result)
-        await App.Detection.set_association_results(filename, asc_result)
+        const treering_result = {
+            ring_points:  asc_result.ring_points, 
+            segmentation: treerings_file
+        }
+        await App.Detection.set_treering_result(filename, treering_result)
+        await App.Detection.set_association_result(filename, asc_result)
     }
 }
 
