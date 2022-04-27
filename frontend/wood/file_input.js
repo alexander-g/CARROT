@@ -24,7 +24,7 @@ static async load_result(filename, resultfiles){
         await App.Detection.set_cell_result(filename, result)
     }
     if(treerings_file){
-        //set below
+        //set below, need to associate for ring_points
     }
     if(cells_file || treerings_file){
         //send association request
@@ -39,10 +39,11 @@ static async load_result(filename, resultfiles){
         console.warn('TODO: ERROR HANDLING')
         const treering_result = {
             ring_points:  asc_result.ring_points, 
-            segmentation: treerings_file
+            segmentation: treerings_file || GLOBAL.files[filename]?.treering_results?.segmentation
         }
         await App.Detection.set_treering_result(filename, treering_result)
         await App.Detection.set_association_result(filename, asc_result)
+        App.Detection.set_processed(filename)
     }
 }
 

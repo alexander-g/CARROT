@@ -11,28 +11,34 @@ WoodEditing = class {
         return false;
     }
 
-    static activate_mode(filename, mode){
+    static async activate_mode(filename, mode, segmentation_file){
         const $root  = $(`[filename="${filename}"]`)
         if(this.is_editing_active(filename) != mode){
             this.clear(filename)
-            $root.find(`.edit-menu-button, .edit-${mode}`).addClass('active')
         }
-        $root.find('.edit-clear, .edit-apply').removeClass('disabled')
-        $root.find('.test-canvas.overlay').css('pointer-events', 'all')
+        $root.find('.edit-menu .hidden-when-disabled').show()
+        $root.find(`.edit-mode:not(.edit-${mode})`).addClass('disabled')
+        $root.find(`.edit-menu-button, .edit-${mode}`).addClass('active').show()
+
+        const canvas           = $root.find('.editing-canvas.overlay')[0]
+        canvas.style.pointerEvents = 'all'
+
+        //hide other overlays, paste segmentation onto canvas
+        this.update_canvas_size(canvas)
+        await paste_blob_onto_canvas(canvas, segmentation_file)
+        const $other_overlays  = $(`[filename="${filename}"] .overlay:not(canvas)`)
+        $other_overlays.css('visibility', 'hidden')
+        set_brightness(filename, 0.5)
     }
 
     static on_edit_cells_button(event){
         const filename = $(event.target).closest('[filename]').attr('filename')
-        this.activate_mode(filename, 'cells')
+        this.activate_mode(filename, 'cells', GLOBAL.files[filename].cell_results.cells)
     }
 
     static on_edit_treerings_button(event){
         const filename = $(event.target).closest('[filename]').attr('filename')
-        this.activate_mode(filename, 'treerings')
-        
-        //TODO: hide overlay, paste segmentation onto canvas
-        const $overlay  = $(`[filename="${filename}"] img.input.overlay`)
-        set_image_src($overlay, GLOBAL.files[filename].treering_results.segmentation)
+        this.activate_mode(filename, 'treerings', GLOBAL.files[filename].treering_results.segmentation)
     }
 
     static async on_edit_apply(event){
@@ -50,18 +56,18 @@ WoodEditing = class {
             console.warn('on_edit_apply() with unexpected editing mode:', mode)
             return;
         }
-        const imgbitmap = await createImageBitmap(prev_file)
-        const canvas    = $root.find('.test-canvas.overlay')[0]
-        const [W,H]     = [canvas.width, canvas.height]
-        const newcanvas = $(`<canvas width="${W}" height="${H}">`)[0]
-        const ctx       = newcanvas.getContext('2d')
-        ctx.drawImage(imgbitmap, 0,0, W,H)
-        ctx.drawImage(canvas,    0,0, W,H)
-        newcanvas.toBlob(blob =>  {
-            const f = new File([blob], prev_file.name);
-            App.FileInput.load_result(filename, [f])
-        }, 'image/png');
-        this.clear(filename)
+        
+        try {
+            App.Detection.set_processing(filename)
+            const canvas    = $root.find('.editing-canvas.overlay')[0]
+            canvas.toBlob(async blob =>  {
+                const f = new File([blob], prev_file.name);
+                await App.FileInput.load_result(filename, [f])
+                this.clear(filename)
+            }, 'image/png');
+        } catch(e) {
+            App.Detection.set_failed(filename)
+        }
     }
 
     static on_edit_clear(event){
@@ -72,12 +78,16 @@ WoodEditing = class {
 
     static clear(filename){
         const $root  = $(`[filename="${filename}"]`)
-        $root.find('.edit-menu-button, .edit-cells, .edit-treerings').removeClass('active')
-        $root.find('.edit-clear, .edit-apply').addClass('disabled')
+        $root.find('.edit-menu .hidden-when-disabled').hide()
+        $root.find('.edit-menu-button, .edit-mode').removeClass('active disabled')
 
-        const canvas = $root.find('.test-canvas.overlay')[0]
+        const canvas = $root.find('.editing-canvas.overlay')[0]
         canvas.getContext('2d').clearRect(0,0,canvas.width, canvas.height)
         $(canvas).css('pointer-events', 'none')
+
+        //show the other overlays again
+        const $other_overlays  = $(`[filename="${filename}"] .overlay:not(canvas)`)
+        $other_overlays.css('visibility', '')
     }
 
     static on_mousedown(mousedown_event){
@@ -94,8 +104,8 @@ WoodEditing = class {
              mousedown_event.pageX - $(canvas).offset().left,
              mousedown_event.pageY - $(canvas).offset().top,
         ])
-        const ctx   = canvas.getContext('2d')
-        const clear = mousedown_event.ctrlKey
+        const ctx       = canvas.getContext('2d')
+        const clear     = mousedown_event.ctrlKey
         ctx.strokeStyle = clear? "black" : "white";
         ctx.lineWidth   = $root.find('.brush-size-slider').slider('get value')
         //double size for easier removing
@@ -148,5 +158,13 @@ WoodEditing = class {
         const xy_img  = [ xy_rel[0]*W_img,  xy_rel[1]*H_img ]
         return xy_img;
     }
+}
+
+
+async function paste_blob_onto_canvas(canvas, blob){
+    const imgbitmap = await createImageBitmap(blob)
+    const ctx       = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(imgbitmap, 0,0, canvas.width,canvas.height)
 }
 

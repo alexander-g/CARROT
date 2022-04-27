@@ -37,3 +37,12 @@ svg.treering-overlay-label foreignObject [contenteditable]:hover{
 svg.treering-overlay-label foreignObject [contenteditable]:focus {
     outline: 0px solid transparent;
 }
+
+canvas.editing-canvas {
+    filter:url(#black-to-transparent)
+}
+
+.hidden-when-disabled {
+    /* doesnt work, done manually in JS */
+    display:none;
+}

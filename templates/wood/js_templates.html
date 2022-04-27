@@ -15,31 +15,37 @@
 <!--------- MACRO edit_menu_item() START---------->
 <div class="ui simple dropdown icon item edit-menu-button">
     <i class="pen icon"></i>
-    <div class="menu edit_menu">
-        <div class="item edit-cells" onclick="{{app}}.Editing.on_edit_cells_button(event)">
+    <div class="menu edit-menu">
+        <div class="item edit-mode edit-cells" onclick="{{app}}.Editing.on_edit_cells_button(event)">
             <i class="pen icon"></i>
             Edit cells
         </div>
-        <div class="item edit-treerings" onclick="{{app}}.Editing.on_edit_treerings_button(event)">
+        <div class="item edit-mode edit-treerings" onclick="{{app}}.Editing.on_edit_treerings_button(event)">
             <i class="pen icon"></i>
             Edit tree rings
         </div>
-        <div class="divider"></div>
-        <div class="item disabled edit-apply" onclick="{{app}}.Editing.on_edit_apply(event)">
-            <i class="check icon"></i>
-            Apply
-        </div>
-        <div class="item disabled edit-clear" onclick="{{app}}.Editing.on_edit_clear(event)">
-            <i class="times icon"></i>
-            Clear
-        </div>
-        <div class="divider"></div>
-        <div class="item brightness">
+
+       
+        
+        <div class="divider hidden-when-disabled"></div>
+        <div class="item brightness hidden-when-disabled">
             <i class="circle outline icon"></i>
             Brush size
             <div class="ui slider brush-size-slider" style="padding:0px; padding-top:5px;"></div>
-            <script> $('.ui.slider').slider({max:100}).slider('set value', 20); </script>
-          </div>
+            <script> $('.brush-size-slider').slider({max:100}).slider('set value', 30); </script>
+        </div>
+
+        <div class="divider hidden-when-disabled"></div>
+        <div class="item edit-clear hidden-when-disabled" onclick="{{app}}.Editing.on_edit_clear(event)">
+            <i class="times icon"></i>
+            Reset
+        </div>
+        <div class="item edit-apply hidden-when-disabled" onclick="{{app}}.Editing.on_edit_apply(event)">
+            <i class="check icon"></i>
+            Apply
+        </div>
+
+        <script> $('.hidden-when-disabled').hide() //css doesnt work </script>
     </div>
 </div>
 <!--------- MACRO edit_menu_item() END  ---------->
@@ -54,7 +60,11 @@
             callback_new_box           = None,
             callback_download          = app+".Download.on_single_item_download_click",
             edit_segmentation_item     = edit_menu_item(app),
-            view_menu_extras           = display_treerings_checkbox()
+            view_menu_kwargs           = {
+                'show_results_layout': False,
+                'extras':              display_treerings_checkbox(),
+                'brightness_max':      10
+            }
     ) | indent }}
 
     <div class="image-container">

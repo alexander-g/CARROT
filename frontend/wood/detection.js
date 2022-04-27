@@ -76,6 +76,7 @@ WoodDetection = class extends BaseDetection {
 
         var $result_overlay = $root.find(`img.overlay`)
         set_image_src($result_overlay, result.cells)
+        set_brightness(filename, 0.5)
 
         GLOBAL.files[filename].cell_results = result;
     }
@@ -90,7 +91,7 @@ WoodDetection = class extends BaseDetection {
         const years = arange(1, 1+result.ring_points.length)
         GLOBAL.files[filename].treering_results.years = years;
 
-        //TODO??set_processed_image_url(filename, `/images/${data.segmentation}?_=${new Date().getTime()}`);
+        set_brightness(filename, 0.5)
         display_treerings(filename, result.ring_points, years);
     }
 
@@ -108,8 +109,9 @@ WoodDetection = class extends BaseDetection {
 
         var $result_overlay = $root.find(`img.overlay`)
         set_image_src($result_overlay, result.ring_map)
+        set_brightness(filename, 0.5)
 
-        //TODO: GLOBAL.files[filename].results = results;  //TODO: call it detection_results? cell_results? results['cells']?
+        //TODO: GLOBAL.files[filename].results = results;  //TODO: 
     }
 }
 
