@@ -23,9 +23,10 @@ WoodDetection = class extends BaseDetection {
             
             WoodDetection.show_dimmer(filename, false, message)
         }
-        GLOBAL.event_source.addEventListener('message', on_message)
 
         try {
+            GLOBAL.event_source.addEventListener('message', on_message)
+            
             const file    = GLOBAL.files[filename];
             await upload_file_to_flask(file).fail( response => {
                 console.error('File upload failed.', response.status)
