@@ -37,12 +37,14 @@ static async load_result(filename, resultfiles){
             e => console.error('FIXME: ERROR HANDLING!', e)
         )
         console.warn('TODO: ERROR HANDLING')
-        const treering_result = {
-            ring_points:  asc_result.ring_points, 
-            segmentation: treerings_file || GLOBAL.files[filename]?.treering_results?.segmentation
+        if(asc_result){
+            const treering_result = {
+                ring_points:  asc_result.ring_points, 
+                segmentation: treerings_file || GLOBAL.files[filename]?.treering_results?.segmentation
+            }
+            await App.Detection.set_treering_result(filename, treering_result)
+            await App.Detection.set_association_result(filename, asc_result)
         }
-        await App.Detection.set_treering_result(filename, treering_result)
-        await App.Detection.set_association_result(filename, asc_result)
         App.Detection.set_processed(filename)
     }
 }

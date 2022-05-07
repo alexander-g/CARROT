@@ -55,29 +55,38 @@ def associate_cells(image_path, settings, recluster=False):
     '''Assign a tree ring label to each cell'''
     model = settings.models['treerings']
     print(f'Processing file {image_path} with model {settings.active_models["treerings"]}')
+
+    result = {
+        'ring_map'    : None,
+        'cells'       : [],
+        'ring_points' : [],
+        'imagesize'   : None,  #currently needed when loading results from file
+    }
     
     if recluster:
-        treering_segmentation  = PIL.Image.open(image_path+'.treerings.png').convert('L') / np.float32(255)
+        treering_segmentation  = PIL.Image.open(image_path+'.treerings.png').convert('L')
+        result['imagesize']    = treering_segmentation.size
+        treering_segmentation  = treering_segmentation / np.float32(255)
         ring_points            = model.segmentation_to_points(treering_segmentation)['ring_points']
-    else:
+    elif os.path.exists(image_path+'.ring_points.pkl'):
         ring_points            = pickle.load(open(image_path+'.ring_points.pkl','rb'))
+    else:
+        #cannot do anything without tree ring data
+        return None
+
+    result['ring_points'] = [np.stack([sample_points(a, 64), sample_points(b, 64)], axis=1) for a,b in ring_points ]
 
     cell_path   = image_path+'.cells.png'
     if os.path.exists(cell_path):
         cell_map            = PIL.Image.open(cell_path).convert('L')
-        imagesize           = cell_map.size
         cell_map            = cell_map / np.float32(255)
         cells, ring_map_rgb = model.associate_cells_from_segmentation(cell_map, ring_points)
         ring_map_output     = image_path+'.ring_map.png'
         write_image(ring_map_output, ring_map_rgb)
-    else:
-        ring_map_output     = ''
-        cells               = []
-        imagesize           = None
+        
+        result['ring_map']  = ring_map_output
+        result['cells']     = cells
+        result['imagesize'] = cell_map.size
+    #else: pass
     
-    return {
-        'ring_map'    : ring_map_output,
-        'cells'       : cells,
-        'ring_points' : [np.stack([sample_points(a, 64), sample_points(b, 64)], axis=1) for a,b in ring_points ],  #TODO
-        'imagesize'   : imagesize
-    }
+    return result
