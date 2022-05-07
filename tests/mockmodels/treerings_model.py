@@ -52,6 +52,19 @@ class TreeringsMockModel(torch.nn.Module):
         ring_map_rgb = np.zeros(cell_map.shape[:2] + (3,), 'uint8')
         return cells, ring_map_rgb
 
+    @staticmethod
+    def segmentation_to_points(segmentation):
+        H,W             = segmentation.shape
+        points, labels  = [],[]
+        rings           = []
+        ring_points     = []
+        return {
+            'segmentation'   : segmentation,
+            'ring_points'    : ring_points,
+            'points'         : points,
+            'labels'         : labels,
+            'ring_labels'    : rings,
+        }
 
     """def start_training(self, imagefiles, targetfiles, epochs=100, callback=None):
         print(f'Simulating training')

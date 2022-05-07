@@ -4,6 +4,8 @@ WoodAnatomyApp = class extends BaseApp {
     static FileInput     =    WoodFileInput;
     static Detection     =    WoodDetection;
     static Editing       =    WoodEditing;
+    static Training      =    WoodTraining;
+    static Download      =    WoodDownload;
 }
 
 

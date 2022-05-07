@@ -41,3 +41,8 @@ class App(BaseApp):
         if not os.path.exists(path) and abort_404:
             flask.abort(404)
         return path
+
+    #override
+    def training(self):
+        imagefiles = dict(flask.request.form.lists())['filenames[]']
+        flask.abort(501)

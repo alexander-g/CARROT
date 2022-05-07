@@ -1,0 +1,40 @@
+{% import 'base/training_tab.html' as base_training_tab %}
+
+
+{% macro training_controls(trainingmodule) %}
+<div class="ui segment form" style="margin-top:0px;">
+    <div class="field" id="training-model-type-field">
+        <label>Model type</label>
+        <div class="ui dropdown selection" id="training-model-type">
+          <input type="hidden" name="active-model">
+          <i class="dropdown icon"></i>
+          <div class="default text"></div>
+          <div class="menu">
+            <div class="item" data-value="cell">Cells</div>
+            <div class="item" data-value="treering">Tree rings</div>
+          </div>
+        </div>
+    </div>
+    <script> $('#training-model-type').dropdown({onChange: _ => {{ trainingmodule }}.refresh_table() } ) </script>
+
+    <div class="ui divider"></div>
+
+    <label class="ui violet basic fluid button" onclick="{{ trainingmodule }}.on_start_training()" id="start-training-button" style="margin-bottom: 20px;">
+      <i class="shuffle icon"></i>
+      Start Training
+    </label>
+
+    {{ base_training_tab.save_model_field(trainingmodule) }}
+</div>
+{% endmacro %}
+
+
+
+{% macro training_tab(app) %}
+<div id="training-tab">
+    
+    {{ base_training_tab.training_filetable() }}
+    {{ training_controls(trainingmodule = app+".Training") }}
+
+</div>
+{% endmacro %}

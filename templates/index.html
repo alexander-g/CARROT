@@ -5,6 +5,7 @@
 {% from   'base/main_container.html'  import main_container %}
 {% from   'wood/js_templates.html'    import filetable_row_template %}
 {% from   'wood/modals.html'          import modal_settings %}
+{% from   'wood/training_tab.html'    import training_tab %}
 
 {% set app = "WoodAnatomyApp" %}
 
@@ -23,7 +24,10 @@
 
     {{ top_menu(app)             | indent }}
 
-    {{ main_container(app)       | indent }}
+    {{ main_container(
+        app, 
+        training_tab = training_tab)
+    | indent }}
 
     {{ modal_settings()          | indent }}
     {{ base_modals.modal_training_progress()      | indent }}

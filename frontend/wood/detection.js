@@ -112,7 +112,7 @@ WoodDetection = class extends BaseDetection {
         set_image_src($result_overlay, result.ring_map)
         set_brightness(filename, 0.5)
 
-        //TODO: GLOBAL.files[filename].results = results;  //TODO: 
+        GLOBAL.files[filename].association_result = result;
     }
 }
 
