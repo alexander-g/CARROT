@@ -4,7 +4,7 @@ import threading, pickle, os
 import numpy as np
 import PIL.Image
 
-#TODO: unify
+#TODO: unify + use same lock for training
 class GLOBALS:
     processing_lock     = threading.Lock()
 

@@ -10,7 +10,8 @@ WoodTraining = class extends BaseTraining {
         const model_type      = $('#training-model-type').dropdown('get value');
 
         //refactor
-        const filter_func     = (k => (GLOBAL.files[k][model_type+'_results']!=undefined))
+        const attrname        = {cells:'cell_results', treerings:'treering_results'}[model_type]
+        const filter_func     = (k => (GLOBAL.files[k][attrname]!=undefined))
         const processed_files = Object.keys(GLOBAL.files).filter( filter_func )
         for(const f of processed_files)
             $('#training-filetable-row').tmpl({filename:f}).appendTo($table.find('tbody#training-selected-files'))
@@ -23,14 +24,20 @@ WoodTraining = class extends BaseTraining {
     static upload_training_data(filenames){
         //TODO: show progress
         const model_type      = $('#training-model-type').dropdown('get value');
-
+        //refactor
+        const attrname        = {cells:'cell_results', treerings:'treering_results'}[model_type]
         const files           = filenames.map( k => GLOBAL.files[k] )
         const targetfiles     = files.map(
-            f => f[model_type+'_results'][model_type=='cell'? 'cells' : 'segmentation']  //FIXME: ugly
+            f => f[attrname][model_type=='cells'? 'cells' : 'segmentation']  //FIXME: ugly
         )
 
         const promises = files.concat(targetfiles).map( f => upload_file_to_flask(f) )
         return Promise.all(promises).catch( this.fail_modal )
     }
 
+    //override
+    static get_training_options(){
+        const training_type      = $('#training-model-type').dropdown('get value');
+        return {training_type: training_type};
+    }
 }

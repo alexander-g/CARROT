@@ -1,8 +1,9 @@
-from base.backend.app import App as BaseApp
+from base.backend.app import App as BaseApp, get_models_path
 
 import os, json
 import flask
 import backend.processing
+import backend.training
 
 
 
@@ -47,5 +48,28 @@ class App(BaseApp):
 
     #override
     def training(self):
-        imagefiles = dict(flask.request.form.lists())['filenames[]']
-        flask.abort(501)
+        trainingtype = flask.request.form['options[training_type]']
+        if trainingtype not in ['cells', 'treerings']:
+            flask.abort(400) #bad request
+        
+        imagefiles   = dict(flask.request.form.lists())['filenames[]']
+        imagefiles   = [os.path.join(self.cache_path, f) for f in imagefiles]
+        targetfiles  = backend.training.find_targetfiles(imagefiles, trainingtype)
+        if len(targetfiles) != len(imagefiles):
+            flask.abort(404)
+        
+        ok = backend.training.start_training(imagefiles, targetfiles, trainingtype, self.settings)
+        return ok
+
+    #override
+    def save_model(self):
+        newname      = flask.request.args['newname']
+        print('Saving training model as:', newname)
+        trainingtype = flask.request.args['options[training_type]']
+        if trainingtype not in ['cells', 'treerings']:
+            flask.abort(400) #bad request
+        
+        path = f'{get_models_path()}/{trainingtype}/{newname}'
+        self.settings.models[trainingtype].save(path)
+        self.settings.active_models[trainingtype] = newname
+        return 'OK'
