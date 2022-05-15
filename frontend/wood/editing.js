@@ -80,6 +80,18 @@ WoodEditing = class {
         $other_overlays.css('visibility', '')
     }
 
+    static on_paint_mode(event){
+        const $root  = $(event.target).closest('[filename]')
+        $root.find('.edit-menu .paint-mode').addClass('active')
+        $root.find('.edit-menu .erase-mode').removeClass('active')
+    }
+
+    static on_erase_mode(event){
+        const $root  = $(event.target).closest('[filename]')
+        $root.find('.edit-menu .erase-mode').addClass('active')
+        $root.find('.edit-menu .paint-mode').removeClass('active')
+    }
+
     static on_mousedown(mousedown_event){
         const canvas   = mousedown_event.target;
         const $root    = $(canvas).closest('[filename]')
@@ -95,7 +107,7 @@ WoodEditing = class {
              mousedown_event.pageY - $(canvas).offset().top,
         ])
         const ctx       = canvas.getContext('2d')
-        const clear     = mousedown_event.ctrlKey
+        const clear     = $root.find('.edit-menu .erase-mode').hasClass('active')
         ctx.strokeStyle = clear? "black" : "white";
         ctx.lineWidth   = $root.find('.brush-size-slider').slider('get value')
         //double size for easier removing

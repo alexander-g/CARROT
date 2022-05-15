@@ -26,10 +26,20 @@
         </div>
 
        
-        
+        <div class="divider hidden-when-disabled"></div>
+        <div class="divider hidden-when-disabled"></div>
+        <div class="item paint-mode hidden-when-disabled active" onclick="{{app}}.Editing.on_paint_mode(event)">
+            <i class="paint brush icon"></i>
+            Paint
+        </div>
+        <div class="item erase-mode hidden-when-disabled" onclick="{{app}}.Editing.on_erase_mode(event)">
+            <i class="eraser icon"></i>
+            Erase
+        </div>
+
         <div class="divider hidden-when-disabled"></div>
         <div class="item brightness hidden-when-disabled">
-            <i class="circle outline icon"></i>
+            <i class="brush icon"></i>
             Brush size
             <div class="ui slider brush-size-slider" style="padding:0px; padding-top:5px;"></div>
             <script> $('.brush-size-slider').slider({max:100}).slider('set value', 30); </script>
