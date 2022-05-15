@@ -1,12 +1,10 @@
 from base.backend.pubsub import PubSub
+from base.backend import GLOBALS
 
 import threading, pickle, os
 import numpy as np
 import PIL.Image
 
-#TODO: unify + use same lock for training
-class GLOBALS:
-    processing_lock     = threading.Lock()
 
 def write_image(path, x):
     if np.max(x) <= 1.0:
