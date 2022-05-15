@@ -42,15 +42,13 @@ WoodTraining = class extends BaseTraining {
         return {training_type: training_type};
     }
 
+    //override
     static update_model_info(){
         const model_type  = $('#training-model-type').dropdown('get value');
         if(!model_type)
             return;
         
-        const model_name  = GLOBAL.settings.active_models[model_type]
-        $('#training-model-info-label').text(model_name)
-        $('#training-model-info-message').removeClass('hidden')
+        super.update_model_info(model_type)
     }
 }
 
-window.addEventListener(BaseSettings.SETTINGS_CHANGED, () => WoodTraining.refresh_table() )
