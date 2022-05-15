@@ -1,8 +1,12 @@
 
 
 function display_treerings(filename){
-    const ring_points = GLOBAL.files[filename].treering_results.ring_points;
-    const years       = GLOBAL.files[filename].treering_results.years;
+    const results     = GLOBAL.files[filename].treering_results;
+    if(!results)
+        return;
+    
+    const ring_points = results.ring_points;
+    const years       = results.years;
     const img         = $(`[filename="${filename}"] img.input-image`)[0];
     if(img.naturalWidth==0){
         //image not yet loaded, display on load
@@ -23,6 +27,15 @@ function display_treerings(filename){
         add_treering_label(ring_points[i], $svg, years[Number(i)], W);
     }
 }
+
+function refresh_all_treerings(){
+    for(const f of Object.values(GLOBAL.files))
+        display_treerings(f.name)
+}
+//refresh if micrometer setting changes
+window.addEventListener(BaseSettings.SETTINGS_CHANGED, () => refresh_all_treerings() )
+
+
 
 function draw_treering_polygon(points, $svg){
     const points_upper = points.map(p => `${p[0][1]}, ${p[0][0]} `)
@@ -58,60 +71,15 @@ function add_treering_label(points, $svg, ring_nr, viewbox_width){
         width   : mean,
         x       : (mean_point[1]-3000/scale).toFixed(1),
         y       : (mean_point[0]-3000/scale).toFixed(1),
-        //x       : 0,  //adjusted below
-        //y       : 0,  //adjusted below
         scale   : scale,
     })
     $label.appendTo($svg)
 
-    //adjust x & y to be in centered on the mean point
-    //FIXME: doesnt work
-    /*const labelsize = $label.find('.size-query-div')[0].getBoundingClientRect()
-    $label.attr({
-        x : mean_point[1] - labelsize.width /2,
-        y : mean_point[0] - labelsize.height/2,
-    })*/
     $label.find('[contenteditable]')
           .on("keydown", on_year_keydown)
           .on('keyup',   on_year_keyup)
           .on('blur',    on_year_blur)
 }
-
-/*function _add_treering_label(points, $svg, ring_nr, viewbox_width){
-    //median distance as text in the center
-    var mean_point = [0,0];
-    for(var p of points){
-        mean_point[0] += p[0][0];
-        mean_point[0] += p[1][0];
-        mean_point[1] += p[0][1];
-        mean_point[1] += p[1][1];
-    }
-    mean_point[0] /= (points.length*2);
-    mean_point[1] /= (points.length*2);
-
-    //ring width
-    var sum  = points.map( x=>dist(x[0],x[1]) ).reduce( (x,y)=>x+y );
-    var mean = ((sum / points.length) / GLOBAL.settings.micrometer_factor).toFixed(1);
-
-    //complicated but needed due to scaling issues
-    var $group = $(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
-    var $fobj  = $(document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject'));
-    var $label = $(`<div><label>Year: </label><label contenteditable="true">${ring_nr}</label></div><label>${mean}μm</label>`)
-
-    var scale  = viewbox_width / 300;  //magic number for same text size independent of image size
-    $group.attr({transform:`translate(${mean_point[1]-3000/scale }, ${mean_point[0]-3000/scale})`})
-    $fobj.attr({x:0, y:0, width:"100%", height:"100%", transform:`scale(${scale},${scale})`}).appendTo($group)
-    $fobj.css({ color:"white", "white-space":'pre', 'font-weight':'bold', "pointer-events":'none' })
-    $label.find('[contenteditable]').css('pointer-events','all');
-    $label.appendTo($fobj);
-    $svg.append($group);
-
-    $label.find('[contenteditable]').on("keydown", on_year_keydown).on('keyup', on_year_keyup).on('blur', on_year_blur);
-    $label.find('[contenteditable]').css('cursor','pointer').hover(
-        (e)=> $(e.target).css('background-color', "rgba(255,255,255,0.5)"),
-        (e)=> $(e.target).css('background-color', "rgba(255,255,255,0.0)") 
-    );
-}*/
 
 function on_show_treerings(visible=undefined){
     var filename    = $(this).closest('[filename]').attr('filename');
