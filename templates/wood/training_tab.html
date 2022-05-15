@@ -14,8 +14,14 @@
             <div class="item" data-value="treerings">Tree rings</div>
           </div>
         </div>
+
+        <div class="ui hidden message" id="training-model-info-message">
+          <p>Starting point for retraining: <b id="training-model-info-label">2022-02-10_026_oak_treerings</b></p>
+        </div>
     </div>
     <script> $('#training-model-type').dropdown({onChange: _ => {{ trainingmodule }}.refresh_table() } ) </script>
+
+
 
     <div class="ui divider"></div>
 

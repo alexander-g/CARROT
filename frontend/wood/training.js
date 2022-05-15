@@ -1,7 +1,6 @@
 
 
 WoodTraining = class extends BaseTraining {
-
     //override
     static refresh_table(){
         const $table = $('#training-filetable')
@@ -15,8 +14,10 @@ WoodTraining = class extends BaseTraining {
         const processed_files = Object.keys(GLOBAL.files).filter( filter_func )
         for(const f of processed_files)
             $('#training-filetable-row').tmpl({filename:f}).appendTo($table.find('tbody#training-selected-files'))
-        $table.find('.checkbox').checkbox({onChange: _ => this.update_table_header()})
+        $table.find('.checkbox').checkbox({onChange: _ => this.refresh_table()})
+        
         this.update_table_header()
+        this.update_model_info()
     }
 
 
@@ -40,4 +41,16 @@ WoodTraining = class extends BaseTraining {
         const training_type      = $('#training-model-type').dropdown('get value');
         return {training_type: training_type};
     }
+
+    static update_model_info(){
+        const model_type  = $('#training-model-type').dropdown('get value');
+        if(!model_type)
+            return;
+        
+        const model_name  = GLOBAL.settings.active_models[model_type]
+        $('#training-model-info-label').text(model_name)
+        $('#training-model-info-message').removeClass('hidden')
+    }
 }
+
+window.addEventListener(BaseSettings.SETTINGS_CHANGED, () => WoodTraining.refresh_table() )

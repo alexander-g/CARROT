@@ -68,6 +68,7 @@ def associate_cells(image_path, settings, recluster=False):
         result['imagesize']    = treering_segmentation.size
         treering_segmentation  = treering_segmentation / np.float32(255)
         ring_points            = model.segmentation_to_points(treering_segmentation)['ring_points']
+        open(image_path+'.ring_points.pkl','wb').write(pickle.dumps(ring_points))
     elif os.path.exists(image_path+'.ring_points.pkl'):
         ring_points            = pickle.load(open(image_path+'.ring_points.pkl','rb'))
     else:
@@ -79,6 +80,7 @@ def associate_cells(image_path, settings, recluster=False):
     cell_path   = image_path+'.cells.png'
     if os.path.exists(cell_path):
         cell_map            = PIL.Image.open(cell_path).convert('L')
+        result['imagesize'] = cell_map.size
         cell_map            = cell_map / np.float32(255)
         cells, ring_map_rgb = model.associate_cells_from_segmentation(cell_map, ring_points)
         ring_map_output     = image_path+'.ring_map.png'
@@ -86,7 +88,6 @@ def associate_cells(image_path, settings, recluster=False):
         
         result['ring_map']  = ring_map_output
         result['cells']     = cells
-        result['imagesize'] = cell_map.size
     #else: pass
     
     return result

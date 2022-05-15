@@ -14,6 +14,13 @@ def training_progress_callback(x):
     pubsub.PubSub.publish({'progress':x,  'description':'Training...'}, event='training')
 
 def find_targetfiles(inputfiles, trainingtype):
+    def find_targetfile(imgf):
+        no_ext_imgf = os.path.splitext(imgf)[0]
+        for f in [f'{imgf}.{trainingtype}.png', f'{no_ext_imgf}.{trainingtype}.png']:
+            if os.path.exists(f):
+                return f
+    return list(map(find_targetfile, inputfiles))
+    
     if trainingtype == 'cells':
         targetfiles = [ f'{imgf}.cells.png' for imgf in inputfiles ]
     elif trainingtype == 'treerings':

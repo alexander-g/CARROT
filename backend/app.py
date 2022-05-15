@@ -55,7 +55,8 @@ class App(BaseApp):
         imagefiles   = dict(flask.request.form.lists())['filenames[]']
         imagefiles   = [os.path.join(self.cache_path, f) for f in imagefiles]
         targetfiles  = backend.training.find_targetfiles(imagefiles, trainingtype)
-        if len(targetfiles) != len(imagefiles):
+        #if len(targetfiles) != len(imagefiles):
+        if not all(targetfiles):
             flask.abort(404)
         
         ok = backend.training.start_training(imagefiles, targetfiles, trainingtype, self.settings)
