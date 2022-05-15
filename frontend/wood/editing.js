@@ -25,7 +25,8 @@ WoodEditing = class {
 
         //hide other overlays, paste segmentation onto canvas
         this.update_canvas_size(canvas)
-        await paste_blob_onto_canvas(canvas, segmentation_file)
+        if(segmentation_file)
+            await paste_blob_onto_canvas(canvas, segmentation_file)
         const $other_overlays  = $(`[filename="${filename}"] .overlay:not(canvas)`)
         $other_overlays.css('visibility', 'hidden')
         set_brightness(filename, 0.5)
@@ -33,35 +34,24 @@ WoodEditing = class {
 
     static on_edit_cells_button(event){
         const filename = $(event.target).closest('[filename]').attr('filename')
-        this.activate_mode(filename, 'cells', GLOBAL.files[filename].cell_results.cells)
+        this.activate_mode(filename, 'cells', GLOBAL.files[filename].cell_results?.cells)
     }
 
     static on_edit_treerings_button(event){
         const filename = $(event.target).closest('[filename]').attr('filename')
-        this.activate_mode(filename, 'treerings', GLOBAL.files[filename].treering_results.segmentation)
+        this.activate_mode(filename, 'treerings', GLOBAL.files[filename].treering_results?.segmentation)
     }
 
     static async on_edit_apply(event){
-        //TODO: what to do when not yet processed?
-        //TODO: dimmer
         const $root    = $(event.target).closest('[filename]')
         const filename = $root.attr('filename')
         const mode     = this.is_editing_active(filename)
-        let prev_file;
-        if(mode == 'treerings'){
-            prev_file = GLOBAL.files[filename].treering_results.segmentation;
-        } else if(mode == 'cells'){
-            prev_file = GLOBAL.files[filename].cell_results.cells;
-        } else {
-            console.warn('on_edit_apply() with unexpected editing mode:', mode)
-            return;
-        }
-        
+        const fname = `${filename}.${mode}.png`
         try {
             App.Detection.set_processing(filename)
             const canvas    = $root.find('.editing-canvas.overlay')[0]
             canvas.toBlob(async blob =>  {
-                const f = new File([blob], prev_file.name);
+                const f = new File([blob], fname);
                 await App.FileInput.load_result(filename, [f])
                 this.clear(filename)
             }, 'image/png');
@@ -71,7 +61,7 @@ WoodEditing = class {
     }
 
     static on_edit_clear(event){
-        //TODO: restore to what it was before
+        //restore to what it was before
         const filename = $(event.target).closest('[filename]').attr('filename')
         this.clear(filename)
     }

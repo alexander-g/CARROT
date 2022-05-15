@@ -34,26 +34,21 @@ WoodDetection = class extends BaseDetection {
             
             if(GLOBAL.settings.cells_enabled){
                 const cell_results = await $.get(`process_cells/${filename}`)
-                this.set_cell_result(filename, cell_results)  //TODO: await??
+                await this.set_cell_result(filename, cell_results)
             }
 
             if(GLOBAL.settings.treerings_enabled){
                 const treering_results = await $.get(`process_treerings/${filename}`)
-                this.set_treering_result(filename, treering_results)
+                await this.set_treering_result(filename, treering_results)
             }
 
-            if(GLOBAL.settings.cells_enabled && GLOBAL.settings.treerings_enabled){
+            //if(GLOBAL.settings.cells_enabled && GLOBAL.settings.treerings_enabled){
+            if(file.cell_results && file.treering_results){
                 const asc_result = await $.get(`/associate_cells/${filename}`)
-                this.set_association_result(filename, asc_result)
+                await this.set_association_result(filename, asc_result)
             }
 
-
-            //TODO: put somewhere else + unify
-            this.hide_dimmer(filename)
-            this.enable_buttons(filename, true, false)
-            //indicate in the file table that this file is processed
-            $(`.table-row[filename="${filename}"] label`).css('font-weight', 'bold')
-            $(`#filetable [filename="${filename}"]`).find('.status.icon').hide().filter('.processed').show()
+            this.set_processed(filename)
         } catch(e) {
             console.error('Processing failed.')
             console.trace(e);
