@@ -28,7 +28,7 @@ WoodDownload = class extends BaseDownload{
         const header = [
             'Year', 
             'X(px)',          'Y(px)',
-            'Lumen Area(px)', 'Lumen Area(μm)',
+            'Lumen Area(px)', 'Lumen Area(μm^2)',
             'Position within tree ring(0-100)',
         ]
 
@@ -36,7 +36,7 @@ WoodDownload = class extends BaseDownload{
         if(include_header)
             csv_text += header.join(', ')+'\n';
 
-        const micrometer_factor = GLOBAL.settings.micrometer_factor;
+        const micrometer_factor = GLOBAL.settings.micrometer_factor ** 2;
         const ignore_buffer_px  = GLOBAL.settings.ignore_buffer_px;
         const cells    = f.association_result.cells.sort( (x,y)=>(x.year-y.year) );
         const years    = f.treering_results.years;
