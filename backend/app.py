@@ -74,3 +74,10 @@ class App(BaseApp):
         self.settings.models[trainingtype].save(path)
         self.settings.active_models[trainingtype] = newname
         return 'OK'
+    
+    #override
+    def stop_training(self):
+        #XXX: brute-force approach to avoid boilerplate code
+        for m in self.settings.models.values():
+            m.stop_training()
+        return 'OK'
