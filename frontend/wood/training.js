@@ -29,7 +29,12 @@ WoodTraining = class extends BaseTraining {
         const attrname        = {cells:'cell_results', treerings:'treering_results'}[model_type]
         const files           = filenames.map( k => GLOBAL.files[k] )
         const targetfiles     = files.map(
-            f => f[attrname][model_type=='cells'? 'cells' : 'segmentation']  //FIXME: ugly
+            f => {
+                let targetf = f[attrname][model_type=='cells'? 'cells' : 'segmentation']  //FIXME: ugly
+                //standardize file name
+                    targetf = rename_file(targetf, `${f.name}.${model_type}.png`)
+                return targetf;
+            }
         )
 
         const promises = files.concat(targetfiles).map( f => upload_file_to_flask(f) )
