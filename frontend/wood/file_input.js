@@ -40,6 +40,7 @@ static async load_result(filename, resultfiles){
         if(asc_result){
             const treering_result = {
                 ring_points:  asc_result.ring_points, 
+                ring_areas:   asc_result.ring_areas, 
                 segmentation: treerings_file || GLOBAL.files[filename]?.treering_results?.segmentation
             }
             await App.Detection.set_treering_result(filename, treering_result)

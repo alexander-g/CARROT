@@ -23,11 +23,11 @@ class TreeringsMockModel(torch.nn.Module):
         print(y0,x0,y1,x1)
         result[y0:y1,x0:x1] = 255
 
-        #ring_points     = [associate_points(points[labels==r0][::2], points[labels==r1][::2]) for r0,r1 in rings]
-        border_points    = np.stack([np.ones(10), np.arange(10)], axis=-1)
-        ring_points  = [ 
+        border_points = np.stack([np.ones(10), np.arange(10)], axis=-1)
+        ring_points   = [ 
             (border_points * (i,1),  border_points * (i+1, 1)) for i in range(2)
         ]
+        ring_areas    = [100]*len(ring_points)
 
         print(f'Simulating image processing')
         for i in range(3):
@@ -36,6 +36,7 @@ class TreeringsMockModel(torch.nn.Module):
         return {
             'segmentation': result,
             'ring_points' : ring_points,
+            'ring_areas'  : ring_areas,
         }
     
     @staticmethod
@@ -58,9 +59,11 @@ class TreeringsMockModel(torch.nn.Module):
         points, labels  = [],[]
         rings           = []
         ring_points     = []
+        ring_areas      = []
         return {
             'segmentation'   : segmentation,
             'ring_points'    : ring_points,
+            'ring_areas'     : ring_areas,
             'points'         : points,
             'labels'         : labels,
             'ring_labels'    : rings,
