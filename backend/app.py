@@ -25,7 +25,6 @@ class App(BaseApp):
             full_path    = self.path_in_cache(imagename, abort_404=True)
             result       = backend.processing.process_treerings(full_path, self.settings)
             result['segmentation'] = os.path.basename(result['segmentation'])
-            result['ring_points']  = [rp.tolist() for rp in result['ring_points']]
             return flask.jsonify(result)
 
         @self.route('/associate_cells/<imagename>')
@@ -37,7 +36,6 @@ class App(BaseApp):
             if result is not None:
                 if result['ring_map'] is not None:
                     result['ring_map']    = os.path.basename(result['ring_map'])
-                result['ring_points'] = [rp.tolist() for rp in result['ring_points']]
             return flask.jsonify(result)
 
     def path_in_cache(self, filename, abort_404=True):

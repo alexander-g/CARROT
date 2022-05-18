@@ -38,10 +38,12 @@ def process_treerings(image_path, settings):
     output_path = image_path+'.treerings.png'
     write_image(output_path, y['segmentation']>0)
     open(image_path+'.ring_points.pkl','wb').write(pickle.dumps(y['ring_points']))
+    open(image_path+'.ring_areas.pkl','wb').write(pickle.dumps(y['ring_areas']))
     
     return {
         'segmentation': output_path,
-        'ring_points' : [np.stack([sample_points(a, 64), sample_points(b, 64)], axis=1) for a,b in y['ring_points']],  #TODO
+        'ring_points' : [np.stack([a, b], axis=1).tolist() for a,b in y['ring_points']],
+        'ring_areas'  : y['ring_areas'],
     }
 
 def sample_points(points, n):
@@ -58,6 +60,7 @@ def associate_cells(image_path, settings, recluster=False):
         'ring_map'    : None,
         'cells'       : [],
         'ring_points' : [],
+        'ring_areas'  : [],
         'imagesize'   : None,  #currently needed when loading results from file
     }
     
@@ -65,15 +68,20 @@ def associate_cells(image_path, settings, recluster=False):
         treering_segmentation  = PIL.Image.open(image_path+'.treerings.png').convert('L')
         result['imagesize']    = treering_segmentation.size
         treering_segmentation  = treering_segmentation / np.float32(255)
-        ring_points            = model.segmentation_to_points(treering_segmentation)['ring_points']
+        y                      = model.segmentation_to_points(treering_segmentation)['ring_points']
+        ring_points            = y['ring_points']
+        ring_areas             = y['ring_areas']
         open(image_path+'.ring_points.pkl','wb').write(pickle.dumps(ring_points))
+        open(image_path+'.ring_areas.pkl','wb').write(pickle.dumps(y['ring_areas']))
     elif os.path.exists(image_path+'.ring_points.pkl'):
         ring_points            = pickle.load(open(image_path+'.ring_points.pkl','rb'))
+        ring_areas             = pickle.load(open(image_path+'.ring_areas.pkl','rb'))
     else:
         #cannot do anything without tree ring data
         return None
 
-    result['ring_points'] = [np.stack([sample_points(a, 64), sample_points(b, 64)], axis=1) for a,b in ring_points ]
+    result['ring_points'] = [np.stack([a, b], axis=1).tolist() for a,b in ring_points],
+    result['ring_areas']  = ring_areas
 
     cell_path   = image_path+'.cells.png'
     if os.path.exists(cell_path):

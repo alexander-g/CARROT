@@ -72,20 +72,29 @@ WoodDownload = class extends BaseDownload{
         if(!f.treering_results)
             return;
         
-        const header = ['Year', 'Mean Tree Ring Width(px)', 'Mean Tree Ring Width(μm)'];
+        const header = [
+            'Year', 
+            'Mean Tree Ring Width(px)', 'Mean Tree Ring Width(μm)',
+            'Tree Ring Area(px)',       'Tree Ring Area(μm^2)',
+        ];
         var csv_text =''
         if(include_header)
             csv_text += header.join(', ')+'\n';
 
         
         const ring_points = f.treering_results.ring_points;
+        const ring_areas  = f.treering_results.ring_areas;
         const years       = f.treering_results.years;
-        const micrometer_factor = GLOBAL.settings.micrometer_factor;
+        const micrometer_factor    = GLOBAL.settings.micrometer_factor;
+        const micrometer_factor_sq = micrometer_factor**2;
         for(const i in ring_points){
             const sum  = ring_points[i].map( x=>dist(x[0],x[1]) ).reduce( (x,y)=>x+y );
             const mean = (sum / ring_points[i].length);
+            const area = ring_areas[i];
             const ring_data = [
-                years[i], mean.toFixed(2), (mean / micrometer_factor).toFixed(2)
+                years[i],
+                mean.toFixed(2), (mean / micrometer_factor).toFixed(2),
+                area.toFixed(2), (area / micrometer_factor_sq).toFixed(2),
             ]
              //sanity check
              if(header.length != ring_data.length){
