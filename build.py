@@ -1,38 +1,38 @@
 #!/bin/python
-import os, shutil, sys
+import os, shutil, sys, subprocess
 import datetime
 
+os.environ['DO_NOT_RELOAD'] = 'true'
+from backend.app import App
+App().recompile_static(force=True)        #make sure the static/ folder is up to date
 
-build_name = '%s_DigIT_WoodAnatomy'%(datetime.datetime.now().strftime('%Y%m%d_%Hh%Mm%Ss') )
+build_name = '%s_DigIT_WoodAnatomy'%(datetime.datetime.now().strftime('%Y-%m-%d_%Hh%Mm%Ss') )
 build_dir  = 'builds/%s'%build_name
 
-os.system(f'''pyinstaller --noupx                                 \
-             --hidden-import=torchvision                          \
-             --hidden-import=sklearn.utils._cython_blas           \
-             --hidden-import=skimage.io._plugins.tifffile_plugin  \
-             --additional-hooks-dir=./hooks                       \
-             --distpath {build_dir} main.py''')
+rc = subprocess.call(f'''pyinstaller --noupx                            \
+              --hidden-import=sklearn.utils._cython_blas     \
+              --hidden-import=skimage.io._plugins.tifffile_plugin   \
+              --hidden-import=skimage.morphology                    \
+              --hidden-import=skimage.graph                         \
+              --hidden-import=skimage.graph.heap                    \
+              --hidden-import=onnxruntime                           \
+              --hidden-import=torchvision                           \
+              --additional-hooks-dir=./hooks                        \
+              --distpath {build_dir} main.py''')
+if rc!=0:
+    print(f'PyInstaller exited with code {rc}')
+    sys.exit(rc)
 
-
-shutil.copytree('HTML',   build_dir+'/HTML')
+shutil.copytree('static', build_dir+'/static')
 shutil.copytree('models', build_dir+'/models')
-shutil.copyfile('settings.json',    build_dir+'/settings.json')
-
 if 'linux' in sys.platform:
-    os.symlink('main/main', build_dir+'/MAIN')
+    os.symlink('/main/main', build_dir+'/main.run')
 else:
-    open(build_dir+'/main.bat', 'w').write(r'main\main.exe')
-
+    open(build_dir+'/main.bat', 'w').write(r'main\main.exe'+'\npause')
 shutil.rmtree('./build')
+#shutil.copyfile('settings.json', build_dir+'/settings.json')
 os.remove('./main.spec')
 
 #hiddenimport doesnt work; copying the whole folder
 import torchvision
 shutil.copytree(os.path.dirname(torchvision.__file__), build_dir+'/main/torchvision')
-
-from PyInstaller.compat import is_win
-if is_win:
-    #scipy hook doesnt work
-    import scipy
-    scipy_dir = os.path.dirname(scipy.__file__)
-    shutil.copytree(os.path.join(scipy_dir, '.libs'), build_dir+'/main/scipy/.libs')
