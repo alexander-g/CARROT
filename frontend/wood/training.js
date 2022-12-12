@@ -1,8 +1,7 @@
 
-
 WoodTraining = class extends BaseTraining {
     //override
-    static refresh_table(){
+    static refresh_tab(){
         const $table = $('#training-filetable')
         $table.find('tbody').html('');
 
@@ -14,7 +13,7 @@ WoodTraining = class extends BaseTraining {
         const processed_files = Object.keys(GLOBAL.files).filter( filter_func )
         for(const f of processed_files)
             $('#training-filetable-row').tmpl({filename:f}).appendTo($table.find('tbody#training-selected-files'))
-        $table.find('.checkbox').checkbox({onChange: _ => this.refresh_table()})
+        $table.find('.checkbox').checkbox({onChange: _ => this.refresh_tab()})
         
         this.update_table_header()
         this.update_model_info()

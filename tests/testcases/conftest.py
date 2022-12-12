@@ -3,6 +3,7 @@ os.environ['TESTS_TO_SKIP'] = (
     '''test_download_all'''                 #replaced by TestWoodDownload.test_download_all
     '''test_load_results'''                 #requires non-static, replaced with test_wood_file_input.py
     '''test_overlay_side_by_side_switch'''  #side-by-side disabled in this ui
+    '''test_add_boxes'''                    #no boxes
 )
 
 

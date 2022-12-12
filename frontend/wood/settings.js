@@ -3,6 +3,7 @@ WoodSettings = class extends BaseSettings {
     
     //override
     static update_settings_modal(models){
+        super.update_settings_modal(models)
         const settings = GLOBAL.settings;
 
         this.update_model_selection_dropdown(

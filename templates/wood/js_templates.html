@@ -62,7 +62,13 @@
 {% endmacro %}
 
 
-{% macro roots_filetable_content(app)%}
+{% macro image_and_treerings_svg_overlay(name, app) %}
+  {{ base_js_templates.image_overlay(name) }}
+  {{ treerings.svg_overlay(app) }}
+{% endmacro %}
+
+
+{% macro wood_filetable_content(app)%}
 <div class="filetable-content" style="display:none">
     {{ base_content_menu.content_menu(
             callback_on_process        = app+".Detection.on_process_image",
@@ -71,7 +77,6 @@
             callback_download          = app+".Download.on_single_item_download_click",
             edit_segmentation_item     = edit_menu_item(app),
             view_menu_kwargs           = {
-                'show_results_layout': False,
                 'extras':              display_treerings_checkbox(),
                 'brightness_max':      10
             }
@@ -80,10 +85,9 @@
     <div class="image-container">
         {{ base_js_templates.content_image(
             name           = "input",  
-            overlay        = True,  
-            viewcontrols   = app+".ViewControls",
-            extras         = treerings.svg_overlay(app)
-        ) | indent(8) }}
+            overlay        = image_and_treerings_svg_overlay("input", app),
+            viewcontrols   = app+".ViewControls"
+        ) | indent(8) }}                                        {# TODO: extras changed upstream #}
         {{ base_js_templates.content_image(
             name           = "result", 
             overlay        = False, 
@@ -96,7 +100,7 @@
 
 
 {% macro filetable_row_template(app) %}
-    {{ base_js_templates.filetable_row_template(app, content=roots_filetable_content) }}
+    {{ base_js_templates.filetable_row_template(app, content=wood_filetable_content) }}
     {{ treerings.treering_overlay_templates() }}
 {% endmacro %}
 

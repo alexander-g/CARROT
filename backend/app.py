@@ -4,12 +4,15 @@ import os, json
 import flask
 import backend.processing
 import backend.training
-
+import backend.settings  #important for some reason
 
 
 class App(BaseApp):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
+        if self.is_reloader:
+            return
+        
 
 
         @self.route('/process_cells/<imagename>')
@@ -73,9 +76,3 @@ class App(BaseApp):
         self.settings.active_models[trainingtype] = newname
         return 'OK'
     
-    #override
-    def stop_training(self):
-        #XXX: brute-force approach to avoid boilerplate code
-        for m in self.settings.models.values():
-            m.stop_training()
-        return 'OK'

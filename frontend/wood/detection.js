@@ -66,12 +66,12 @@ WoodDetection = class extends BaseDetection {
 
         var $root           = $(`#filetable [filename="${filename}"]`)
         var $result_image   = $root.find('img.result-image')
-        set_image_src($result_image, result.cells)
+        GLOBAL.App.ImageLoading.set_image_src($result_image, result.cells)
         //$result_image.css('filter',clear? 'contrast(0)' : 'contrast(1)')
         $result_image.css('filter', 'contrast(1)')
 
         var $result_overlay = $root.find(`img.overlay`)
-        set_image_src($result_overlay, result.cells)
+        GLOBAL.App.ImageLoading.set_image_src($result_overlay, result.cells)
         set_brightness(filename, 0.5)
 
         GLOBAL.files[filename].cell_results = result;
@@ -99,12 +99,12 @@ WoodDetection = class extends BaseDetection {
         
         var $root           = $(`#filetable [filename="${filename}"]`)
         var $result_image   = $root.find('img.result-image')
-        set_image_src($result_image, result.ring_map)
+        GLOBAL.App.ImageLoading.set_image_src($result_image, result.ring_map)
         //$result_image.css('filter',clear? 'contrast(0)' : 'contrast(1)')
         $result_image.css('filter', 'contrast(1)')
 
         var $result_overlay = $root.find(`img.overlay`)
-        set_image_src($result_overlay, result.ring_map)
+        GLOBAL.App.ImageLoading.set_image_src($result_overlay, result.ring_map)
         set_brightness(filename, 0.5)
 
         GLOBAL.files[filename].association_result = result;

@@ -6,3 +6,4 @@ models
 static
 cache
 settings.json
+venv
