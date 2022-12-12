@@ -49,14 +49,15 @@ class App(BaseApp):
 
     #override
     def training(self):
-        trainingtype = flask.request.form['options[training_type]']
+        requestform  = flask.request.get_json(force=True)
+        options      = requestform['options']
+        trainingtype = options['training_type']
         if trainingtype not in ['cells', 'treerings']:
             flask.abort(400) #bad request
         
-        imagefiles   = dict(flask.request.form.lists())['filenames[]']
+        imagefiles   = requestform['filenames']
         imagefiles   = [os.path.join(self.cache_path, f) for f in imagefiles]
         targetfiles  = backend.training.find_targetfiles(imagefiles, trainingtype)
-        #if len(targetfiles) != len(imagefiles):
         if not all(targetfiles):
             flask.abort(404)
         

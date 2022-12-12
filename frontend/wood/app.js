@@ -9,5 +9,13 @@ WoodAnatomyApp = class extends BaseApp {
 }
 
 
-//override
-App = WoodAnatomyApp;
+//override (both needed)
+App        = WoodAnatomyApp;
+GLOBAL.App = WoodAnatomyApp;
+
+
+//override (mostly just for documentation)
+class WoodInputFile extends InputFile {
+    cell_results     = undefined;
+    treering_results = undefined;
+}

@@ -2,21 +2,8 @@
 WoodTraining = class extends BaseTraining {
     //override
     static refresh_tab(){
-        const $table = $('#training-filetable')
-        $table.find('tbody').html('');
-
-        const model_type      = $('#training-model-type').dropdown('get value');
-
-        //refactor
-        const attrname        = {cells:'cell_results', treerings:'treering_results'}[model_type]
-        const filter_func     = (k => (GLOBAL.files[k][attrname]!=undefined))
-        const processed_files = Object.keys(GLOBAL.files).filter( filter_func )
-        for(const f of processed_files)
-            $('#training-filetable-row').tmpl({filename:f}).appendTo($table.find('tbody#training-selected-files'))
-        $table.find('.checkbox').checkbox({onChange: _ => this.refresh_tab()})
-        
-        this.update_table_header()
-        this.update_model_info()
+        super.refresh_tab()
+        this.update_number_of_training_files_info()
     }
 
 
@@ -53,6 +40,30 @@ WoodTraining = class extends BaseTraining {
             return;
         
         super.update_model_info(model_type)
+    }
+
+    //override
+    static get_selected_files(){
+        const files            = Object.values(GLOBAL.files);
+        let files_with_results = []
+        const options          = this.get_training_options()
+        if(options.training_type == 'cells') {
+            files_with_results = files.filter( x => !!x.cell_results )
+        } else if(options.training_type == 'treerings') {
+            files_with_results = files.filter( x => !!x.treering_results )
+        } else if(options.training_type == '') {
+            return [];
+        } else {
+            console.error('Unexpected training type: ', options)
+            return;
+        }
+        return files_with_results.map( x => x.name)
+    }
+
+    static update_number_of_training_files_info(){
+        const n = this.get_selected_files().length;
+        $('#training-number-of-files-info-label').text(n)
+        $('#training-number-of-files-info-message').removeClass('hidden')
     }
 }
 
