@@ -109,5 +109,13 @@ WoodDetection = class extends BaseDetection {
 
         GLOBAL.files[filename].association_result = result;
     }
+
+    static set_processed(filename, clear=false){
+        super.set_processed(filename, clear)
+        const $root = $(`#filetable [filename="${filename}"]`)
+        $root.find('.show-results-checkbox')
+            .checkbox({onChange: () => GLOBAL.App.ViewControls.toggle_results(filename) } )
+            .checkbox('check')
+    }
 }
 
