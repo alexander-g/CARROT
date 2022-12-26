@@ -9,6 +9,8 @@ import backend.settings  #important for some reason
 
 class App(BaseApp):
     def __init__(self, *args, **kw):
+        backend.settings.ensure_pretrained_models()
+        
         super().__init__(*args, **kw)
         if self.is_reloader:
             return
