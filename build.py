@@ -12,7 +12,7 @@ os.environ['DO_NOT_RELOAD'] = 'true'
 from backend.app import App
 App().recompile_static(force=True)        #make sure the static/ folder is up to date
 
-build_name = '%s_DigIT_WoodAnatomy'%(datetime.datetime.now().strftime('%Y-%m-%d_%Hh%Mm%Ss') )
+build_name = '%s_CARROT'%(datetime.datetime.now().strftime('%Y-%m-%d_%Hh%Mm%Ss') )
 build_dir  = 'builds/%s'%build_name
 
 rc = subprocess.call(f'''pyinstaller --noupx                            \
@@ -29,7 +29,9 @@ if rc!=0:
     sys.exit(rc)
 
 shutil.copytree('static', build_dir+'/static')
-shutil.copytree('models', build_dir+'/models')
+os.makedirs(build_dir+'/models/')
+shutil.copy('models/pretrained_models.txt', build_dir+'/models/')
+
 if 'linux' in sys.platform:
     os.symlink('/main/main', build_dir+'/main.run')
 else:
