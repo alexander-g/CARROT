@@ -69,8 +69,8 @@ function add_treering_label(points, $svg, ring_nr, viewbox_width){
     const $label = $('#treering-overlay-label-template').tmpl({
         ring_nr : ring_nr,
         width   : mean,
-        x       : (mean_point[1]-3000/scale).toFixed(1),
-        y       : (mean_point[0]-3000/scale).toFixed(1),
+        x       : (mean_point[1]).toFixed(1),
+        y       : (mean_point[0]).toFixed(1),
         scale   : scale,
     })
     $label.appendTo($svg)
