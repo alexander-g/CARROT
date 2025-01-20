@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "lib": ["dom", "deno.ns"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "https://esm.sh/preact@10.25.0",
+
+    //to make sure that [][0] gives undefined
+    "noUncheckedIndexedAccess": true
+  },
+  "lock": false,
+  "tasks": {
+    "compile_index": "./build.ts",
+    "bundle_deps"  : "./backend/ts/esbuild.ts",
+    "cache":         "./deno.sh cache --allow-import --reload ./build.ts ./frontend/dep.ts",
+  },
+
+  "imports": {
+    //"@base/": "https://dg4uu3rcpia76csw47x7sq6lz4.srv.us/",
+    "@base/": "../UI-base/",
+  }
+}
