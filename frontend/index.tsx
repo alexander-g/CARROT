@@ -43,7 +43,9 @@ export function Index(): JSX.Element {
         <base.Head 
             title = {"CARROT - Cell and Ring Recognition Tool"} 
             import_src = {"index.tsx.js"} 
-        />
+        >
+            <link rel="stylesheet" href="css/treerings.css" />
+        </base.Head>
         <CARROT_App />
     </html>
 }

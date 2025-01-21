@@ -6,7 +6,8 @@ polyline.treering-border {
 }
 
 polygon.treering-area  {
-    fill:        rgba(255,255,255,0.0)
+    fill:        rgba(255,255,255,0.0);
+    pointer-events: all;
 }
 
 polygon.treering-area:hover  {
@@ -28,6 +29,8 @@ svg.treering-overlay-label foreignObject{
 svg.treering-overlay-label foreignObject [contenteditable]{
     pointer-events: all;
     background-color: rgba(255,255,255,0.0);
+    /* make sure whitespace is displayed */
+    white-space:    pre;
 }
 
 svg.treering-overlay-label foreignObject [contenteditable]:hover{

@@ -18,7 +18,7 @@ class App(BaseApp):
             static    = get_static_path(),
             index_tsx = 'index.tsx',
             dep_ts    = 'dep.ts',
-            #copy_globs= 'favicon.ico,logo.svg',
+            copy_globs= 'css/treerings.css',
         )
         kw['deno_cfg'] = deno
         

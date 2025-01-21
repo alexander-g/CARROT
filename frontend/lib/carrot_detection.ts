@@ -1,6 +1,7 @@
 import { base } from "../dep.ts"
 
-type Point = base.util.Point;
+type Point      = base.util.Point;
+type PointPair  = [Point,Point]
 type BaseResult = base.files.Result;
 
 /** Result with additional attributes for roots */
@@ -8,12 +9,12 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
     
     /** Coordinates of treerings or intermediate image file containing detected 
      *  boundaries that needs to be processed to extract coordinates */
-    treerings: [Point,Point][][]|File|null;
+    treerings: PointPair[][]|File|null;
 
     constructor(
         ...args: [
             ...baseargs: ConstructorParameters<typeof base.segmentation.SegmentationResult>,
-            treerings?:   [Point,Point][][]|File,
+            treerings?:   PointPair[][]|File,
         ]
     ){
         super(args[0], args[1], args[2], args[3])
@@ -49,6 +50,9 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
         return null
     }
 
+    get_treering_coordinates_if_loaded(): PointPair[][]|null {
+        return (Array.isArray(this.treerings))? this.treerings : null;
+    }
 }
 
 
@@ -114,39 +118,65 @@ async function validate_cell_association_response<T extends BaseResult>(
         && base.util.has_property_of_type(
             jsondata, 
             'ring_points', 
-            validate_point_tuple_dual_array,
+            validate_2x2_number_tuple_dual_array,
         )){
-            return new ctor('processed', raw, '??', jsondata.ring_map)
+            const ring_points:PointPair[][] = 
+                convert_2x2_number_tuple_dual_array_to_points(jsondata.ring_points)
+            return new ctor('processed', raw, '??', jsondata.ring_map, ring_points)
         }
         else return null;
     }
     else return null;
 }
 
-function validate_point_tuple_dual_array(x:unknown): [Point,Point][][]|null {
-    if(base.util.is_array_of_type(x, validate_point_tuple_array)){
+
+
+type TwoNumbers = [number,number]
+type TwoNumberTuple = [TwoNumbers, TwoNumbers]
+
+
+/** Conversion from simple numbers to objects. 
+ *  y first x second (as return by legacy flask backend) */
+function convert_2x2_number_tuple_dual_array_to_points(x:TwoNumberTuple[][]):
+PointPair[][] {
+    const result:PointPair[][] = []
+    for(const array0 of x){
+        const tuples:PointPair[] = []
+        for(const two_number_tuple of array0){
+            const p0:Point = {y:two_number_tuple[0][0], x:two_number_tuple[0][1]}
+            const p1:Point = {y:two_number_tuple[1][0], x:two_number_tuple[1][1]}
+            tuples.push([p0,p1])
+        }
+        result.push(tuples)
+    }
+    return result;
+}
+
+
+function validate_2x2_number_tuple_dual_array(x:unknown): TwoNumberTuple[][]|null {
+    if(base.util.is_array_of_type(x, validate_2x2_number_tuple_array)){
         return x;
     }
     else return null;
 }
 
-function validate_point_tuple_array(x:unknown): [Point,Point][]|null {
-    if(base.util.is_array_of_type(x, validate_2_point_tuple)){
+function validate_2x2_number_tuple_array(x:unknown): TwoNumberTuple[]|null {
+    if(base.util.is_array_of_type(x, validate_2x2_number_tuple)){
         return x;
     }
     else return null;
 }
 
-function validate_2_point_tuple(q:unknown): [Point,Point]|null {
+function validate_2x2_number_tuple(q:unknown): TwoNumberTuple|null {
     if(base.util.is_array_of_type(q, validate_2_number_tuple)
     && q.length == 2){
-        return [{y:q[0]![0],x:q[0]![1]}, {y:q[1]![0],x:q[1]![1]}]
+        return q as TwoNumberTuple;
     }
     else return null;
 }
 
 // TODO: move upstream
-function validate_2_number_tuple(x: unknown): [number,number]|null {
+function validate_2_number_tuple(x: unknown): TwoNumbers|null {
     if(base.util.is_number_array(x)
     && x.length == 2){
         return x as [number,number];
