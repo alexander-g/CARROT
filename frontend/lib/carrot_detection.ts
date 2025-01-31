@@ -1,4 +1,5 @@
 import { base } from "../dep.ts"
+import { CARROT_Settings } from "./carrot_settings.ts";
 
 type Point      = base.util.Point;
 type PointPair  = [Point,Point]
@@ -197,8 +198,9 @@ export type UnfinishedCARROT_Result = {
         treerings: Extract<CARROT_Result['treerings'], Blob>;
 })
 
-export interface CARROT_Backend {
-    process_cell_association: (r:UnfinishedCARROT_Result) => Promise<BaseResult>;
+export abstract class CARROT_Backend
+extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Settings> {
+    abstract process_cell_association(r:UnfinishedCARROT_Result): Promise<BaseResult>;
 }
 
 export function validate_CARROT_Backend(x:unknown): CARROT_Backend|null {
@@ -214,9 +216,7 @@ export function is_CARROT_Backend(x:unknown): x is CARROT_Backend {
 }
 
 
-export class CARROT_RemoteBackend 
-    extends base.RemoteProcessing<CARROT_Result> 
-    implements CARROT_Backend {
+export class CARROT_RemoteBackend extends CARROT_Backend {
     
     async process_cell_association(r:UnfinishedCARROT_Result): 
     Promise<BaseResult>{
@@ -242,5 +242,32 @@ export class CARROT_RemoteBackend
             return new CARROT_Result('failed')
 
         return (await CARROT_Result.validate(response)) ?? new CARROT_Result('failed')
+    }
+
+    override async process(
+        input: File, 
+        on_progress?: ((x: base.files.InputResultPair<File, CARROT_Result>
+    ) => void) | undefined): Promise<CARROT_Result> {
+        on_progress?.({input, result:new this.ResultClass("processing")})
+
+        const upload_ok:Response|Error = await base.util.upload_file_no_throw(input)
+        if(upload_ok instanceof Error)
+            return new CARROT_Result('failed')
+
+        const cells:boolean     = this.settings.cells_enabled;
+        const treerings:boolean = this.settings.treerings_enabled;
+        const filename:string   = input.name;
+        const url = `process/${filename}?cells=${cells}&treerings=${treerings}`
+        const response:Response|Error = await base.util.fetch_no_throw(url)
+
+        if(response instanceof Error)
+            return new CARROT_Result('failed')
+        
+        const result: base.files.Result|null = 
+            await CARROT_Result.validate(response)
+        if(result != null)
+            return result as CARROT_Result
+        else 
+            return new CARROT_Result('failed')
     }
 }

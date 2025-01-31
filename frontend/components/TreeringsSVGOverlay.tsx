@@ -157,8 +157,10 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
                     <label 
                         // style set in treerings.css
                         contenteditable = "true"
-                        onKeyUp = {this.on_keyup}
-                        ref     = {this.#inputref}
+                        onKeyUp   = {this.on_keyup}
+                        onKeyDown = {this.on_keydown}
+                        onBlur    = {this.on_blur}
+                        ref       = {this.#inputref}
                     >
                         {props.ring_nr.toFixed(0)}
                     </label>
@@ -204,15 +206,32 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
             };
     }
 
-    on_keyup = ((event:KeyboardEvent):void => {
+    on_keyup = ((_event:KeyboardEvent): void => {
         // make sure there is at least a small string in the label
         // or otherwise it's basically gone
         if(this.#inputref.current?.innerText == ''){
-            console.log('yoyo')
             this.#inputref.current.innerText = '  ';
         }
-        console.log(`>${this.#inputref.current?.innerText}<`)
     }).bind(this)
-}
 
+    on_keydown = ( (event:KeyboardEvent): boolean => {
+        if(event.key=="Enter"){
+            event.preventDefault();
+            setTimeout(() => this.#inputref.current?.blur(), 0);
+            return false;
+        }
+        return true;
+    } ).bind(this)
+
+    on_blur = ( () => {
+        const label:HTMLLabelElement = this.#inputref.current!;
+        const year:number = Number(label.innerText)
+        if(label.innerText.trim() == '' || isNaN(year))
+            label.innerText='???';
+        else {
+            // TODO
+        }
+
+    } ).bind(this)
+}
 

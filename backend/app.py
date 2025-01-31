@@ -18,7 +18,7 @@ class App(BaseApp):
             static    = get_static_path(),
             index_tsx = 'index.tsx',
             dep_ts    = 'dep.ts',
-            copy_globs= 'css/treerings.css',
+            copy_globs= 'css/treerings.css,favicon.ico',
         )
         kw['deno_cfg'] = deno
         
@@ -27,6 +27,37 @@ class App(BaseApp):
             return
         
 
+        @self.route('/process/<imagename>')
+        def process(imagename):
+            cells = flask.request.args.get('cells', "false")
+            cells = json.loads(cells)
+            treerings = flask.request.args.get('treerings', "false")
+            treerings = json.loads(treerings)
+
+            if not cells and not treerings:
+                flask.abort(400)  #bad request
+
+            results = {}
+            full_path = self.path_in_cache(imagename, abort_404=True)
+            if cells:
+                result = backend.processing.process_cells(full_path, self.settings)
+                results['cellmap'] = os.path.basename(result)
+            if treerings:
+                result = backend.processing.process_treerings(full_path, self.settings)
+                results['treeringmap'] = os.path.basename(result['segmentation'])
+            
+            recluster = bool(treerings)
+            result = backend.processing.associate_cells(
+                full_path, 
+                self.settings, 
+                recluster
+            )
+            if result is not None:
+                if result['ring_map'] is not None:
+                    result['ring_map'] = os.path.basename(result['ring_map'])
+                    results.update(result)
+
+            return flask.jsonify(results)
 
         @self.route('/process_cells/<imagename>')
         def process_cells(imagename):

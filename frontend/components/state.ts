@@ -4,6 +4,7 @@ import {
     CARROT_Backend, 
     UnfinishedCARROT_Result 
 } from "../lib/carrot_detection.ts"
+import { CARROT_Settings } from "../lib/carrot_settings.ts"
 
 
 type BaseInputResultPair = base.state.InputResultPair<
@@ -15,7 +16,7 @@ type BaseInputResultPair = base.state.InputResultPair<
 
 
 export 
-class CARROT_State extends base.state.AppState<base.settings.BaseSettings>{
+class CARROT_State extends base.state.AppState<CARROT_Settings>{
     override ResultClass:base.files.ResultClassInterface<base.files.Result> 
         = CARROT_Result;
     

@@ -2,6 +2,7 @@ import { base, JSX } from "./dep.ts"
 
 import { CARROT_State } from "./components/state.ts";
 import { CARROT_DetectionTab } from "./components/DetectionTab.tsx";
+import { CARROT_SettingsHandler } from "./lib/carrot_settings.ts";
 import { 
     CARROT_RemoteBackend, 
     CARROT_Result, 
@@ -18,7 +19,7 @@ class CARROT_App extends base.create_App({
     AppState:        CARROT_State,
     // @ts-ignore type hell
     backend:         CARROT_RemoteBackend,
-    settingshandler: new base.settings.BaseSettingsHandler,
+    settingshandler: new CARROT_SettingsHandler,
     TopMenu:         base.TopMenu,
     tabs:{
         'Detection': CARROT_DetectionTab,
@@ -44,6 +45,7 @@ export function Index(): JSX.Element {
             title = {"CARROT - Cell and Ring Recognition Tool"} 
             import_src = {"index.tsx.js"} 
         >
+            <link rel="icon" href="favicon.ico" />
             <link rel="stylesheet" href="css/treerings.css" />
         </base.Head>
         <CARROT_App />
