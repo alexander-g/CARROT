@@ -2,7 +2,11 @@ from base.backend.app import App as BaseApp, DenoConfig, get_models_path
 from base.backend.paths import get_static_path, path_to_main_module
 
 
-import os, json
+import os
+import json
+import typing as tp
+import zipfile
+
 import flask
 import backend.processing
 import backend.training
@@ -33,57 +37,52 @@ class App(BaseApp):
             cells = json.loads(cells)
             treerings = flask.request.args.get('treerings', "false")
             treerings = json.loads(treerings)
+            recluster = flask.request.args.get('recluster', "false")
+            recluster = json.loads(recluster)
 
-            if not cells and not treerings:
-                flask.abort(400)  #bad request
+            #if not cells and not treerings and not recluster:
+            #    flask.abort(400)  #bad request
 
-            results = {}
-            full_path = self.path_in_cache(imagename, abort_404=True)
+            results:tp.Dict[str, bytes] = {}
+            full_path = self.path_in_cache(imagename, abort_404=False)
             if cells:
                 result = backend.processing.process_cells(full_path, self.settings)
-                results['cellmap'] = os.path.basename(result)
             if treerings:
                 result = backend.processing.process_treerings(full_path, self.settings)
-                results['treeringmap'] = os.path.basename(result['segmentation'])
+                results[f'{imagename}.associationdata.json'] = json.dumps({
+                    'ring_points': result['ring_points'],
+                    'ring_areas':  result['ring_areas'],
+                }).encode('utf8')
             
-            recluster = bool(treerings)
+
+            cellsmap     = backend.processing.get_cellsmap(full_path)
+            if os.path.exists(cellsmap):
+                results[f'{imagename}/{imagename}.cells.png'] = \
+                    open(cellsmap, 'rb').read()
+            treeringsmap = backend.processing.get_treeringsmap(full_path)
+            if os.path.exists(treeringsmap):
+                results[f'{imagename}/{imagename}.treerings.png'] = \
+                    open(treeringsmap, 'rb').read()
+
+            
             result = backend.processing.associate_cells(
                 full_path, 
                 self.settings, 
                 recluster
             )
-            if result is not None:
-                if result['ring_map'] is not None:
-                    result['ring_map'] = os.path.basename(result['ring_map'])
-                    results.update(result)
+            if result is not None and result['ring_map'] is not None:
+                results[f'{imagename}.ring_map.png'] = \
+                    open(result['ring_map'], 'rb').read()
+                results[f'{imagename}.associationdata.json'] = json.dumps({
+                    'cells':       result['cells'],
+                    'ring_points': result['ring_points'],
+                    'ring_areas':  result['ring_areas'],
+                    'imagesize':   result['imagesize'],
+                }).encode('utf8')
 
-            return flask.jsonify(results)
+            path = zip_results(results, full_path)
+            return flask.send_file(path)
 
-        @self.route('/process_cells/<imagename>')
-        def process_cells(imagename):
-            full_path    = self.path_in_cache(imagename, abort_404=True)
-            result       = backend.processing.process_cells(full_path, self.settings)
-            result       = os.path.basename(result)
-            #vismap       = backend.processing.maybe_compare_to_groundtruth(full_path)
-            return flask.jsonify({'cells': result})
-
-        @self.route('/process_treerings/<imagename>')
-        def process_treerings(imagename):
-            full_path    = self.path_in_cache(imagename, abort_404=True)
-            result       = backend.processing.process_treerings(full_path, self.settings)
-            result['segmentation'] = os.path.basename(result['segmentation'])
-            return flask.jsonify(result)
-
-        @self.route('/associate_cells/<imagename>')
-        def associate_cells(imagename):
-            full_path    = self.path_in_cache(imagename, abort_404=False)
-            recluster    = flask.request.args.get('recluster', "false")
-            recluster    = json.loads(recluster)
-            result       = backend.processing.associate_cells(full_path, self.settings, recluster)
-            if result is not None:
-                if result['ring_map'] is not None:
-                    result['ring_map']    = os.path.basename(result['ring_map'])
-            return flask.jsonify(result)
 
     def path_in_cache(self, filename, abort_404=True):
         path = os.path.join(self.cache_path, filename)
@@ -120,4 +119,12 @@ class App(BaseApp):
         self.settings.models[trainingtype].save(path)
         self.settings.active_models[trainingtype] = newname
         return 'OK'
-    
+
+def zip_results(result:tp.Dict[str, bytes], inputfile:str) -> str:
+    zipfilepath = inputfile + '.results.zip'
+    with zipfile.ZipFile(zipfilepath, 'w')as zipf:
+        for k,v in result.items():
+            with zipf.open(k, 'w') as zipff:
+                zipff.write(v)
+    return zipfilepath
+
