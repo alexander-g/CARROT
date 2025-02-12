@@ -9,6 +9,7 @@ import {
     is_CARROT_Backend,
 } from "./lib/carrot_detection.ts";
 import { CARROT_TopMenu } from "./components/CARROT_Settings.tsx";
+import { TrainingTab }    from "./components/TrainingTab.tsx"
 
 
 const id = "CARROT";
@@ -24,6 +25,7 @@ class CARROT_App extends base.create_App({
     TopMenu:         CARROT_TopMenu,
     tabs:{
         'Detection': CARROT_DetectionTab,
+        'Training':  TrainingTab,
     },
 }){
     // overriding to pass processingmodule to appstate.set_files
