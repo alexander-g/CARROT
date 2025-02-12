@@ -11,10 +11,10 @@ Deno.test('CARROT_Result.export-import', async () => {
         'processed',
         null,
         inputname,
-        undefined,
+        new File(['...'], 'ring_map.png'),
         [],
         [],
-        new File(['...'], 'classmap.png'),
+        new File(['...'], 'cellsmap.png'),
         new File(['...'], 'tringmap.png'),
         {width:100, height:100},
     )
@@ -27,6 +27,7 @@ Deno.test('CARROT_Result.export-import', async () => {
             `${inputname}.tree_ring_statistics.csv`,
             `${inputname}.cell_statistics.csv`,
             `${inputname}.ring_map.png`,
+            `${inputname}.associationdata.json`,
             `${inputname}/${inputname}.cells.png`,
             `${inputname}/${inputname}.treerings.png`,
         ]
@@ -42,7 +43,7 @@ Deno.test('CARROT_Result.export-import', async () => {
     asserts.assertEquals(imported.inputname, inputname)
     asserts.assert( Array.isArray(imported.treerings) )
     // @ts-ignore meh
-    asserts.assertEquals( imported.treerings, exported.treerings )
+    asserts.assertEquals( imported.treerings, r0.treerings )
 })
 
 

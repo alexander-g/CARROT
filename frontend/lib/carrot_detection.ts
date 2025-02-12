@@ -53,7 +53,11 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
             return null;
         
         const result:Record<string, File> = {}
+        const associationdata: Record<string, unknown> = {}
 
+        if(this.classmap instanceof Blob)
+            result[`${this.inputname}.ring_map.png`] = 
+                new File([this.classmap], '');
         if(this.cellsmap != null)
             result[`${this.inputname}/${this.inputname}.cells.png`] = 
                 this.cellsmap;
@@ -76,6 +80,7 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
                     micrometer_factor, 
                     ignore_buffer_px
                 )
+            associationdata['cells'] = this.cells.map( (c:CellInfo) => c.box_xy)
         }
         if(this.treerings){
             console.warn('TODO: get years from svg overlay')
@@ -91,6 +96,19 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
                     years, 
                     micrometer_factor
                 )
+            // TODO: associationdata.json
+            associationdata['ring_points'] = 
+                convert_treerings_to_points(this.treerings)
+            associationdata['ring_areas'] = areas;
+        }
+        if(this.imagesize)
+            associationdata['imagesize'] = 
+                [this.imagesize.width, this.imagesize.height]
+        
+
+        if( Object.keys(associationdata).length > 0){
+            result[`${this.inputname}.associationdata.json`] = 
+                new File([JSON.stringify(associationdata)], 'associationdata.json')
         }
 
         return result;
@@ -109,6 +127,11 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
             return null;
 
         let result:T|null = null;
+
+        // zip file containing png mask files and association data
+        result = await validate_zipped_result(raw, this)
+        if(result != null)
+            return result as T;
 
         // zip file containing png mask files
         result = await validate_legacy_zipped_result(raw, this)
@@ -130,6 +153,61 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
         return (Array.isArray(this.treerings))? this.treerings : null;
     }
 }
+
+
+async function validate_zipped_result<T extends BaseResult>(
+    raw:unknown, 
+    ctor:base.util.ClassWithValidate<
+        T & CARROT_Result, 
+        ConstructorParameters<typeof CARROT_Result>
+    >
+): Promise<T|null> {
+    const baseresult:BaseResult|null = await validate_legacy_zipped_result(raw, ctor)
+    if( !(baseresult instanceof CARROT_Result) )
+        return null;
+    
+    if(base.files.is_input_and_file_pair(raw)
+    && base.files.match_resultfile_to_inputfile(
+        raw.input, 
+        raw.file, 
+        ['.zip', '.results.zip']
+    )){
+        const zipcontents:base.zip.Files|Error = await base.zip.unzip(raw.file)
+        if(zipcontents instanceof Error)
+            return null;
+        
+        const associationpath = `${raw.input.name}.associationdata.json`
+        const association:File|undefined = zipcontents[associationpath]
+        if(association == undefined)
+            return null;
+        
+        const adata:AssociationData|null = 
+            validate_association_data(await association.text())
+        if(adata == null)
+            return null;
+        
+        const ring_points:PointPair[][] = 
+            convert_2x2_number_tuple_dual_array_to_points(adata.ring_points)
+        const imagesize:base.util.ImageSize = {
+            width:  adata.imagesize[0],
+            height: adata.imagesize[1],
+        }
+
+        return new ctor(
+            'processed',
+            raw,
+            baseresult.inputname,
+            baseresult.classmap ?? undefined, 
+            adata.cells, 
+            ring_points,
+            baseresult.cellsmap ?? undefined,
+            baseresult.treeringsmap ?? undefined,
+            imagesize,
+        )
+    }
+    else return null;
+}
+
 
 
 async function validate_legacy_zipped_result<T extends BaseResult>(
@@ -210,13 +288,47 @@ async function validate_backend_response<T extends BaseResult>(
         const ringmap:File     = zipdata[ringmappath]!
         const association:File = zipdata[associationpath]!
 
-        const jsondata:unknown|Error = 
-            base.util.parse_json_no_throw(await association.text())
-        if(jsondata instanceof Error)
+        const adata:AssociationData|null = 
+            validate_association_data(await association.text())
+        if(adata == null)
             return null;
+
+        const ring_points:PointPair[][] = 
+            convert_2x2_number_tuple_dual_array_to_points(adata.ring_points)
+        const imagesize:base.util.ImageSize = {
+            width:  adata.imagesize[0],
+            height: adata.imagesize[1],
+        }
         
-        
-        if(base.util.is_object(jsondata)
+        return new ctor(
+            'processed', 
+            raw, 
+            inputname,
+            ringmap, 
+            adata.cells, 
+            ring_points,
+            cellmap,
+            boundarymap,
+            imagesize,
+        )
+    }
+    else return null;
+}
+
+type AssociationData = {
+    ring_points: TwoNumberTuple[][]; 
+    ring_areas:  number[];
+    cells:       CellInfo[];
+    imagesize:   TwoNumbers;
+}
+
+function validate_association_data(raw:string): AssociationData|null {
+    const jsondata:unknown|Error = 
+        base.util.parse_json_no_throw(raw)
+    if(jsondata instanceof Error)
+        return null;
+
+    if(base.util.is_object(jsondata)
         && base.util.has_property_of_type(
             jsondata, 
             'ring_areas', 
@@ -236,31 +348,8 @@ async function validate_backend_response<T extends BaseResult>(
             jsondata, 
             'imagesize', 
             validate_2_number_tuple
-        )){
-            const inputname:string|null = 
-                parse_inputfile_from_process_response(raw.url)
-
-            const ring_points:PointPair[][] = 
-                convert_2x2_number_tuple_dual_array_to_points(jsondata.ring_points)
-            const imagesize:base.util.ImageSize = {
-                width:  jsondata.imagesize[0],
-                height: jsondata.imagesize[1],
-            }
-            
-            return new ctor(
-                // not fully processed because need to download cellmap/tringmap
-                'processed', 
-                raw, 
-                inputname,
-                ringmap, 
-                jsondata.cells, 
-                ring_points,
-                cellmap,
-                boundarymap,
-                imagesize,
-            )
-        }
-        else return null;
+    )){
+        return jsondata;
     }
     else return null;
 }
@@ -473,6 +562,18 @@ function parse_inputfile_from_process_response(url:string): string|null{
     } catch {
         return null;
     }
+}
+
+function convert_treerings_to_points(treerings:PointPair[][]):TwoNumberTuple[][] {
+    const result:TwoNumberTuple[][] = []
+    for(const rings of treerings){
+        const intermediate: TwoNumberTuple[] = []
+        for(const pair of rings){
+            intermediate.push( [[pair[0].x, pair[0].y], [pair[1].x, pair[1].y] ] )
+        }
+        result.push(intermediate)
+    }
+    return result
 }
 
 
