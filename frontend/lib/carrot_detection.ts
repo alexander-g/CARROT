@@ -96,7 +96,6 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
                     years, 
                     micrometer_factor
                 )
-            // TODO: associationdata.json
             associationdata['ring_points'] = 
                 convert_treerings_to_points(this.treerings)
             associationdata['ring_areas'] = areas;
@@ -172,13 +171,17 @@ async function validate_zipped_result<T extends BaseResult>(
         raw.file, 
         ['.zip', '.results.zip']
     )){
+        // TODO: unzipping a second time, inefficient
         const zipcontents:base.zip.Files|Error = await base.zip.unzip(raw.file)
         if(zipcontents instanceof Error)
             return null;
         
+        const ringmappath     = `${raw.input.name}.ring_map.png`
         const associationpath = `${raw.input.name}.associationdata.json`
+        const ringmap:File|undefined     = zipcontents[ringmappath]
         const association:File|undefined = zipcontents[associationpath]
-        if(association == undefined)
+        if(association == undefined
+        || ringmap == undefined)
             return null;
         
         const adata:AssociationData|null = 
@@ -197,7 +200,7 @@ async function validate_zipped_result<T extends BaseResult>(
             'processed',
             raw,
             baseresult.inputname,
-            baseresult.classmap ?? undefined, 
+            ringmap, 
             adata.cells, 
             ring_points,
             baseresult.cellsmap ?? undefined,
@@ -261,59 +264,105 @@ async function validate_backend_response<T extends BaseResult>(
     >
 ): Promise<T|null> {
     if(raw instanceof Response){
-        const zipdata:base.zip.Files|Error = 
-            await base.zip.unzip( await raw.blob() )
-        if(zipdata instanceof Error)
-            return null;
-
-
         const inputname:string|null = 
             parse_inputfile_from_process_response(raw.url)
-
-        const cellmappath     = `${inputname}/${inputname}.cells.png`
-        const boundarymappath = `${inputname}/${inputname}.treerings.png`
-        const ringmappath     = `${inputname}.ring_map.png`
-        const associationpath = `${inputname}.associationdata.json`
-
-        if(!(cellmappath in zipdata
-        && boundarymappath in zipdata
-        && ringmappath in zipdata
-        && associationpath in zipdata)){
+        if(inputname == null)
             return null;
-        }
-
-
-        const cellmap:File     = zipdata[cellmappath]!
-        const boundarymap:File = zipdata[boundarymappath]!
-        const ringmap:File     = zipdata[ringmappath]!
-        const association:File = zipdata[associationpath]!
-
-        const adata:AssociationData|null = 
-            validate_association_data(await association.text())
-        if(adata == null)
-            return null;
-
-        const ring_points:PointPair[][] = 
-            convert_2x2_number_tuple_dual_array_to_points(adata.ring_points)
-        const imagesize:base.util.ImageSize = {
-            width:  adata.imagesize[0],
-            height: adata.imagesize[1],
-        }
         
-        return new ctor(
-            'processed', 
-            raw, 
-            inputname,
-            ringmap, 
-            adata.cells, 
-            ring_points,
-            cellmap,
-            boundarymap,
-            imagesize,
-        )
+        const as_file:File = new File([await raw.blob()], `${inputname}.zip`)
+        let result:T|null = await validate_zipped_result({
+            input: {name:inputname},
+            file:  as_file,
+        }, ctor)
+        if(result != null)
+            // full result
+            return result;
+        // else partial result, only cells / only treerings
+
+        // TODO: unzipping a second or third time
+        const zipdata:base.zip.Files|Error = await base.zip.unzip( as_file )
+        if(zipdata instanceof Error)
+            return null;
+        
+        result = await validate_cells_only_unzipped(zipdata, inputname, ctor)
+        if(result != null)
+            return result;
+
+        result = await validate_rings_only_unzipped(zipdata, inputname, ctor)
+        if(result != null)
+            return result;
+
+        return null;
     }
     else return null;
 }
+
+/** Validate zipfile contents, for a cells only result */
+async function validate_cells_only_unzipped<T extends BaseResult>(
+    zipdata:   Record<string, File>, 
+    inputname: string,
+    ctor:base.util.ClassWithValidate<
+        T & CARROT_Result, 
+        ConstructorParameters<typeof CARROT_Result>
+    >
+): Promise<T|null> {
+    const cellmappath = `${inputname}/${inputname}.cells.png`
+    const cellmap:File|undefined = zipdata[cellmappath]
+    if(!cellmap)
+        return null;
+
+    return new ctor(
+        'processed',
+        zipdata,
+        inputname,
+        cellmap,
+        undefined,
+        undefined,
+        cellmap,
+        undefined,
+        undefined,
+    )
+}
+
+/** Validate zipfile contents, for a tree rings only result */
+async function validate_rings_only_unzipped<T extends BaseResult>(
+    zipdata:   Record<string, File>, 
+    inputname: string,
+    ctor:base.util.ClassWithValidate<
+        T & CARROT_Result, 
+        ConstructorParameters<typeof CARROT_Result>
+    >
+): Promise<T|null> {
+    const boundariespath  = `${inputname}/${inputname}.treerings.png`
+    const associationpath = `${inputname}.associationdata.json`
+    const boundarymap:File|undefined = zipdata[boundariespath]
+    const association:File|undefined = zipdata[associationpath]
+    if(association == undefined
+    || boundarymap == undefined)
+        return null;
+    
+    const adata:RingsOnlyAssociationData|null = 
+        validate_ringsonly_association_data(await association.text())
+    if(adata == null)
+        return null;
+    
+    const ring_points:PointPair[][] = 
+        convert_2x2_number_tuple_dual_array_to_points(adata.ring_points)
+
+    return new ctor(
+        'processed',
+        zipdata,
+        inputname,
+        undefined,
+        undefined,
+        ring_points,
+        undefined,
+        boundarymap,
+        undefined,
+    )
+}
+
+
 
 type AssociationData = {
     ring_points: TwoNumberTuple[][]; 
@@ -348,6 +397,33 @@ function validate_association_data(raw:string): AssociationData|null {
             jsondata, 
             'imagesize', 
             validate_2_number_tuple
+    )){
+        return jsondata;
+    }
+    else return null;
+}
+
+type RingsOnlyAssociationData = {
+    ring_points: TwoNumberTuple[][]; 
+    ring_areas:  number[];
+}
+
+function validate_ringsonly_association_data(raw:string): RingsOnlyAssociationData|null {
+    const jsondata:unknown|Error = 
+        base.util.parse_json_no_throw(raw)
+    if(jsondata instanceof Error)
+        return null;
+
+    if(base.util.is_object(jsondata)
+    && base.util.has_property_of_type(
+        jsondata, 
+        'ring_areas', 
+        base.util.validate_number_array
+    )
+    && base.util.has_property_of_type(
+        jsondata, 
+        'ring_points', 
+        validate_2x2_number_tuple_dual_array,
     )){
         return jsondata;
     }
@@ -579,6 +655,7 @@ function convert_treerings_to_points(treerings:PointPair[][]):TwoNumberTuple[][]
 
 
 export type UnfinishedCARROT_Result = {
+        status:       Extract<CARROT_Result['status'], 'processing'>
         inputname:    Extract<CARROT_Result['inputname'], string>
 } & ({
         cellsmap:     Extract<CARROT_Result['cellsmap'],     Blob>;
@@ -590,7 +667,7 @@ export type UnfinishedCARROT_Result = {
 
 export abstract class CARROT_Backend
 extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Settings> {
-    abstract process_cell_association(r:UnfinishedCARROT_Result): Promise<BaseResult>;
+    abstract process_cell_association(r:UnfinishedCARROT_Result): Promise<CARROT_Result>;
 }
 
 export function validate_CARROT_Backend(x:unknown): CARROT_Backend|null {
@@ -609,7 +686,7 @@ export function is_CARROT_Backend(x:unknown): x is CARROT_Backend {
 export class CARROT_RemoteBackend extends CARROT_Backend {
     
     async process_cell_association(r:UnfinishedCARROT_Result): 
-    Promise<BaseResult>{
+    Promise<CARROT_Result>{
 
         if(r.cellsmap == null && r.treeringsmap == null)
             return new CARROT_Result('failed')
@@ -631,7 +708,9 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         if(response instanceof Error)
             return new CARROT_Result('failed')
 
-        return (await CARROT_Result.validate(response)) ?? new CARROT_Result('failed')
+        const full_result = 
+            (await CARROT_Result.validate(response) as CARROT_Result|null)
+        return full_result ?? new CARROT_Result('failed')
     }
 
     override async process(

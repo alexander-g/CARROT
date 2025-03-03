@@ -55,7 +55,7 @@ class App(BaseApp):
                 }).encode('utf8')
             
 
-            cellsmap     = backend.processing.get_cellsmap(full_path)
+            cellsmap = backend.processing.get_cellsmap(full_path)
             if os.path.exists(cellsmap):
                 results[f'{imagename}/{imagename}.cells.png'] = \
                     open(cellsmap, 'rb').read()
@@ -70,15 +70,19 @@ class App(BaseApp):
                 self.settings, 
                 recluster
             )
-            if result is not None and result['ring_map'] is not None:
-                results[f'{imagename}.ring_map.png'] = \
-                    open(result['ring_map'], 'rb').read()
-                results[f'{imagename}.associationdata.json'] = json.dumps({
-                    'cells':       result['cells'],
+            if result is not None:
+                assocdata = {
                     'ring_points': result['ring_points'],
                     'ring_areas':  result['ring_areas'],
-                    'imagesize':   result['imagesize'],
-                }).encode('utf8')
+                }
+                if result['ring_map'] is not None:
+                    results[f'{imagename}.ring_map.png'] = \
+                        open(result['ring_map'], 'rb').read()
+                    assocdata['cells'] = result['cells']
+                    assocdata['imagesize'] = result['imagesize']
+
+                results[f'{imagename}.associationdata.json'] = \
+                    json.dumps(assocdata).encode('utf8')
 
             path = zip_results(results, full_path)
             return flask.send_file(path)

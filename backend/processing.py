@@ -22,7 +22,7 @@ def process_cells(image_path, settings):
         def on_progress(p):
             PubSub.publish({'progress':p, 'image':os.path.basename(image_path), 'stage':'cells'})
         y = model.process_image(x, progress_callback=on_progress)
-    output_path = get_cellsmap()
+    output_path = get_cellsmap(image_path)
     write_image(output_path, y)
     return output_path
 
@@ -40,7 +40,7 @@ def process_treerings(image_path, settings):
         def on_progress(p):
             PubSub.publish({'progress':p, 'image':os.path.basename(image_path), 'stage':'treerings'})
         y = model.process_image(x, progress_callback=on_progress)
-    output_path = get_treeringsmap()
+    output_path = get_treeringsmap(image_path)
     write_image(output_path, y['segmentation']>0)
     open(image_path+'.ring_points.pkl','wb').write(pickle.dumps(y['ring_points']))
     open(image_path+'.ring_areas.pkl','wb').write(pickle.dumps(y['ring_areas']))

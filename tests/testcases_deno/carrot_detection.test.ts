@@ -64,6 +64,50 @@ Deno.test('response.full-from-flask', async () => {
     asserts.assertEquals(result.status, 'processed')
     asserts.assertEquals(result.inputname, imagefilename)
     asserts.assertInstanceOf(result, CARROT_Result)
+    asserts.assertExists(result.classmap)
+})
+
+Deno.test('response.cells-only-from-flask', async () => {
+    const rawdata:Uint8Array = Deno.readFileSync(
+        import.meta.resolve('./assets/cellsonly/ELD_QURO_637A_4.jpg.results.zip')
+        .replace('file://', '')
+    )
+    const imagefilename = 'ELD_QURO_637A_4.jpg'
+    const response = new Response(rawdata)
+    Object.defineProperty(
+        response, 
+        "url", 
+        { value: `https://localhost/process/${imagefilename}`, configurable: true }
+    );
+
+    const result = await CARROT_Result.validate(response)
+    asserts.assertExists(result)
+    asserts.assertEquals(result.status, 'processed')
+    asserts.assertEquals(result.inputname, imagefilename)
+    asserts.assertInstanceOf(result, CARROT_Result)
+    asserts.assertExists(result.cellsmap)
+})
+
+Deno.test('response.rings-only-from-flask', async () => {
+    const rawdata:Uint8Array = Deno.readFileSync(
+        import.meta.resolve('./assets/ringsonly/ELD_QURO_637A_4.jpg.results.zip')
+        .replace('file://', '')
+    )
+    const imagefilename = 'ELD_QURO_637A_4.jpg'
+    const response = new Response(rawdata)
+    Object.defineProperty(
+        response, 
+        "url", 
+        { value: `https://localhost/process/${imagefilename}`, configurable: true }
+    );
+
+    const result = await CARROT_Result.validate(response)
+    asserts.assertExists(result)
+    asserts.assertEquals(result.status, 'processed')
+    asserts.assertEquals(result.inputname, imagefilename)
+    asserts.assertInstanceOf(result, CARROT_Result)
+    asserts.assertExists(result.treeringsmap)
+    asserts.assertExists(result.treerings)
 })
 
 
