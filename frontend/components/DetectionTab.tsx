@@ -29,6 +29,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     
     $active_editing_mode: Signal<CARROT_ModelTypes|null> = new Signal(null)
     $editing_brush_size:  Signal<number> = new Signal(0)
+    
+    /** Flag indicating to erase rather than to paint */
+    $erase: Signal<boolean> = new Signal(false)
 
     $treering_points: Readonly<Signal<PointPair[][]>> = signals.computed( () => { 
         return this.props.$result.value.get_treering_coordinates_if_loaded() ?? [] 
@@ -48,6 +51,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             <EditCanvas 
                 ref = {this.canvas_ref} 
                 $active_mode = { this.$active_editing_mode }
+                $erase       = { this.$erase }
                 $imagesize   = { this.$og_imagesize }
                 $brush_size  = { this.$editing_brush_size }
                 $inputblob   = { signals.computed(() => 
@@ -70,6 +74,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 on_apply = { this.on_apply_editing_changes }
                 on_clear = { () => this.canvas_ref.current?.clear() }
                 $active_mode = { this.$active_editing_mode }
+                $erase       = { this.$erase }
                 $brush_size  = { this.$editing_brush_size }
             />
         ]
@@ -132,6 +137,9 @@ type EditMenuProps = {
     /** @output The brush size as selected by the user in the slider */
     $brush_size: Signal<number>;
 
+    /** @output Flag indicating to erase rather than to paint */
+    $erase: Signal<boolean>;
+
     /** Callback issued when user wants to apply editing changes */
     on_apply: () => void;
 
@@ -146,9 +154,24 @@ class EditMenu extends preact.Component<EditMenuProps> {
     edit_cells_button:preact.RefObject<HTMLDivElement> = preact.createRef()
     edit_treerings_button:preact.RefObject<HTMLDivElement> = preact.createRef()
 
+    $menu_active:Readonly<Signal<'active'|null>> = signals.computed(
+        () => this.props.$active_mode.value ? 'active': null
+    )
+
+    $erase_active: Readonly<Signal<'active'|null>> = signals.computed(
+        () => this.props.$erase.value ? 'active' : null
+    )
+    $paint_active: Readonly<Signal<'active'|null>> = signals.computed(
+        () => this.props.$erase.value ? null : 'active'
+    )
+
+
     render(props:EditMenuProps): JSX.Element {
         return (
-        <div class="ui simple dropdown icon item edit-menu-button" ref={this.ref}>
+        <div class={
+            `ui simple dropdown icon item edit-menu-button ${this.$menu_active}`} 
+            ref = {this.ref}
+        >
             <i class="pen icon"></i>
             <div class="menu edit-menu">
                 <div 
@@ -171,15 +194,15 @@ class EditMenu extends preact.Component<EditMenuProps> {
                 <div class="divider hidden-when-disabled"></div>
                 <div class="divider hidden-when-disabled"></div>
                 <div 
-                    class = "item paint-mode hidden-when-disabled active" 
-                    onClick = {console.error}
+                    class = {`item paint-mode hidden-when-disabled ${this.$paint_active}` }
+                    onClick = { () => this.props.$erase.value = false }
                 >
                     <i class="paint brush icon"></i>
                     Paint
                 </div>
                 <div 
-                    class   ="item erase-mode hidden-when-disabled" 
-                    onClick = {console.error}
+                    class   = {`item erase-mode hidden-when-disabled ${this.$erase_active}` }
+                    onClick = { () => this.props.$erase.value = true }
                 >
                     <i class="eraser icon"></i>
                     Erase
@@ -287,6 +310,9 @@ class EditMenu extends preact.Component<EditMenuProps> {
 type EditCanvasProps = {
     /** @input The currently active drawing mode or `null` if not active. */
     $active_mode: Readonly< Signal<CARROT_ModelTypes|null> >;
+    
+    /** Whether to erase rather than draw */
+    $erase: Readonly<Signal<boolean>>;
 
     /** @input Drawing brush size */
     $brush_size:  Readonly< Signal<number> >
@@ -370,12 +396,11 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         if(ctx == null)
             return false;
         
-        //TODO: const clear     = $root.find('.edit-menu .erase-mode').hasClass('active')
-        const clear = false;
-        ctx.strokeStyle = clear? "black" : "white";
+        const erase:boolean = this.props.$erase.value;
+        ctx.strokeStyle = erase? "black" : "white";
         ctx.lineWidth   = this.props.$brush_size.value;
         //double size for easier removing
-        ctx.lineWidth = clear? ctx.lineWidth*2 : ctx.lineWidth;
+        ctx.lineWidth = erase? ctx.lineWidth*2 : ctx.lineWidth;
         ctx.lineCap   = 'round';
         
         type Point = base.util.Point;

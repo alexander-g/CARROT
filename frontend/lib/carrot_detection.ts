@@ -80,7 +80,7 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
                     micrometer_factor, 
                     ignore_buffer_px
                 )
-            associationdata['cells'] = this.cells.map( (c:CellInfo) => c.box_xy)
+            associationdata['cells'] = this.cells;
         }
         if(this.treerings){
             console.warn('TODO: get years from svg overlay')
@@ -532,7 +532,7 @@ function format_treerings_for_export(
     for(const i in ring_points){
         const sum:number = 
             ring_points[i]!
-            .map( (x:PointPair) => distance(x[0],x[1]) )
+            .map( (x:PointPair) => base.util.distance(x[0],x[1]) )
             .reduce( (x:number, y:number) => x+y );
         const mean:number = (sum / ring_points[i]!.length);
         const area:number = ring_areas[i] ?? -1;
@@ -550,13 +550,6 @@ function format_treerings_for_export(
         csv_text += ring_data.join(', ')+'\n';
     }
     return new File([csv_text], 'tree_ring_statistics.csv')
-}
-
-function distance(a:Point, b:Point): number {
-    return base.util.vector_length( { 
-        x:a.x - b.x, 
-        y:a.y - b.y, 
-    } )
 }
 
 
@@ -645,7 +638,7 @@ function convert_treerings_to_points(treerings:PointPair[][]):TwoNumberTuple[][]
     for(const rings of treerings){
         const intermediate: TwoNumberTuple[] = []
         for(const pair of rings){
-            intermediate.push( [[pair[0].x, pair[0].y], [pair[1].x, pair[1].y] ] )
+            intermediate.push( [[pair[0].y, pair[0].x], [pair[1].y, pair[1].x] ] )
         }
         result.push(intermediate)
     }

@@ -57,7 +57,6 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
                 result.cellsmap instanceof File
                 || result.treeringsmap instanceof File
             )){
-                result.inputname
                 pair.$result.value = 
                     await backend.process_cell_association({
                         inputname:    result.inputname,

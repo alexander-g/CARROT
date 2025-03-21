@@ -69,6 +69,11 @@ class TreeringComponent extends preact.Component<TreeringComponentProps> {
             ).join(' ')
         )
 
+        // TODO:
+        const HARDCODED_px_per_um:number = 1.0
+        const ring_width:number = 
+            compute_treering_width(this.props.treering_points, HARDCODED_px_per_um)
+
         const css_border = {
             stroke:         "white",
             'stroke-width': "8",
@@ -95,7 +100,7 @@ class TreeringComponent extends preact.Component<TreeringComponentProps> {
 
             <TreeringLabel 
                 ring_nr   = {this.props.year} 
-                width_um  = {14.5} 
+                width_um  = { ring_width } 
                 position  = { label_position } 
                 imagesize = { props.imagesize }
                 parentsvg = { props.parentsvg }
@@ -116,6 +121,16 @@ function mean_point(points:Point[]): Point|null {
     return mean;
 }
 
+function compute_treering_width(
+    treering_points: PointPair[],
+    px_per_um:       number, 
+): number {
+    const sum:number = treering_points
+        .map( (x:PointPair) => base.util.distance(x[0],x[1]) )
+        .reduce( (a:number,b:number) => a+b );
+    const width:number = (sum / treering_points.length) / px_per_um
+    return width;
+}
 
 
 
