@@ -42,13 +42,13 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 $visible  = {this.$result_visible}
             />
             <TreeringsSVGOverlay 
-                size = { this.$imagesize.value ?? {height:0, width:0} }
+                size = { this.$og_imagesize.value ?? {height:0, width:0} }
                 $treering_points = { this.$treering_points }
             />
             <EditCanvas 
                 ref = {this.canvas_ref} 
                 $active_mode = { this.$active_editing_mode }
-                $imagesize   = { this.$imagesize }
+                $imagesize   = { this.$og_imagesize }
                 $brush_size  = { this.$editing_brush_size }
                 $inputblob   = { signals.computed(() => 
                     _get_map_for_editmode(

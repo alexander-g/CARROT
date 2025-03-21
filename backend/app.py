@@ -55,11 +55,11 @@ class App(BaseApp):
                 }).encode('utf8')
             
 
-            cellsmap = backend.processing.get_cellsmap(full_path)
+            cellsmap = backend.processing.get_cellsmap_name(full_path)
             if os.path.exists(cellsmap):
                 results[f'{imagename}/{imagename}.cells.png'] = \
                     open(cellsmap, 'rb').read()
-            treeringsmap = backend.processing.get_treeringsmap(full_path)
+            treeringsmap = backend.processing.get_treeringsmap_name(full_path)
             if os.path.exists(treeringsmap):
                 results[f'{imagename}/{imagename}.treerings.png'] = \
                     open(treeringsmap, 'rb').read()
@@ -86,6 +86,25 @@ class App(BaseApp):
 
             path = zip_results(results, full_path)
             return flask.send_file(path)
+        
+        @self.route('/bigtiff', methods=['POST'])
+        def bigtiff():
+            '''Convert bigtiff to jpeg'''
+            files = flask.request.files.getlist("files")
+            if len(files) != 1:
+                flask.abort(400)
+
+            f = files[0]            
+            fullpath = self.path_in_cache(os.path.basename(f.filename), abort_404=False )
+            f.save(fullpath)
+            
+            jpeg_path, [og_height, og_width] = \
+                backend.processing.convert_tiff_to_jpeg(fullpath, 4096)
+            
+            response = flask.send_file(jpeg_path)
+            response.headers['X-Original-Image-Width']  = og_width
+            response.headers['X-Original-Image-Height'] = og_height
+            return response
 
 
     def path_in_cache(self, filename, abort_404=True):

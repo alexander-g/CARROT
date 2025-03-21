@@ -20,11 +20,12 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
     render(props:TreeringsSVGOverlayProps): JSX.Element {
         const viewbox = `0 0 ${props.size.width} ${props.size.height}`
         const treerings_svg: JSX.Element[] = props.$treering_points.value.map( 
-            (points:PointPair[]) => 
+            (points:PointPair[], i:number) => 
                 <TreeringComponent 
                     treering_points = { points } 
                     imagesize       = { props.size } 
                     parentsvg       = { this.ref.current }
+                    year = {i}
                 /> 
         )
 
@@ -50,6 +51,7 @@ type TreeringComponentProps = {
     treering_points: PointPair[];
     imagesize: base.util.ImageSize;
     parentsvg: SVGSVGElement|null;
+    year: number;
 }
 
 class TreeringComponent extends preact.Component<TreeringComponentProps> {
@@ -92,7 +94,7 @@ class TreeringComponent extends preact.Component<TreeringComponentProps> {
             />
 
             <TreeringLabel 
-                ring_nr   = {2222} 
+                ring_nr   = {this.props.year} 
                 width_um  = {14.5} 
                 position  = { label_position } 
                 imagesize = { props.imagesize }
@@ -130,11 +132,11 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
     #ref:     preact.RefObject<HTMLDivElement> = preact.createRef()
     #inputref:preact.RefObject<HTMLLabelElement> = preact.createRef()
 
-    /** Size of the component. Used to offset to the center */
+    /** Size of the component (in image coordinates). Used to offset to the center */
     #$divsize: Signal<base.util.Size> = new Signal({width:0, height:0});
 
     render(props:TreeringLabelProps): JSX.Element {
-        const scale = 5.0;
+        const scale:number = this.#estimate_scale();
         const css_fo = {
             width:     "100%",
             height:    "100%",
@@ -174,9 +176,18 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
         </>
     }
 
+    override componentDidUpdate(): void {
+        this.#update_divsize()
+    }
+
+    override componentDidMount(): void {
+        this.#update_divsize()
+    }
+    
+
     /** Store the size of the label after each update, 
      *  so that it can be centered properly */
-    override componentDidUpdate(): void {
+    #update_divsize(): void {
         if(this.props.parentsvg == null || this.#ref.current == null)
             return
         
@@ -224,6 +235,7 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
     } ).bind(this)
 
     on_blur = ( () => {
+        // TODO: use a signal so that component gets updated and position recalculated
         const label:HTMLLabelElement = this.#inputref.current!;
         const year:number = Number(label.innerText)
         if(label.innerText.trim() == '' || isNaN(year))
@@ -233,5 +245,16 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
         }
 
     } ).bind(this)
+
+    #estimate_scale(): number {
+        const parentwidth:number = 
+            this.props.parentsvg?.getBoundingClientRect().width 
+            // deno-lint-ignore no-window
+            ?? window.innerWidth * 0.9;
+        const imagewidth:number = 
+            this.props.imagesize.width;
+        
+        return imagewidth / parentwidth * 2.0;
+    }
 }
 
