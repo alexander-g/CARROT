@@ -73,7 +73,6 @@ class App(BaseApp):
             if result is not None:
                 assocdata = {
                     'ring_points': result['ring_points'],
-                    'ring_areas':  result['ring_areas'],
                 }
                 if result['ring_map'] is not None:
                     results[f'{imagename}.ring_map.png'] = \

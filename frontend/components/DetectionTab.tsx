@@ -4,6 +4,8 @@ import {
     CARROT_Result, 
     CARROT_Backend,
     UnfinishedCARROT_Result,
+    TreeringInfo,
+    _zip_into_treerings
 } from "../lib/carrot_detection.ts"
 import { TreeringsSVGOverlay, PointPair } from "./TreeringsSVGOverlay.tsx"
 import { CARROT_ModelTypes } from "../lib/carrot_settings.ts";
@@ -37,6 +39,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         return this.props.$result.value.get_treering_coordinates_if_loaded() ?? [] 
     })
 
+
     override result_overlays(): JSX.Element {
         return <>
             {/* TODO: need to hide overlays when editing is active */}
@@ -46,7 +49,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             />
             <TreeringsSVGOverlay 
                 size = { this.$og_imagesize.value ?? {height:0, width:0} }
-                $treering_points = { this.$treering_points }
+                $result = { this.props.$result }
+                $scale  = { this.$scale }
             />
             <EditCanvas 
                 ref = {this.canvas_ref} 
@@ -94,6 +98,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         
 
         const current_result:CARROT_Result = this.props.$result.value;
+        const current_years:number[] = current_result.treerings?.map(
+            (ring:TreeringInfo) => ring.year
+        ) ?? []
         const filename = `${this.props.input.name}.${mode}.png`
         const file = new File([blob], filename)
         
@@ -110,9 +117,17 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         }
         // awkward
         this.props.$result.value = new CARROT_Result('processing');
-        const finished_result:CARROT_Result = 
+        const edited_result:CARROT_Result = 
             await backend.process_cell_association(unfinished_result)
-        this.props.$result.value = finished_result;
+
+        const edited_ring_points:PointPair[][] = edited_result.treerings?.map(
+            (ring:TreeringInfo) => ring.coordinates
+        ) ?? []
+        const finished_rings:TreeringInfo[] = 
+            _zip_into_treerings(edited_ring_points, current_years)
+        edited_result.treerings = finished_rings;
+
+        this.props.$result.value = edited_result;
     }
 }
 
@@ -166,7 +181,7 @@ class EditMenu extends preact.Component<EditMenuProps> {
     )
 
 
-    render(props:EditMenuProps): JSX.Element {
+    render(_props:EditMenuProps): JSX.Element {
         return (
         <div class={
             `ui simple dropdown icon item edit-menu-button ${this.$menu_active}`} 

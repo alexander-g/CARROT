@@ -11,7 +11,12 @@ type CellInfo = {
     id:     number, 
     position_within: number|null, 
     year:   number,
-  }
+}
+
+export type TreeringInfo = {
+    coordinates: PointPair[];
+    year:  number;
+}
 
 
 // TODO: remove SegmentationResult parent class
@@ -19,12 +24,14 @@ type CellInfo = {
 /** Result with additional attributes for cells and treerings */
 export class CARROT_Result extends base.segmentation.SegmentationResult {
     
-    /** Coordinates of treerings or intermediate image file containing detected 
-     *  boundaries that needs to be processed to extract coordinates */
-    treerings:    PointPair[][]|null;
+    treerings:    TreeringInfo[]|null;
     cells:        CellInfo[]|null;
 
+    /** Intermediate image file containing detected cells that needs 
+     *  to be processed to extract coordinates */
     cellsmap:     File|null;
+    /** Intermediate image file containing detected boundaries that needs 
+     *  to be processed to extract coordinates */
     treeringsmap: File|null;
 
     imagesize: base.util.ImageSize|null;
@@ -34,7 +41,7 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
         ...args: [
             ...baseargs: ConstructorParameters<typeof base.segmentation.SegmentationResult>,
             cells?:        CellInfo[],
-            treerings?:    PointPair[][],
+            treerings?:    TreeringInfo[],
             cellsmap?:     File,
             treeringsmap?: File,
             imagesize?:    base.util.ImageSize,
@@ -49,6 +56,7 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
     }
 
     override async export(): Promise<Record<string, File> | null> {
+        await 0;
         if(this.inputname == null)
             return null;
         
@@ -84,21 +92,17 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
         }
         if(this.treerings){
             console.warn('TODO: get years from svg overlay')
-            const years:number[] = Object.keys(this.treerings ?? []).map(Number)
+            const years:number[] = this.treerings.map((x:TreeringInfo) => x.year)
             console.warn('TODO: get areas')
             const areas:number[] = Object.keys(this.treerings ?? []).map(Number)
             const micrometer_factor:number = 1.0;
             console.warn('TODO: get ignore_buffer_px from settings')
             result[`${this.inputname}.tree_ring_statistics.csv`] = 
-                format_treerings_for_export(
-                    this.treerings, 
-                    areas, 
-                    years, 
-                    micrometer_factor
-                )
+                format_treerings_for_export(this.treerings, micrometer_factor)
             associationdata['ring_points'] = 
                 convert_treerings_to_points(this.treerings)
             associationdata['ring_areas'] = areas;
+            associationdata['ring_years'] = years;
         }
         if(this.imagesize)
             associationdata['imagesize'] = 
@@ -149,7 +153,7 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
     }
 
     get_treering_coordinates_if_loaded(): PointPair[][]|null {
-        return (Array.isArray(this.treerings))? this.treerings : null;
+        return this.treerings?.map( (t:TreeringInfo) => t.coordinates) ?? null;
     }
 }
 
@@ -191,6 +195,7 @@ async function validate_zipped_result<T extends BaseResult>(
         
         const ring_points:PointPair[][] = 
             convert_2x2_number_tuple_dual_array_to_points(adata.ring_points)
+        const rings:TreeringInfo[] = _zip_into_treerings(ring_points)
         const imagesize:base.util.ImageSize = {
             width:  adata.imagesize[0],
             height: adata.imagesize[1],
@@ -202,7 +207,7 @@ async function validate_zipped_result<T extends BaseResult>(
             baseresult.inputname,
             ringmap, 
             adata.cells, 
-            ring_points,
+            rings,
             baseresult.cellsmap ?? undefined,
             baseresult.treeringsmap ?? undefined,
             imagesize,
@@ -306,6 +311,7 @@ async function validate_cells_only_unzipped<T extends BaseResult>(
         ConstructorParameters<typeof CARROT_Result>
     >
 ): Promise<T|null> {
+    await 0;
     const cellmappath = `${inputname}/${inputname}.cells.png`
     const cellmap:File|undefined = zipdata[cellmappath]
     if(!cellmap)
@@ -348,6 +354,8 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
     
     const ring_points:PointPair[][] = 
         convert_2x2_number_tuple_dual_array_to_points(adata.ring_points)
+    const rings:TreeringInfo[] = 
+        _zip_into_treerings(ring_points)
 
     return new ctor(
         'processed',
@@ -355,7 +363,7 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
         inputname,
         undefined,
         undefined,
-        ring_points,
+        rings,
         undefined,
         boundarymap,
         undefined,
@@ -363,10 +371,32 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
 }
 
 
+export function _zip_into_treerings(
+    ring_points:  PointPair[][], 
+    ring_years?:  number[]
+): TreeringInfo[] {
+    if(ring_points.length != ring_years?.length){
+        // unequal number of coordinate pairs and years because user edited 
+        // or none at all because fresh from flask
+        const year_0:number = ring_years?.length? ring_years[0]! : 0;
+        ring_years = base.util.arange(year_0, year_0 + ring_points.length)
+    }
+    
+    const result:TreeringInfo[] = []
+    for(const i in ring_points){
+        result.push({
+            coordinates: ring_points[i]!,
+            year:        ring_years[i]!
+        })
+    }
+    return result;
+}
+
+
 
 type AssociationData = {
     ring_points: TwoNumberTuple[][]; 
-    ring_areas:  number[];
+    //ring_years:  number[];
     cells:       CellInfo[];
     imagesize:   TwoNumbers;
 }
@@ -380,7 +410,7 @@ function validate_association_data(raw:string): AssociationData|null {
     if(base.util.is_object(jsondata)
         && base.util.has_property_of_type(
             jsondata, 
-            'ring_areas', 
+            'ring_years', 
             base.util.validate_number_array
         )
         && base.util.has_property_of_type(
@@ -405,7 +435,7 @@ function validate_association_data(raw:string): AssociationData|null {
 
 type RingsOnlyAssociationData = {
     ring_points: TwoNumberTuple[][]; 
-    ring_areas:  number[];
+    //ring_years:  number[];
 }
 
 function validate_ringsonly_association_data(raw:string): RingsOnlyAssociationData|null {
@@ -415,11 +445,11 @@ function validate_ringsonly_association_data(raw:string): RingsOnlyAssociationDa
         return null;
 
     if(base.util.is_object(jsondata)
-    && base.util.has_property_of_type(
-        jsondata, 
-        'ring_areas', 
-        base.util.validate_number_array
-    )
+    // && base.util.has_property_of_type(
+    //     jsondata, 
+    //     'ring_years', 
+    //     base.util.validate_number_array
+    // )
     && base.util.has_property_of_type(
         jsondata, 
         'ring_points', 
@@ -512,10 +542,8 @@ function box_center(box: [number,number,number,number]): [number,number]{
 }
 
 function format_treerings_for_export(
-    ring_points: PointPair[][], 
-    ring_areas:  number[],
-    ring_years:  number[],
-    micrometer_factor: number,
+    treerings: TreeringInfo[],
+    px_per_um: number,
 ): File {
     const header:string[] = [
         'Year', 
@@ -528,20 +556,16 @@ function format_treerings_for_export(
     let csv_text:string =''
     csv_text += header.join(', ')+'\n';
 
-    const micrometer_factor_sq:number = micrometer_factor**2;
-    for(const i in ring_points){
-        const sum:number = 
-            ring_points[i]!
-            .map( (x:PointPair) => base.util.distance(x[0],x[1]) )
-            .reduce( (x:number, y:number) => x+y );
-        const mean:number = (sum / ring_points[i]!.length);
-        const area:number = ring_areas[i] ?? -1;
+    const px_per_um_sq:number = px_per_um**2;
+    for(const treering of treerings){
+        const width: number = compute_treering_width(treering.coordinates)
+        const area:number = compute_treering_area(treering.coordinates);
         const ring_data:string[] = [
-            (ring_years[i] ?? 0).toFixed(0),
-            mean.toFixed(2), 
-            (mean / micrometer_factor).toFixed(2),
+            treering.year.toFixed(0),
+            width.toFixed(2),
+            (width / px_per_um).toFixed(2),
             area.toFixed(2), 
-            (area / micrometer_factor_sq).toFixed(2),
+            (area / px_per_um_sq).toFixed(2),
         ]
          //sanity check
          if(header.length != ring_data.length){
@@ -550,6 +574,43 @@ function format_treerings_for_export(
         csv_text += ring_data.join(', ')+'\n';
     }
     return new File([csv_text], 'tree_ring_statistics.csv')
+}
+
+export function compute_treering_width(treering_points: PointPair[]): number {
+    const sum:number = treering_points
+        .map( (x:PointPair) => base.util.distance(x[0],x[1]) )
+        .reduce( (a:number,b:number) => a+b );
+    const width:number = (sum / treering_points.length)
+    return width;
+}
+
+/** Compute the area of the polygon defined by treering border points */
+export function compute_treering_area(treering_points: PointPair[]): number {
+    let total_area:number = 0.0;
+    for(let i:number = 0; i < treering_points.length-1; i++){
+        const triangle0: [Point, Point, Point] = [
+            treering_points[i]![0],
+            treering_points[i+1]![0],
+            treering_points[i]![1],
+        ]
+        const triangle1: [Point, Point, Point] = [
+            treering_points[i]![1],
+            treering_points[i+1]![1],
+            treering_points[i+1]![0],
+        ]
+        
+        total_area += compute_triangle_area(triangle0);
+        total_area += compute_triangle_area(triangle1);
+    }
+    return total_area;
+}
+
+
+function compute_triangle_area(triangle:[Point,Point,Point]): number {
+    const [A, B, C] = triangle;
+    return Math.abs(
+        (A.x * (B.y - C.y) + B.x * (C.y - A.y) + C.x * (A.y - B.y)) / 2
+    );
 }
 
 
@@ -633,11 +694,11 @@ function parse_inputfile_from_process_response(url:string): string|null{
     }
 }
 
-function convert_treerings_to_points(treerings:PointPair[][]):TwoNumberTuple[][] {
+function convert_treerings_to_points(treerings:TreeringInfo[]):TwoNumberTuple[][] {
     const result:TwoNumberTuple[][] = []
-    for(const rings of treerings){
+    for(const ringinfo of treerings){
         const intermediate: TwoNumberTuple[] = []
-        for(const pair of rings){
+        for(const pair of ringinfo.coordinates){
             intermediate.push( [[pair[0].y, pair[0].x], [pair[1].y, pair[1].x] ] )
         }
         result.push(intermediate)
@@ -650,6 +711,7 @@ function convert_treerings_to_points(treerings:PointPair[][]):TwoNumberTuple[][]
 export type UnfinishedCARROT_Result = {
         status:       Extract<CARROT_Result['status'], 'processing'>
         inputname:    Extract<CARROT_Result['inputname'], string>
+        // TODO? maybe add treerings, because of the years
 } & ({
         cellsmap:     Extract<CARROT_Result['cellsmap'],     Blob>;
         treeringsmap: Extract<CARROT_Result['treeringsmap'], Blob|null>;

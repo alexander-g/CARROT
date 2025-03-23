@@ -1,4 +1,5 @@
 import inspect
+import json
 import typing as tp
 
 from base.backend.pubsub import PubSub
@@ -57,18 +58,28 @@ def process_treerings(image_path, settings):
         y = model.process_image(x, progress_callback=on_progress)
     output_path = get_treeringsmap_name(image_path)
     write_image(output_path, y['segmentation']>0)
-    open(image_path+'.ring_points.pkl','wb').write(pickle.dumps(y['ring_points']))
-    open(image_path+'.ring_areas.pkl','wb').write(pickle.dumps(y['ring_areas']))
+    cache_treerings(y, image_path)
     
     return {
         'segmentation': output_path,
-        'ring_points' : [np.stack([a, b], axis=1).tolist() for a,b in y['ring_points']],
+        'ring_points' : [
+            np.stack([a, b], axis=1).tolist() for a,b in y['ring_points']
+        ],
         'ring_areas'  : y['ring_areas'],
     }
 
-def sample_points(points, n):
-    '''Select n points'''
-    return np.array(points)[ np.linspace(0,len(points)-1,n).astype(int) ]
+def get_cached_treerings_file(image_path:str) -> str:
+    return f'{image_path}.treerings.json'
+
+def cache_treerings(result, image_path:str):
+    ring_points = [np.array(p).tolist() for p in result['ring_points'] ]
+    jsondata = {
+        'ring_points': ring_points,
+    }
+    cachefile = get_cached_treerings_file(image_path)
+    open(cachefile, 'w').write(json.dumps(jsondata))
+    return jsondata
+
 
 
 def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
@@ -84,27 +95,30 @@ def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
         'imagesize'   : None,  #currently needed when loading results from file
     }
     
-    if recluster:
-        # convert boundary segmentation to points (e.g. after user edited it)
-        treering_segmentation  = PIL.Image.open(image_path+'.treerings.png').convert('L')
-        result['imagesize']    = treering_segmentation.size
-        treering_segmentation  = treering_segmentation / np.float32(255)
-        y                      = model.segmentation_to_points(treering_segmentation)
-        ring_points            = y['ring_points']
-        ring_areas             = y['ring_areas']
-        open(image_path+'.ring_points.pkl','wb').write(pickle.dumps(ring_points))
-        open(image_path+'.ring_areas.pkl','wb').write(pickle.dumps(ring_areas))
-    elif os.path.exists(image_path+'.ring_points.pkl'):
-        # load previously computed boundary points from cache
-        ring_points            = pickle.load(open(image_path+'.ring_points.pkl','rb'))
-        ring_areas             = pickle.load(open(image_path+'.ring_areas.pkl','rb'))
-    else:
+    treerings_cachefile = get_cached_treerings_file(image_path)
+    
+    if not recluster and not os.path.exists(treerings_cachefile):
         #cannot do anything without tree ring data
         return None
 
+    if os.path.exists(treerings_cachefile):
+        # load previously computed boundary points from cache
+        cached_treerings = json.load(open(treerings_cachefile))
+        ring_points = cached_treerings['ring_points']
+    
+    if recluster:
+        # convert boundary segmentation to points (e.g. after user edited it)
+        treering_segmentation  = PIL.Image.open(
+            get_treeringsmap_name(image_path)
+        ).convert('L')
+        result['imagesize']    = treering_segmentation.size
+        treering_segmentation  = treering_segmentation / np.float32(255)
+        y                      = model.segmentation_to_points(treering_segmentation)
+        ring_points            = y['ring_points']    
+
     result['ring_points'] = [np.stack([a, b], axis=1).tolist() for a,b in ring_points]
-    result['ring_areas']  = ring_areas
-    result['imagesize']   = PIL.Image.open(image_path).size
+    if os.path.exists(image_path):
+        result['imagesize']   = PIL.Image.open(image_path).size
 
     cellmap_path = get_cellsmap_name(image_path)
     # NOTE: useless when editing

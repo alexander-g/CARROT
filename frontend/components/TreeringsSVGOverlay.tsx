@@ -1,4 +1,10 @@
 import { base, preact, Signal, JSX } from "../dep.ts"
+import { 
+    CARROT_Result,
+    TreeringInfo,
+    compute_treering_width,
+    _zip_into_treerings,
+} from "../lib/carrot_detection.ts"
 
 export type Point     = base.util.Point;
 export type PointPair = [Point,Point];
@@ -7,8 +13,11 @@ type TreeringsSVGOverlayProps = {
     /** Size of the corresponding input image, for svg viewbox */
     size: base.util.ImageSize;
 
-    /** Coordinate pairs (upper and lower) of tree rings */
-    $treering_points: Readonly< Signal<PointPair[][]> >
+    /** Result containing treerings to display */
+    $result: Signal<CARROT_Result>;
+
+    /** The current zoom level of the image */
+    $scale?: Readonly<Signal<number>>;
 
 }
 
@@ -19,15 +28,19 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
 
     render(props:TreeringsSVGOverlayProps): JSX.Element {
         const viewbox = `0 0 ${props.size.width} ${props.size.height}`
-        const treerings_svg: JSX.Element[] = props.$treering_points.value.map( 
-            (points:PointPair[], i:number) => 
-                <TreeringComponent 
-                    treering_points = { points } 
-                    imagesize       = { props.size } 
-                    parentsvg       = { this.ref.current }
-                    year = {i}
-                /> 
-        )
+        const treerings_svg: JSX.Element[]|undefined = 
+            props.$result.value.treerings?.map( 
+                (ring:TreeringInfo, i:number) => 
+                    <TreeringComponent 
+                        index           = { i }
+                        treering_points = { ring.coordinates } 
+                        imagesize       = { props.size } 
+                        parentsvg       = { this.ref.current }
+                        year            = { ring.year }
+                        on_new_year     = { this.on_new_year }
+                        $scale          = { props.$scale }
+                    /> 
+            )
 
         return <>
         <svg 
@@ -43,15 +56,56 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
         </svg>
         </>
     }
+
+    on_new_year = (index:number, new_year:number) => {
+        console.log('new year:', new_year, index)
+        const old_result:CARROT_Result = this.props.$result.value;
+        const rings:TreeringInfo[] = this.props.$result.value.treerings ?? []
+        if(rings.length <= index){
+            console.error(`Cannot update tree ring index ${index}`)
+            return;
+        }
+
+        const ring_points:PointPair[][] = 
+            rings.map( (ring:TreeringInfo) => ring.coordinates )
+        const year_0:number = new_year - index;
+        const new_years:number[] = 
+            base.util.arange(year_0, year_0 + rings.length)
+        console.log('new year:', new_years)
+        const new_rings:TreeringInfo[] = 
+            _zip_into_treerings(ring_points, new_years)
+        
+        const new_result:CARROT_Result = new CARROT_Result(
+            old_result.status,
+            old_result.raw,
+            old_result.inputname,
+            old_result.classmap ?? undefined,
+            old_result.cells ?? undefined,
+            new_rings,
+            old_result.cellsmap ?? undefined,
+            old_result.treeringsmap ?? undefined,
+            old_result.imagesize ?? undefined,
+        )
+        this.props.$result.value = new_result;
+    }
 }
 
 
 type TreeringComponentProps = {
+    /** Position within the list of tree rings */
+    index: number;
+
     /** Coordinate pairs (upper and lower) of this tree ring */
     treering_points: PointPair[];
     imagesize: base.util.ImageSize;
     parentsvg: SVGSVGElement|null;
     year: number;
+
+    /** Called when user wants to assign a new year to the tree ring */
+    on_new_year: (index:number, year:number) => void;
+
+    /** The current zoom level of the image */
+    $scale?: Readonly<Signal<number>>;
 }
 
 class TreeringComponent extends preact.Component<TreeringComponentProps> {
@@ -71,8 +125,9 @@ class TreeringComponent extends preact.Component<TreeringComponentProps> {
 
         // TODO:
         const HARDCODED_px_per_um:number = 1.0
+        console.warn('TODO: get px_per_um')
         const ring_width:number = 
-            compute_treering_width(this.props.treering_points, HARDCODED_px_per_um)
+            compute_treering_width(this.props.treering_points)
 
         const css_border = {
             stroke:         "white",
@@ -99,11 +154,14 @@ class TreeringComponent extends preact.Component<TreeringComponentProps> {
             />
 
             <TreeringLabel 
-                ring_nr   = {this.props.year} 
+                index     = { this.props.index } 
+                year      = { this.props.year }
                 width_um  = { ring_width } 
                 position  = { label_position } 
                 imagesize = { props.imagesize }
                 parentsvg = { props.parentsvg }
+                on_new_year = { props.on_new_year }
+                $scale      = { props.$scale }
             />
         </g>
     }
@@ -121,26 +179,23 @@ function mean_point(points:Point[]): Point|null {
     return mean;
 }
 
-function compute_treering_width(
-    treering_points: PointPair[],
-    px_per_um:       number, 
-): number {
-    const sum:number = treering_points
-        .map( (x:PointPair) => base.util.distance(x[0],x[1]) )
-        .reduce( (a:number,b:number) => a+b );
-    const width:number = (sum / treering_points.length) / px_per_um
-    return width;
-}
 
 
 
 type TreeringLabelProps = {
-    ring_nr:  number;
+    index:    number;
+    year:     number;
     width_um: number;
     position: Point;
     
     imagesize: base.util.ImageSize;
     parentsvg: SVGSVGElement|null;
+
+    /** Called when user wants to assign a new year to the tree ring */
+    on_new_year: (index:number, year:number) => void;
+
+    /** The current zoom level of the image */
+    $scale?: Readonly<Signal<number>>;
 }
 
 class TreeringLabel extends preact.Component<TreeringLabelProps>{
@@ -179,7 +234,7 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
                         onBlur    = {this.on_blur}
                         ref       = {this.#inputref}
                     >
-                        {props.ring_nr.toFixed(0)}
+                        { props.year.toFixed(0) }
                     </label>
                 </div>
                 <label>
@@ -256,20 +311,21 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
         if(label.innerText.trim() == '' || isNaN(year))
             label.innerText='???';
         else {
-            // TODO
+            this.props.on_new_year(this.props.index, year);
         }
-
     } ).bind(this)
 
     #estimate_scale(): number {
-        const parentwidth:number = 
-            this.props.parentsvg?.getBoundingClientRect().width 
+        let parentwidth:number = 
+            this.props.parentsvg?.getBoundingClientRect().width
             // deno-lint-ignore no-window
             ?? window.innerWidth * 0.9;
+        const scale:number = this.props.$scale?.value ?? 1.0
+        parentwidth = parentwidth / scale
         const imagewidth:number = 
             this.props.imagesize.width;
         
-        return imagewidth / parentwidth * 2.0;
+        return imagewidth / parentwidth * 1.5 / scale;
     }
 }
 
