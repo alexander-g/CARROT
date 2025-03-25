@@ -27,6 +27,10 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
     ): Promise<void>{
         await super.set_files(files_raw);
 
+        for(const pair of this.$files.value)
+            (pair.$result.value as CARROT_Result).px_per_um = 
+                this.$settings.value?.micrometer_factor ?? null;
+
         // saved results do not contain all information that is needed
         // have to send those files to the backend for further processing
         const unfinished_results: BaseInputResultPair[] = 
@@ -54,18 +58,30 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
             if(result instanceof CARROT_Result
             && base.util.is_string(result.inputname)
             && (
-                result.cellsmap instanceof File
-                || result.treeringsmap instanceof File
+                has_cellsmap_but_no_cells(result)
+                || has_treeringsmap_but_no_treerings(result)
             )){
                 pair.$result.value = 
                     await backend.process_cell_association({
+                        status:       'processing',
                         inputname:    result.inputname,
-                        cellsmap:     result.cellsmap,
-                        treeringsmap: result.treeringsmap,
-                    } as UnfinishedCARROT_Result)
+                        cellsmap:     result.cellsmap as File,
+                        treeringsmap: result.treeringsmap as File,
+                    })
+            } else {
+                console.error('Unexpected unfinished result:', result)
             }
         }
     }
 }
 
 
+function has_cellsmap_but_no_cells(x:CARROT_Result): 
+x is CARROT_Result & {cells:null, cellsmap:File} {
+    return (x.cells == null && x.cellsmap instanceof File);
+}
+
+function has_treeringsmap_but_no_treerings(x:CARROT_Result):
+x is CARROT_Result & {treerings:null, treeringsmap:File} {
+    return (x.treerings == null && x.treeringsmap instanceof File)
+}

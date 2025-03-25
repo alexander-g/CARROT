@@ -1,4 +1,4 @@
-import { base, Signal, signals, JSX } from "../dep.ts"
+import { base, Signal, signals, JSX, preact } from "../dep.ts"
 import { CARROT_State }  from "./state.ts"
 import { 
     CARROT_Result, 

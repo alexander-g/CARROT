@@ -39,6 +39,7 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
                         year            = { ring.year }
                         on_new_year     = { this.on_new_year }
                         $scale          = { props.$scale }
+                        px_per_um       = { props.$result.value.px_per_um ?? 1.0}
                     /> 
             )
 
@@ -58,7 +59,6 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
     }
 
     on_new_year = (index:number, new_year:number) => {
-        console.log('new year:', new_year, index)
         const old_result:CARROT_Result = this.props.$result.value;
         const rings:TreeringInfo[] = this.props.$result.value.treerings ?? []
         if(rings.length <= index){
@@ -71,7 +71,6 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
         const year_0:number = new_year - index;
         const new_years:number[] = 
             base.util.arange(year_0, year_0 + rings.length)
-        console.log('new year:', new_years)
         const new_rings:TreeringInfo[] = 
             _zip_into_treerings(ring_points, new_years)
         
@@ -86,6 +85,7 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
             old_result.treeringsmap ?? undefined,
             old_result.imagesize ?? undefined,
         )
+        new_result.px_per_um = old_result.px_per_um;
         this.props.$result.value = new_result;
     }
 }
@@ -106,6 +106,9 @@ type TreeringComponentProps = {
 
     /** The current zoom level of the image */
     $scale?: Readonly<Signal<number>>;
+
+    /** Pixels per um as set by user */
+    px_per_um: number;
 }
 
 class TreeringComponent extends preact.Component<TreeringComponentProps> {
@@ -123,11 +126,8 @@ class TreeringComponent extends preact.Component<TreeringComponentProps> {
             ).join(' ')
         )
 
-        // TODO:
-        const HARDCODED_px_per_um:number = 1.0
-        console.warn('TODO: get px_per_um')
         const ring_width:number = 
-            compute_treering_width(this.props.treering_points)
+            compute_treering_width(this.props.treering_points) / props.px_per_um;
 
         const css_border = {
             stroke:         "white",

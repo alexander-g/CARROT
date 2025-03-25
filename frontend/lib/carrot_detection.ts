@@ -36,6 +36,9 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
 
     imagesize: base.util.ImageSize|null;
 
+    /** Image resolution, pixels per micrometer */
+    px_per_um: number|null = null;
+
 
     constructor(
         ...args: [
@@ -72,12 +75,14 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
         if(this.treeringsmap != null)
             result[`${this.inputname}/${this.inputname}.treerings.png`] = 
                 this.treeringsmap;
+        
+        const years:number[] = this.treerings?.map((x:TreeringInfo) => x.year) ?? []
+        if(this.px_per_um == null)
+            console.error('No px_per_um in result');
+        const px_per_um:number = this.px_per_um ?? 1.0;
+
         if(this.cells != null 
         && this.imagesize != null){
-            console.warn('TODO: get years from svg overlay')
-            const years:number[] = Object.keys(this.treerings ?? []).map(Number)
-            console.warn('TODO: get micrometer_factor from settings')
-            const micrometer_factor:number = 1.0;
             console.warn('TODO: get ignore_buffer_px from settings')
             const ignore_buffer_px:number = 8;
             result[`${this.inputname}.cell_statistics.csv`] = 
@@ -85,20 +90,21 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
                     this.cells, 
                     years, 
                     this.imagesize, 
-                    micrometer_factor, 
+                    px_per_um, 
                     ignore_buffer_px
                 )
-            associationdata['cells'] = this.cells;
+            associationdata['cells'] = this.cells.map( (c:CellInfo) => {return {
+                ...c,
+                year: years[c.year] ?? -1
+            }} );
         }
         if(this.treerings){
-            console.warn('TODO: get years from svg overlay')
             const years:number[] = this.treerings.map((x:TreeringInfo) => x.year)
-            console.warn('TODO: get areas')
-            const areas:number[] = Object.keys(this.treerings ?? []).map(Number)
-            const micrometer_factor:number = 1.0;
-            console.warn('TODO: get ignore_buffer_px from settings')
+            const areas:number[] = this.treerings.map(
+                (x:TreeringInfo) => compute_treering_area(x.coordinates)
+            )
             result[`${this.inputname}.tree_ring_statistics.csv`] = 
-                format_treerings_for_export(this.treerings, micrometer_factor)
+                format_treerings_for_export(this.treerings, px_per_um)
             associationdata['ring_points'] = 
                 convert_treerings_to_points(this.treerings)
             associationdata['ring_areas'] = areas;
@@ -195,7 +201,7 @@ async function validate_zipped_result<T extends BaseResult>(
         
         const ring_points:PointPair[][] = 
             convert_2x2_number_tuple_dual_array_to_points(adata.ring_points)
-        const rings:TreeringInfo[] = _zip_into_treerings(ring_points)
+        const rings:TreeringInfo[] = _zip_into_treerings(ring_points, adata.ring_years)
         const imagesize:base.util.ImageSize = {
             width:  adata.imagesize[0],
             height: adata.imagesize[1],
@@ -355,7 +361,7 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
     const ring_points:PointPair[][] = 
         convert_2x2_number_tuple_dual_array_to_points(adata.ring_points)
     const rings:TreeringInfo[] = 
-        _zip_into_treerings(ring_points)
+        _zip_into_treerings(ring_points, adata.ring_years)
 
     return new ctor(
         'processed',
@@ -396,7 +402,7 @@ export function _zip_into_treerings(
 
 type AssociationData = {
     ring_points: TwoNumberTuple[][]; 
-    //ring_years:  number[];
+    ring_years?: number[];
     cells:       CellInfo[];
     imagesize:   TwoNumbers;
 }
@@ -408,11 +414,6 @@ function validate_association_data(raw:string): AssociationData|null {
         return null;
 
     if(base.util.is_object(jsondata)
-        && base.util.has_property_of_type(
-            jsondata, 
-            'ring_years', 
-            base.util.validate_number_array
-        )
         && base.util.has_property_of_type(
             jsondata, 
             'ring_points', 
@@ -435,7 +436,7 @@ function validate_association_data(raw:string): AssociationData|null {
 
 type RingsOnlyAssociationData = {
     ring_points: TwoNumberTuple[][]; 
-    //ring_years:  number[];
+    ring_years?: number[];
 }
 
 function validate_ringsonly_association_data(raw:string): RingsOnlyAssociationData|null {
@@ -445,11 +446,6 @@ function validate_ringsonly_association_data(raw:string): RingsOnlyAssociationDa
         return null;
 
     if(base.util.is_object(jsondata)
-    // && base.util.has_property_of_type(
-    //     jsondata, 
-    //     'ring_years', 
-    //     base.util.validate_number_array
-    // )
     && base.util.has_property_of_type(
         jsondata, 
         'ring_points', 
@@ -711,7 +707,6 @@ function convert_treerings_to_points(treerings:TreeringInfo[]):TwoNumberTuple[][
 export type UnfinishedCARROT_Result = {
         status:       Extract<CARROT_Result['status'], 'processing'>
         inputname:    Extract<CARROT_Result['inputname'], string>
-        // TODO? maybe add treerings, because of the years
 } & ({
         cellsmap:     Extract<CARROT_Result['cellsmap'],     Blob>;
         treeringsmap: Extract<CARROT_Result['treeringsmap'], Blob|null>;
@@ -738,6 +733,8 @@ export function is_CARROT_Backend(x:unknown): x is CARROT_Backend {
 }
 
 
+/** Backend that sends HTTP processing requests to flask, 
+ *  including some CARROT-specific ones. */
 export class CARROT_RemoteBackend extends CARROT_Backend {
     
     async process_cell_association(r:UnfinishedCARROT_Result): 
@@ -765,6 +762,8 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
         const full_result = 
             (await CARROT_Result.validate(response) as CARROT_Result|null)
+        if(full_result && full_result?.px_per_um == null)
+            full_result.px_per_um = this.settings.micrometer_factor
         return full_result ?? new CARROT_Result('failed')
     }
 
@@ -791,6 +790,9 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         
         const result: base.files.Result|null = 
             await CARROT_Result.validate(response)
+        if(result instanceof CARROT_Result && result?.px_per_um == null)
+            result.px_per_um = this.settings.micrometer_factor
+        
         if(result != null)
             return result as CARROT_Result
         else 
