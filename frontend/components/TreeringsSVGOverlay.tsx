@@ -58,6 +58,7 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
         </>
     }
 
+    /** Called when user wants to modify a year number */
     on_new_year = (index:number, new_year:number) => {
         const old_result:CARROT_Result = this.props.$result.value;
         const rings:TreeringInfo[] = this.props.$result.value.treerings ?? []
@@ -65,28 +66,10 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
             console.error(`Cannot update tree ring index ${index}`)
             return;
         }
-
-        const ring_points:PointPair[][] = 
-            rings.map( (ring:TreeringInfo) => ring.coordinates )
-        const year_0:number = new_year - index;
-        const new_years:number[] = 
-            base.util.arange(year_0, year_0 + rings.length)
-        const new_rings:TreeringInfo[] = 
-            _zip_into_treerings(ring_points, new_years)
-        
-        const new_result:CARROT_Result = new CARROT_Result(
-            old_result.status,
-            old_result.raw,
-            old_result.inputname,
-            old_result.classmap ?? undefined,
-            old_result.cells ?? undefined,
-            new_rings,
-            old_result.cellsmap ?? undefined,
-            old_result.treeringsmap ?? undefined,
-            old_result.imagesize ?? undefined,
-        )
-        new_result.px_per_um = old_result.px_per_um;
-        this.props.$result.value = new_result;
+        const new_result:CARROT_Result|null = 
+            CARROT_Result.modify_year(old_result, index, new_year)
+        if(new_result != null)
+            this.props.$result.value = new_result;
     }
 }
 
@@ -205,6 +188,8 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
     /** Size of the component (in image coordinates). Used to offset to the center */
     #$divsize: Signal<base.util.Size> = new Signal({width:0, height:0});
 
+    #labeltext: string = ""
+
     render(props:TreeringLabelProps): JSX.Element {
         const scale:number = this.#estimate_scale();
         const css_fo = {
@@ -216,6 +201,7 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
             "pointer-events": "none",
         }
 
+        this.#labeltext = props.year.toFixed(0)
         return <>
         <svg 
             class = "treering-overlay-label unselectable" 
@@ -234,7 +220,7 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
                         onBlur    = {this.on_blur}
                         ref       = {this.#inputref}
                     >
-                        { props.year.toFixed(0) }
+                        { this.#labeltext }
                     </label>
                 </div>
                 <label>
@@ -248,6 +234,9 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
 
     override componentDidUpdate(): void {
         this.#update_divsize()
+        // sometimes the label is not updated probably because of contenteditable
+        // make sure it is
+        this.#inputref.current!.innerText = this.#labeltext
     }
 
     override componentDidMount(): void {

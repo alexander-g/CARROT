@@ -120,6 +120,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         const edited_result:CARROT_Result = 
             await backend.process_cell_association(unfinished_result)
 
+        // re-apply potentially edited years
         const edited_ring_points:PointPair[][] = edited_result.treerings?.map(
             (ring:TreeringInfo) => ring.coordinates
         ) ?? []
@@ -128,6 +129,11 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         edited_result.treerings = finished_rings;
 
         this.props.$result.value = edited_result;
+    }
+
+    on_reverse_growth_direction = () => {
+        this.props.$result.value = 
+            CARROT_Result.reverse_growth_direction(this.props.$result.value)
     }
 }
 
@@ -160,6 +166,9 @@ type EditMenuProps = {
 
     /** Callback issued when user wants to cancel the editing process */
     on_clear: () => void;
+
+    /** Callback, user wants to reverse the direction of tree rings */
+    on_reverse_growth_direction: () => void;
 }
 
 class EditMenu extends preact.Component<EditMenuProps> {
@@ -204,6 +213,13 @@ class EditMenu extends preact.Component<EditMenuProps> {
                 >
                     <i class="pen icon"></i>
                     Edit tree rings
+                </div>
+                <div
+                    class = "item edit-mode edit-growth-direction" 
+                    onClick = {this.props.on_reverse_growth_direction}
+                >
+                    <i class="exchange alternate icon"></i>
+                    Reverse growth direction
                 </div>
         
                 <div class="divider hidden-when-disabled"></div>

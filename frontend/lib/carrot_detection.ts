@@ -39,6 +39,9 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
     /** Image resolution, pixels per micrometer */
     px_per_um: number|null = null;
 
+    /** Whether to reverse the growth direction from what is predicted */
+    reversed_growth_direction: boolean = false;
+
 
     constructor(
         ...args: [
@@ -160,6 +163,84 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
 
     get_treering_coordinates_if_loaded(): PointPair[][]|null {
         return this.treerings?.map( (t:TreeringInfo) => t.coordinates) ?? null;
+    }
+
+    /** Clone result, with reversed tree ring growth direction */
+    static reverse_growth_direction(previous:CARROT_Result): CARROT_Result {
+        const new_direction_is_reverse:boolean = 
+            !previous.reversed_growth_direction;
+
+        let new_treerings:TreeringInfo[] = []
+        const n:number = previous.treerings?.length ?? 0;
+        if(n > 0){
+            const year_0:number = previous.treerings![0]!.year;
+            const year_n:number = previous.treerings![n-1]!.year;
+            const year_min:number = Math.min(year_0, year_n)
+            const year_max:number = Math.max(year_0, year_n)
+            let new_years:number[] = base.util.arange(year_min, year_max+1)
+            if(new_direction_is_reverse)
+                new_years = new_years.reverse()
+            new_treerings = previous.treerings!.map( 
+                (r:TreeringInfo, i:number) => {
+                    return {
+                        year: new_years[i]!,
+                        coordinates: r.coordinates
+                    }
+                } 
+            )
+        }
+
+        const new_result = new CARROT_Result(
+            previous.status,
+            previous.raw,
+            previous.inputname,
+            previous.classmap ?? undefined,
+            previous.cells ?? undefined,
+            new_treerings,
+            previous.cellsmap ?? undefined,
+            previous.treeringsmap ?? undefined,
+            previous.imagesize ?? undefined,
+        )
+        new_result.reversed_growth_direction = new_direction_is_reverse;
+        new_result.px_per_um = previous.px_per_um;
+        return new_result;
+    }
+
+    static modify_year(
+        previous:CARROT_Result, 
+        index:   number, 
+        new_year:number,
+    ): CARROT_Result|null {
+        const rings:TreeringInfo[]|null = previous.treerings;
+        if(rings == null || rings.length <= index)
+            return null;
+        const reversed:boolean = previous.reversed_growth_direction
+
+        const ring_points:PointPair[][] = 
+            rings.map( (ring:TreeringInfo) => ring.coordinates )
+        const year_0:number = reversed? new_year - rings.length + index +1 : new_year - index;
+        let new_years:number[] = 
+            base.util.arange(year_0, year_0 + rings.length)
+        if(reversed)
+            new_years = new_years.reverse()
+        const new_treerings:TreeringInfo[] = 
+            _zip_into_treerings(ring_points, new_years)
+        
+        // TODO: this should be done in carrot_detection.ts
+        const new_result:CARROT_Result = new CARROT_Result(
+            previous.status,
+            previous.raw,
+            previous.inputname,
+            previous.classmap ?? undefined,
+            previous.cells ?? undefined,
+            new_treerings,
+            previous.cellsmap ?? undefined,
+            previous.treeringsmap ?? undefined,
+            previous.imagesize ?? undefined,
+        )
+        new_result.px_per_um = previous.px_per_um;
+        new_result.reversed_growth_direction = previous.reversed_growth_direction;
+        return new_result;
     }
 }
 
