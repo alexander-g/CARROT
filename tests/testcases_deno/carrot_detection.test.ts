@@ -1,22 +1,38 @@
 import { asserts } from "./dep.ts"
 import { base }    from "../../frontend/dep.ts"
-import { CARROT_Result } from "../../frontend/lib/carrot_detection.ts"
+import { 
+    CARROT_Result,
+    CellsAndTreeringsData,
+} from "../../frontend/lib/carrot_detection.ts"
 
 
 
 
 Deno.test('CARROT_Result.export-import', async () => {
     const inputname = 'file0.jpg'
+    const data0:CellsAndTreeringsData = {
+        colored_cellmap: new File(['...'], 'ringmap.png'),
+        cellmap: new File(['...'], 'cellsmap.png'),
+        treeringmap: new File(['...'], 'tringmap.png'),
+        cells:[
+            {id:2, area:777, position_within:0.5, year_index:0, box_xy:[10,10,30,30]},
+        ],
+        treerings:[{
+            coordinates:[ 
+                [{x:0,y:0}, {x:10,y:10}], [{x:5,y:5}, {x:15,y:15}] 
+            ],
+            year:2222
+            },
+        ],
+        imagesize: {width:200, height:300},
+        px_per_um: 1.5,
+        reversed_growth_direction: true,
+    }
     const r0 = new CARROT_Result(
         'processed',
         null,
         inputname,
-        new File(['...'], 'ring_map.png'),
-        [{id:2, area:777, position_within:0.5, year:2222, box_xy:[10,10,30,30]}],
-        [ [ [{x:0, y:0}, {x:10, y:0}], [{x:0, y:5}, {x:10, y:5}] ] ],
-        new File(['...'], 'cellsmap.png'),
-        new File(['...'], 'tringmap.png'),
-        {width:100, height:100},
+        data0,
     )
 
     const exported: Record<string, File>|null = await r0.export()
@@ -27,7 +43,8 @@ Deno.test('CARROT_Result.export-import', async () => {
             `${inputname}.tree_ring_statistics.csv`,
             `${inputname}.cell_statistics.csv`,
             `${inputname}.ring_map.png`,
-            `${inputname}.associationdata.json`,
+            `${inputname}/treerings.json`,
+            `${inputname}/cells.json`,
             `${inputname}/${inputname}.cells.png`,
             `${inputname}/${inputname}.treerings.png`,
         ]
@@ -40,11 +57,17 @@ Deno.test('CARROT_Result.export-import', async () => {
     const imported:CARROT_Result|null 
         = await CARROT_Result.validate<CARROT_Result>(input_file_pair)
     asserts.assertInstanceOf(imported, CARROT_Result)
+    asserts.assertEquals(imported.status, 'processed')
     asserts.assertEquals(imported.inputname, inputname)
-    asserts.assert( Array.isArray(imported.treerings) )
-    // @ts-ignore meh
-    asserts.assertEquals( imported.treerings, r0.treerings )
-    asserts.assertEquals( imported.cells, r0.cells )
+
+    asserts.assert( 'treerings' in imported.data )
+    asserts.assert( Array.isArray(imported.data.treerings) )
+    asserts.assertEquals( imported.data.treerings, data0.treerings )
+    
+    asserts.assert( 'cells' in imported.data )
+    asserts.assertEquals( imported.data.cells, data0.cells )
+    
+    asserts.assertEquals(imported.data.reversed_growth_direction, data0.reversed_growth_direction)
 })
 
 
@@ -65,7 +88,8 @@ Deno.test('response.full-from-flask', async () => {
     asserts.assertEquals(result.status, 'processed')
     asserts.assertEquals(result.inputname, imagefilename)
     asserts.assertInstanceOf(result, CARROT_Result)
-    asserts.assertExists(result.classmap)
+    asserts.assert('colored_cellmap' in result.data)
+    asserts.assertExists(result.data.colored_cellmap)
 })
 
 Deno.test('response.cells-only-from-flask', async () => {
@@ -86,7 +110,7 @@ Deno.test('response.cells-only-from-flask', async () => {
     asserts.assertEquals(result.status, 'processed')
     asserts.assertEquals(result.inputname, imagefilename)
     asserts.assertInstanceOf(result, CARROT_Result)
-    asserts.assertExists(result.cellsmap)
+    asserts.assert('cellmap' in result.data)
 })
 
 Deno.test('response.rings-only-from-flask', async () => {
@@ -107,8 +131,8 @@ Deno.test('response.rings-only-from-flask', async () => {
     asserts.assertEquals(result.status, 'processed')
     asserts.assertEquals(result.inputname, imagefilename)
     asserts.assertInstanceOf(result, CARROT_Result)
-    asserts.assertExists(result.treeringsmap)
-    asserts.assertExists(result.treerings)
+    asserts.assert('treeringmap' in result.data)
+    asserts.assert('treerings' in result.data)
 })
 
 
@@ -125,6 +149,8 @@ Deno.test('import.legacy_v0', async () => {
 
     asserts.assertExists(imported)
     asserts.assertEquals(imported.status, 'processing')
-    asserts.assertInstanceOf(imported.cellsmap, File)
-    asserts.assertInstanceOf(imported.treeringsmap, File)
+    asserts.assert('cellmap' in imported.data)
+    asserts.assert('treeringmap' in imported.data)
+    asserts.assertInstanceOf(imported.data.cellmap, File)
+    asserts.assertInstanceOf(imported.data.treeringmap, File)
 })

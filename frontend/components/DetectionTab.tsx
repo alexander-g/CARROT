@@ -2,6 +2,7 @@ import { base, Signal, signals, JSX, preact } from "../dep.ts"
 import { CARROT_State }  from "./state.ts"
 import { 
     CARROT_Result, 
+    CARROT_Data,
     CARROT_Backend,
     UnfinishedCARROT_Result,
     TreeringInfo,
@@ -41,10 +42,16 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
 
     override result_overlays(): JSX.Element {
+        const result:CARROT_Result = this.props.$result.value;
+        // TODO: not only colored_cellmap
+        const overlayimage:File|null = 
+            ('colored_cellmap' in result.data)? result.data.colored_cellmap : 
+            ('cellmap' in result.data)? result.data.cellmap :
+            ('treeringmap' in result.data)? result.data.treeringmap : null;
         return <>
-            {/* TODO: need to hide overlays when editing is active */}
+            {/* TODO: need to hide overlays when editing is active. */}
             <base.imageoverlay.ImageOverlay 
-                image     = {this.props.$result.value.classmap}        
+                image     = {overlayimage}        
                 $visible  = {this.$result_visible}
             />
             <TreeringsSVGOverlay 
@@ -77,6 +84,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 ref = {this.edit_menu_ref}
                 on_apply = { this.on_apply_editing_changes }
                 on_clear = { () => this.canvas_ref.current?.clear() }
+                on_reverse_growth_direction = {this.on_reverse_growth_direction}
                 $active_mode = { this.$active_editing_mode }
                 $erase       = { this.$erase }
                 $brush_size  = { this.$editing_brush_size }
@@ -96,23 +104,30 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         if(blob == null)
             return;
         
-
-        const current_result:CARROT_Result = this.props.$result.value;
-        const current_years:number[] = current_result.treerings?.map(
+        const current_data:CARROT_Data = this.props.$result.value.data;
+        const current_rings:TreeringInfo[] = 
+            ('treerings' in current_data)? current_data.treerings : []
+        const current_years:number[] = current_rings.map(
             (ring:TreeringInfo) => ring.year
-        ) ?? []
+        )
         const filename = `${this.props.input.name}.${mode}.png`
         const file = new File([blob], filename)
         
+        const maybe_cellmap:File|null = 
+            ('cellmap' in current_data)? current_data.cellmap : null;
+        const maybe_treeringmap:File|null = 
+            ('treeringmap' in current_data)? current_data.treeringmap : null;
         const unfinished_result:UnfinishedCARROT_Result = {
             status:    'processing',
             inputname: this.props.input.name,
-            ... (mode == 'cells')? {
-                cellsmap:     file,
-                treeringsmap: current_result.treeringsmap,
+            data: (mode == 'cells')? {
+                cellmap:     file,
+                //treeringmap: maybe_treeringmap,
+                ...(maybe_treeringmap? {treeringmap:maybe_treeringmap} : {})
             } : {
-                cellsmap:     current_result.cellsmap,
-                treeringsmap: file,
+                //cellmap:     maybe_cellmap,
+                ...(maybe_cellmap? {cellmap:maybe_cellmap} : {}),
+                treeringmap: file,
             }
         }
         // awkward
@@ -121,12 +136,12 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             await backend.process_cell_association(unfinished_result)
 
         // re-apply potentially edited years
-        const edited_ring_points:PointPair[][] = edited_result.treerings?.map(
-            (ring:TreeringInfo) => ring.coordinates
-        ) ?? []
+        const edited_ring_points:PointPair[][] = 
+            edited_result.get_treering_coordinates_if_loaded() ?? []
         const finished_rings:TreeringInfo[] = 
             _zip_into_treerings(edited_ring_points, current_years)
-        edited_result.treerings = finished_rings;
+        if('treerings' in edited_result.data)
+            edited_result.data.treerings = finished_rings;
 
         this.props.$result.value = edited_result;
     }
@@ -142,10 +157,10 @@ function _get_map_for_editmode(
     mode:   CARROT_ModelTypes|null, 
     result: CARROT_Result,
 ): File|null {
-    if(mode == 'cells')
-        return result.cellsmap;
-    if(mode == 'treerings')
-        return result.treeringsmap;
+    if(mode == 'cells' && 'cellmap' in result.data)
+        return result.data.cellmap;
+    if(mode == 'treerings' && 'treeringmap' in result.data)
+        return result.data.treeringmap;
     return null;
 }
 
@@ -315,6 +330,7 @@ class EditMenu extends preact.Component<EditMenuProps> {
 
         this.props.on_clear()
 
+        // TODO: overlays
         // const canvas = $root.find('.editing-canvas.overlay')[0]
         // canvas.getContext('2d').clearRect(0,0,canvas.width, canvas.height)
         // $(canvas).css('pointer-events', 'none')

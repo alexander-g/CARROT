@@ -137,6 +137,8 @@ def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
             cells, ring_map_rgb = method(cell_map, ring_points, og_size=result['imagesize'])
         else:
             cells, ring_map_rgb = method(cell_map, ring_points)
+        for c in cells:
+            c['year_index'] = c['year']
         result['cells'] = cells
         ring_map_path = image_path+'.ring_map.png'
         write_image(ring_map_path, ring_map_rgb)

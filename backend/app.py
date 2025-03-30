@@ -46,12 +46,11 @@ class App(BaseApp):
             results:tp.Dict[str, bytes] = {}
             full_path = self.path_in_cache(imagename, abort_404=False)
             if cells:
-                result = backend.processing.process_cells(full_path, self.settings)
+                _ignored = backend.processing.process_cells(full_path, self.settings)
             if treerings:
                 result = backend.processing.process_treerings(full_path, self.settings)
                 results[f'{imagename}.associationdata.json'] = json.dumps({
                     'ring_points': result['ring_points'],
-                    'ring_areas':  result['ring_areas'],
                 }).encode('utf8')
             
 
@@ -71,17 +70,22 @@ class App(BaseApp):
                 recluster
             )
             if result is not None:
-                assocdata = {
+                # TODO: split into cells.json and treerings.json
+                ringdata = {
                     'ring_points': result['ring_points'],
                 }
+                results[f'{imagename}/treerings.json'] = \
+                    json.dumps(ringdata).encode('utf8')
                 if result['ring_map'] is not None:
                     results[f'{imagename}.ring_map.png'] = \
                         open(result['ring_map'], 'rb').read()
-                    assocdata['cells'] = result['cells']
-                    assocdata['imagesize'] = result['imagesize']
+                    celldata = {
+                        'cells' : result['cells'],
+                        'imagesize' : result['imagesize'],
+                    }
+                    results[f'{imagename}/cells.json'] = \
+                        json.dumps(celldata).encode('utf8')
 
-                results[f'{imagename}.associationdata.json'] = \
-                    json.dumps(assocdata).encode('utf8')
 
             path = zip_results(results, full_path)
             return flask.send_file(path)

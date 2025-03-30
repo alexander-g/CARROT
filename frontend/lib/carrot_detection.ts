@@ -5,12 +5,12 @@ type Point      = base.util.Point;
 type PointPair  = [Point,Point]
 type BaseResult = base.files.Result;
 
-type CellInfo = {
+export type CellInfo = {
     area:   number,
     box_xy: [number,number,number,number],
     id:     number, 
     position_within: number|null, 
-    year:   number,
+    year_index:      number,
 }
 
 export type TreeringInfo = {
@@ -19,111 +19,106 @@ export type TreeringInfo = {
 }
 
 
-// TODO: remove SegmentationResult parent class
+/** Result loaded from a single cell mask, still needs to be processed */
+export type CellMapOnlyUnfinishedData = {
+    cellmap: File;
+}
 
-/** Result with additional attributes for cells and treerings */
-export class CARROT_Result extends base.segmentation.SegmentationResult {
+export type CellsOnlyData = {
+    cellmap: File;
+    cells:   CellInfo[];
+    imagesize: base.util.ImageSize;
+    px_per_um: number;
+}
+
+/** Result loaded from a single tree ring mask, still needs to be processed */
+export type TreeringMapOnlyUnfinishedData = {
+    treeringmap: File;
+}
+
+export type TreeringsOnlyData = {
+    treeringmap: File;
+    treerings:    TreeringInfo[];
+    px_per_um:    number;
+    reversed_growth_direction: boolean;
+}
+
+/** An old version of saved results that did not contain association data. */
+export type LegacySavedMapOnlyUnfinishedData = 
+    TreeringMapOnlyUnfinishedData
+    | CellMapOnlyUnfinishedData
+    | (TreeringMapOnlyUnfinishedData & CellMapOnlyUnfinishedData);
+
+/** Full result data, after cell and tree ring detection */
+export type CellsAndTreeringsData = {
+    /** Image file containing detected cells colored by tree ring */
+    colored_cellmap: File;
     
-    treerings:    TreeringInfo[]|null;
-    cells:        CellInfo[]|null;
-
+    cells:       CellInfo[];
+    treerings:   TreeringInfo[];
+    
     /** Intermediate image file containing detected cells that needs 
      *  to be processed to extract coordinates */
-    cellsmap:     File|null;
+    cellmap:         File;
+    
     /** Intermediate image file containing detected boundaries that needs 
      *  to be processed to extract coordinates */
-    treeringsmap: File|null;
+    treeringmap:     File;
 
-    imagesize: base.util.ImageSize|null;
+    imagesize: base.util.ImageSize;
 
     /** Image resolution, pixels per micrometer */
-    px_per_um: number|null = null;
-
+    px_per_um: number;
+    
     /** Whether to reverse the growth direction from what is predicted */
-    reversed_growth_direction: boolean = false;
+    reversed_growth_direction: boolean;
+}
 
+/** For unprocessed or failed results. */
+type NoData = Record<never, never>
+
+
+export type CARROT_Data = CellsAndTreeringsData 
+| CellMapOnlyUnfinishedData
+| CellsOnlyData
+| TreeringMapOnlyUnfinishedData
+| TreeringsOnlyData
+| LegacySavedMapOnlyUnfinishedData
+| NoData
+
+
+/** Result with additional attributes for cells and treerings */
+export class CARROT_Result extends base.files.Result {
+    
+    data: CARROT_Data;
 
     constructor(
         ...args: [
-            ...baseargs: ConstructorParameters<typeof base.segmentation.SegmentationResult>,
-            cells?:        CellInfo[],
-            treerings?:    TreeringInfo[],
-            cellsmap?:     File,
-            treeringsmap?: File,
-            imagesize?:    base.util.ImageSize,
+            ...baseargs: ConstructorParameters<typeof base.files.Result>,
+            data?: CARROT_Data
         ]
     ){
-        super(args[0], args[1], args[2], args[3])
-        this.cells        = args[4] ?? null;
-        this.treerings    = args[5] ?? null;
-        this.cellsmap     = args[6] ?? null;
-        this.treeringsmap = args[7] ?? null;
-        this.imagesize    = args[8] ?? null;
+        super(args[0], args[1], args[2])
+        this.data = args[3] ?? {};
     }
 
     override async export(): Promise<Record<string, File> | null> {
         await 0;
-        if(this.inputname == null)
+        const data:CARROT_Data|null = this.data;
+        if(this.status != 'processed' 
+        || this.inputname == null
+        || data == null)
             return null;
         
-        const result:Record<string, File> = {}
-        const associationdata: Record<string, unknown> = {}
-
-        if(this.classmap instanceof Blob)
-            result[`${this.inputname}.ring_map.png`] = 
-                new File([this.classmap], '');
-        if(this.cellsmap != null)
-            result[`${this.inputname}/${this.inputname}.cells.png`] = 
-                this.cellsmap;
-        if(this.treeringsmap != null)
-            result[`${this.inputname}/${this.inputname}.treerings.png`] = 
-                this.treeringsmap;
+        if('colored_cellmap' in data)
+            return export_full(data, this.inputname)
+        if('cells' in data)
+            return export_cellsonly(data, this.inputname)
+        if('treerings' in data)
+            return export_treeringsonly(data, this.inputname)
         
-        const years:number[] = this.treerings?.map((x:TreeringInfo) => x.year) ?? []
-        if(this.px_per_um == null)
-            console.error('No px_per_um in result');
-        const px_per_um:number = this.px_per_um ?? 1.0;
-
-        if(this.cells != null 
-        && this.imagesize != null){
-            console.warn('TODO: get ignore_buffer_px from settings')
-            const ignore_buffer_px:number = 8;
-            result[`${this.inputname}.cell_statistics.csv`] = 
-                format_cells_for_export(
-                    this.cells, 
-                    years, 
-                    this.imagesize, 
-                    px_per_um, 
-                    ignore_buffer_px
-                )
-            associationdata['cells'] = this.cells.map( (c:CellInfo) => {return {
-                ...c,
-                year: years[c.year] ?? -1
-            }} );
-        }
-        if(this.treerings){
-            const years:number[] = this.treerings.map((x:TreeringInfo) => x.year)
-            const areas:number[] = this.treerings.map(
-                (x:TreeringInfo) => compute_treering_area(x.coordinates)
-            )
-            result[`${this.inputname}.tree_ring_statistics.csv`] = 
-                format_treerings_for_export(this.treerings, px_per_um)
-            associationdata['ring_points'] = 
-                convert_treerings_to_points(this.treerings)
-            associationdata['ring_areas'] = areas;
-            associationdata['ring_years'] = years;
-        }
-        if(this.imagesize)
-            associationdata['imagesize'] = 
-                [this.imagesize.width, this.imagesize.height]
-        
-
-        if( Object.keys(associationdata).length > 0){
-            result[`${this.inputname}.associationdata.json`] = 
-                new File([JSON.stringify(associationdata)], 'associationdata.json')
-        }
-
-        return result;
+        //else
+        return null;
     }
 
     static override async validate<T extends BaseResult>(
@@ -162,25 +157,31 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
     }
 
     get_treering_coordinates_if_loaded(): PointPair[][]|null {
-        return this.treerings?.map( (t:TreeringInfo) => t.coordinates) ?? null;
+        if(this.data && 'treerings' in this.data)
+            return this.data.treerings.map( (t:TreeringInfo) => t.coordinates )
+        else
+            return null;
     }
 
     /** Clone result, with reversed tree ring growth direction */
     static reverse_growth_direction(previous:CARROT_Result): CARROT_Result {
-        const new_direction_is_reverse:boolean = 
-            !previous.reversed_growth_direction;
+        const data:CARROT_Data|null = previous.data;
+        if( !data || !('treerings' in data))
+            return previous;
+        
+        const new_direction_is_reverse:boolean = !data.reversed_growth_direction
 
         let new_treerings:TreeringInfo[] = []
-        const n:number = previous.treerings?.length ?? 0;
+        const n:number = data.treerings?.length ?? 0;
         if(n > 0){
-            const year_0:number = previous.treerings![0]!.year;
-            const year_n:number = previous.treerings![n-1]!.year;
+            const year_0:number = data.treerings![0]!.year;
+            const year_n:number = data.treerings![n-1]!.year;
             const year_min:number = Math.min(year_0, year_n)
             const year_max:number = Math.max(year_0, year_n)
             let new_years:number[] = base.util.arange(year_min, year_max+1)
             if(new_direction_is_reverse)
                 new_years = new_years.reverse()
-            new_treerings = previous.treerings!.map( 
+            new_treerings = data.treerings!.map( 
                 (r:TreeringInfo, i:number) => {
                     return {
                         year: new_years[i]!,
@@ -190,19 +191,18 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
             )
         }
 
+        const new_data:typeof data = {
+            ...data,
+            treerings: new_treerings,
+            reversed_growth_direction: new_direction_is_reverse,
+        }
+
         const new_result = new CARROT_Result(
             previous.status,
             previous.raw,
             previous.inputname,
-            previous.classmap ?? undefined,
-            previous.cells ?? undefined,
-            new_treerings,
-            previous.cellsmap ?? undefined,
-            previous.treeringsmap ?? undefined,
-            previous.imagesize ?? undefined,
+            new_data,
         )
-        new_result.reversed_growth_direction = new_direction_is_reverse;
-        new_result.px_per_um = previous.px_per_um;
         return new_result;
     }
 
@@ -211,10 +211,14 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
         index:   number, 
         new_year:number,
     ): CARROT_Result|null {
-        const rings:TreeringInfo[]|null = previous.treerings;
+        const data:CARROT_Data|null = previous.data;
+        if( !data || !('treerings' in data) )
+            return previous;
+
+        const rings:TreeringInfo[]|null = data.treerings;
         if(rings == null || rings.length <= index)
             return null;
-        const reversed:boolean = previous.reversed_growth_direction
+        const reversed:boolean = data.reversed_growth_direction
 
         const ring_points:PointPair[][] = 
             rings.map( (ring:TreeringInfo) => ring.coordinates )
@@ -226,20 +230,16 @@ export class CARROT_Result extends base.segmentation.SegmentationResult {
         const new_treerings:TreeringInfo[] = 
             _zip_into_treerings(ring_points, new_years)
         
-        // TODO: this should be done in carrot_detection.ts
+        const new_data:typeof data = {
+            ...data,
+            treerings: new_treerings,
+        }
         const new_result:CARROT_Result = new CARROT_Result(
             previous.status,
             previous.raw,
             previous.inputname,
-            previous.classmap ?? undefined,
-            previous.cells ?? undefined,
-            new_treerings,
-            previous.cellsmap ?? undefined,
-            previous.treeringsmap ?? undefined,
-            previous.imagesize ?? undefined,
+            new_data,
         )
-        new_result.px_per_um = previous.px_per_um;
-        new_result.reversed_growth_direction = previous.reversed_growth_direction;
         return new_result;
     }
 }
@@ -253,7 +253,13 @@ async function validate_zipped_result<T extends BaseResult>(
     >
 ): Promise<T|null> {
     const baseresult:BaseResult|null = await validate_legacy_zipped_result(raw, ctor)
-    if( !(baseresult instanceof CARROT_Result) )
+    if( !(baseresult instanceof CARROT_Result)
+    || baseresult.data == null
+    || !('cellmap' in baseresult.data )
+    || !baseresult.data.cellmap
+    || !('treeringmap' in baseresult.data)
+    || !baseresult.data.treeringmap
+    )
         return null;
     
     if(base.files.is_input_and_file_pair(raw)
@@ -267,42 +273,57 @@ async function validate_zipped_result<T extends BaseResult>(
         if(zipcontents instanceof Error)
             return null;
         
-        const ringmappath     = `${raw.input.name}.ring_map.png`
-        const associationpath = `${raw.input.name}.associationdata.json`
-        const ringmap:File|undefined     = zipcontents[ringmappath]
-        const association:File|undefined = zipcontents[associationpath]
-        if(association == undefined
+        const ringmappath   = `${raw.input.name}.ring_map.png`
+        const treeringspath = `${raw.input.name}/treerings.json`
+        const cellspath     = `${raw.input.name}/cells.json`
+        const ringmap:      File|undefined = zipcontents[ringmappath]
+        const treeringsfile:File|undefined = zipcontents[treeringspath]
+        const cellsfile:    File|undefined = zipcontents[cellspath]
+        if(treeringsfile == undefined
+        || cellsfile == undefined
         || ringmap == undefined)
             return null;
         
-        const adata:AssociationData|null = 
-            validate_association_data(await association.text())
-        if(adata == null)
+        const cellsdata:CellsAssociationData|null = 
+            validate_cells_association_data(await cellsfile.text())
+        if(cellsdata == null)
             return null;
         
+        const ringsdata:RingsAssociationData|null = 
+            validate_ringsonly_association_data(await treeringsfile.text())
+        if(ringsdata == null)
+            return null
+        
         const ring_points:PointPair[][] = 
-            convert_2x2_number_tuple_dual_array_to_points(adata.ring_points)
-        const rings:TreeringInfo[] = _zip_into_treerings(ring_points, adata.ring_years)
+            convert_2x2_number_tuple_dual_array_to_points(ringsdata.ring_points)
+        const rings:TreeringInfo[] = 
+            _zip_into_treerings(ring_points, ringsdata.ring_years)
         const imagesize:base.util.ImageSize = {
-            width:  adata.imagesize[0],
-            height: adata.imagesize[1],
+            width:  cellsdata.imagesize[0],
+            height: cellsdata.imagesize[1],
         }
 
+        const data:CellsAndTreeringsData = {
+            colored_cellmap: ringmap,
+            cellmap:         baseresult.data.cellmap,
+            treeringmap:     baseresult.data.treeringmap,
+            cells:     cellsdata.cells,
+            treerings: rings,
+            imagesize: imagesize,
+            // NOTE: px_per_um updated in state.ts (for now)
+            px_per_um: NaN,
+            reversed_growth_direction: 
+                ringsdata.reversed_growth_direction ?? false,
+        }
         return new ctor(
             'processed',
             raw,
             baseresult.inputname,
-            ringmap, 
-            adata.cells, 
-            rings,
-            baseresult.cellsmap ?? undefined,
-            baseresult.treeringsmap ?? undefined,
-            imagesize,
+            data,
         )
     }
     else return null;
 }
-
 
 
 async function validate_legacy_zipped_result<T extends BaseResult>(
@@ -329,17 +350,17 @@ async function validate_legacy_zipped_result<T extends BaseResult>(
         const ringmapfile:File|undefined = zipcontents[ringmappath];
 
         if(cellmapfile || ringmapfile){
+            const data:LegacySavedMapOnlyUnfinishedData = {
+                cellmap:     cellmapfile!,
+                treeringmap: ringmapfile!,
+            }
             // 'processing' because need to send to a backend to extract 
             // cells & ring coordinates
             return new ctor(
                 'processing', 
                 raw, 
                 raw.input.name,
-                undefined,   //classmap
-                undefined,   //treerings
-                undefined,   //cells
-                cellmapfile, //cellmap
-                ringmapfile, //treeringmap
+                data,
             )
         }
         else return null;
@@ -399,21 +420,21 @@ async function validate_cells_only_unzipped<T extends BaseResult>(
     >
 ): Promise<T|null> {
     await 0;
+    const nfiles:number = Object.keys(zipdata).length;
+    if(nfiles != 1)
+        return null;
+
     const cellmappath = `${inputname}/${inputname}.cells.png`
     const cellmap:File|undefined = zipdata[cellmappath]
     if(!cellmap)
         return null;
 
+    const data:CellMapOnlyUnfinishedData = {cellmap};
     return new ctor(
         'processed',
         zipdata,
         inputname,
-        cellmap,
-        undefined,
-        undefined,
-        cellmap,
-        undefined,
-        undefined,
+        data,
     )
 }
 
@@ -426,6 +447,10 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
         ConstructorParameters<typeof CARROT_Result>
     >
 ): Promise<T|null> {
+    const nfiles:number = Object.keys(zipdata).length;
+    if(nfiles != 2)
+        return null;
+    
     const boundariespath  = `${inputname}/${inputname}.treerings.png`
     const associationpath = `${inputname}.associationdata.json`
     const boundarymap:File|undefined = zipdata[boundariespath]
@@ -434,7 +459,7 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
     || boundarymap == undefined)
         return null;
     
-    const adata:RingsOnlyAssociationData|null = 
+    const adata:RingsAssociationData|null = 
         validate_ringsonly_association_data(await association.text())
     if(adata == null)
         return null;
@@ -444,16 +469,18 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
     const rings:TreeringInfo[] = 
         _zip_into_treerings(ring_points, adata.ring_years)
 
+    const data:TreeringsOnlyData = {
+        treerings:   rings,
+        treeringmap: boundarymap,
+        reversed_growth_direction: adata.reversed_growth_direction ?? false,
+        // NOTE: px_per_um is updated in state.ts (for now)
+        px_per_um:   NaN,
+    }
     return new ctor(
         'processed',
         zipdata,
         inputname,
-        undefined,
-        undefined,
-        rings,
-        undefined,
-        boundarymap,
-        undefined,
+        data,
     )
 }
 
@@ -481,25 +508,18 @@ export function _zip_into_treerings(
 
 
 
-type AssociationData = {
-    ring_points: TwoNumberTuple[][]; 
-    ring_years?: number[];
+type CellsAssociationData = {
     cells:       CellInfo[];
     imagesize:   TwoNumbers;
 }
 
-function validate_association_data(raw:string): AssociationData|null {
+function validate_cells_association_data(raw:string): CellsAssociationData|null {
     const jsondata:unknown|Error = 
         base.util.parse_json_no_throw(raw)
     if(jsondata instanceof Error)
         return null;
 
     if(base.util.is_object(jsondata)
-        && base.util.has_property_of_type(
-            jsondata, 
-            'ring_points', 
-            validate_2x2_number_tuple_dual_array,
-        )
         && base.util.has_property_of_type(
             jsondata, 
             'cells', 
@@ -515,12 +535,14 @@ function validate_association_data(raw:string): AssociationData|null {
     else return null;
 }
 
-type RingsOnlyAssociationData = {
+// TODO: why not simply TreeringInfo[] ?
+type RingsAssociationData = {
     ring_points: TwoNumberTuple[][]; 
+    reversed_growth_direction?: boolean;
     ring_years?: number[];
 }
 
-function validate_ringsonly_association_data(raw:string): RingsOnlyAssociationData|null {
+function validate_ringsonly_association_data(raw:string): RingsAssociationData|null {
     const jsondata:unknown|Error = 
         base.util.parse_json_no_throw(raw)
     if(jsondata instanceof Error)
@@ -530,8 +552,7 @@ function validate_ringsonly_association_data(raw:string): RingsOnlyAssociationDa
     && base.util.has_property_of_type(
         jsondata, 
         'ring_points', 
-        validate_2x2_number_tuple_dual_array,
-    )){
+        validate_2x2_number_tuple_dual_array)){
         return jsondata;
     }
     else return null;
@@ -581,14 +602,14 @@ function format_cells_for_export(
 
     for(const i in cells){
         const cell:CellInfo = cells[i]!
-        if(cell.year == 0)
+        if(cell.year_index == 0)
             continue;
         
         if(box_distance_from_border(cell.box_xy, imagesize) < ignore_buffer_px)
             continue;
         
         const celldata:string[] = [
-            years[cell.year-1]?.toFixed(0) ?? '',
+            years[cell.year_index-1]?.toFixed(0) ?? '',
             box_center(cell.box_xy)[0].toFixed(0),
             box_center(cell.box_xy)[1].toFixed(0),
             cell.area.toFixed(1),
@@ -737,7 +758,7 @@ function validate_cellinfo(x:unknown): CellInfo|null {
     if(base.util.is_object(x)
     && base.util.has_number_property(x, 'id')
     && base.util.has_number_property(x, 'area')
-    && base.util.has_number_property(x, 'year')
+    && base.util.has_number_property(x, 'year_index')
     && base.util.has_property_of_type(
         x, 
         'box_xy', 
@@ -784,17 +805,77 @@ function convert_treerings_to_points(treerings:TreeringInfo[]):TwoNumberTuple[][
 }
 
 
+function export_cellsonly(
+    data: CellsOnlyData, 
+    inputname: string, 
+    years?:    number[],
+): Record<string, File> {
+    console.warn('TODO: get ignore_buffer_px from settings')
+    const ignore_buffer_px:number = 8;
+    years = years ?? data.cells.map( (c:CellInfo) => c.year_index )
+    const celldata:CellsAssociationData = {
+        cells:     data.cells,
+        imagesize: [data.imagesize.width, data.imagesize.height],
+    }
+    return {
+        [`${inputname}.cell_statistics.csv`] : format_cells_for_export(
+            data.cells, 
+            years, 
+            data.imagesize, 
+            data.px_per_um, 
+            ignore_buffer_px
+        ),
+        [`${inputname}/cells.json`]: 
+            new File([JSON.stringify(celldata)], 'cells.json'),
+        [`${inputname}/${inputname}.cells.png`]: data.cellmap,
+    }
+}
+
+function export_treeringsonly(
+    data:TreeringsOnlyData, 
+    inputname:string
+): Record<string, File> {
+    const years:number[] = data.treerings.map((x:TreeringInfo) => x.year)
+
+    const associationdata: RingsAssociationData = {
+        ring_points: convert_treerings_to_points(data.treerings),
+        ring_years:  years,
+        reversed_growth_direction: data.reversed_growth_direction,
+    }
+    return {
+        [`${inputname}.tree_ring_statistics.csv`] :
+            format_treerings_for_export(data.treerings, data.px_per_um),
+        [`${inputname}/treerings.json`]: 
+            new File([JSON.stringify(associationdata)], 'treerings.json'),
+        [`${inputname}/${inputname}.treerings.png`]: data.treeringmap,
+    }
+}
+
+function export_full(
+    data:CellsAndTreeringsData, 
+    inputname:string
+): Record<string, File> {
+    return {
+        ...export_cellsonly(data, inputname),
+        ...export_treeringsonly(data, inputname),
+        [`${inputname}.ring_map.png`]: data.colored_cellmap,
+    }
+}
+
+
 
 export type UnfinishedCARROT_Result = {
         status:       Extract<CARROT_Result['status'], 'processing'>
         inputname:    Extract<CARROT_Result['inputname'], string>
-} & ({
-        cellsmap:     Extract<CARROT_Result['cellsmap'],     Blob>;
-        treeringsmap: Extract<CARROT_Result['treeringsmap'], Blob|null>;
-} | {
-        cellsmap:     Extract<CARROT_Result['cellsmap'],     Blob|null>;
-        treeringsmap: Extract<CARROT_Result['treeringsmap'], Blob>;
-})
+        data: LegacySavedMapOnlyUnfinishedData
+}
+// } & ({
+//         cellsmap:     Extract<CARROT_Result['cellsmap'],     Blob>;
+//         treeringsmap: Extract<CARROT_Result['treeringsmap'], Blob|null>;
+// } | {
+//         cellsmap:     Extract<CARROT_Result['cellsmap'],     Blob|null>;
+//         treeringsmap: Extract<CARROT_Result['treeringsmap'], Blob>;
+// })
 
 export abstract class CARROT_Backend
 extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Settings> {
@@ -820,18 +901,19 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
     
     async process_cell_association(r:UnfinishedCARROT_Result): 
     Promise<CARROT_Result>{
-
-        if(r.cellsmap == null && r.treeringsmap == null)
+        const data:LegacySavedMapOnlyUnfinishedData = r.data
+        
+        if(!('cellmap' in data) && !('treeringmap' in data))
             return new CARROT_Result('failed')
         
-        const recluster:boolean = (!!r.treeringsmap)
-        if(r.cellsmap)
+        const recluster:boolean = !!('treeringmap' in data)
+        if('cellmap' in data)
             await base.util.upload_file_no_throw(
-                new File([r.cellsmap], `${r.inputname}.cells.png`)
+                new File([data.cellmap], `${r.inputname}.cells.png`)
             )
-        if(r.treeringsmap)
+        if('treeringmap' in data)
             await base.util.upload_file_no_throw(
-                new File([r.treeringsmap], `${r.inputname}.treerings.png`)
+                new File([data.treeringmap], `${r.inputname}.treerings.png`)
             )
         
         const response:Error|Response = 
@@ -843,8 +925,8 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
         const full_result = 
             (await CARROT_Result.validate(response) as CARROT_Result|null)
-        if(full_result && full_result?.px_per_um == null)
-            full_result.px_per_um = this.settings.micrometer_factor
+        if(full_result && full_result.data && 'px_per_um' in full_result.data)
+            full_result.data.px_per_um = this.settings.micrometer_factor
         return full_result ?? new CARROT_Result('failed')
     }
 
@@ -871,8 +953,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         
         const result: base.files.Result|null = 
             await CARROT_Result.validate(response)
-        if(result instanceof CARROT_Result && result?.px_per_um == null)
-            result.px_per_um = this.settings.micrometer_factor
+        if(result instanceof CARROT_Result 
+        && result.data
+        && ('px_per_um' in result.data)
+        && isNaN(result.data.px_per_um) )
+            result.data.px_per_um = this.settings.micrometer_factor
         
         if(result != null)
             return result as CARROT_Result

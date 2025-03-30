@@ -1,6 +1,7 @@
 import { base, preact, Signal, JSX } from "../dep.ts"
 import { 
     CARROT_Result,
+    CARROT_Data,
     TreeringInfo,
     compute_treering_width,
     _zip_into_treerings,
@@ -28,8 +29,14 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
 
     render(props:TreeringsSVGOverlayProps): JSX.Element {
         const viewbox = `0 0 ${props.size.width} ${props.size.height}`
+        const resultdata:CARROT_Data = props.$result.value.data;
+        const treerings:TreeringInfo[] = 
+            ('treerings' in resultdata)? resultdata.treerings : [];
+        const px_per_um:number = 
+            ('px_per_um' in resultdata)? resultdata.px_per_um : 1.0;
+
         const treerings_svg: JSX.Element[]|undefined = 
-            props.$result.value.treerings?.map( 
+            treerings.map( 
                 (ring:TreeringInfo, i:number) => 
                     <TreeringComponent 
                         index           = { i }
@@ -39,7 +46,7 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
                         year            = { ring.year }
                         on_new_year     = { this.on_new_year }
                         $scale          = { props.$scale }
-                        px_per_um       = { props.$result.value.px_per_um ?? 1.0}
+                        px_per_um       = { px_per_um }
                     /> 
             )
 
@@ -61,7 +68,8 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
     /** Called when user wants to modify a year number */
     on_new_year = (index:number, new_year:number) => {
         const old_result:CARROT_Result = this.props.$result.value;
-        const rings:TreeringInfo[] = this.props.$result.value.treerings ?? []
+        const rings:TreeringInfo[] = 
+            ('treerings' in old_result.data)? old_result.data.treerings : [];
         if(rings.length <= index){
             console.error(`Cannot update tree ring index ${index}`)
             return;

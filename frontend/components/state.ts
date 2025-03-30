@@ -2,7 +2,8 @@ import { base } from "../dep.ts"
 import { 
     CARROT_Result, 
     CARROT_Backend, 
-    UnfinishedCARROT_Result 
+    CARROT_Data,
+    LegacySavedMapOnlyUnfinishedData,
 } from "../lib/carrot_detection.ts"
 import { CARROT_Settings } from "../lib/carrot_settings.ts"
 
@@ -27,9 +28,12 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
     ): Promise<void>{
         await super.set_files(files_raw);
 
-        for(const pair of this.$files.value)
-            (pair.$result.value as CARROT_Result).px_per_um = 
-                this.$settings.value?.micrometer_factor ?? null;
+        for(const pair of this.$files.value){
+            const result = pair.$result.value as CARROT_Result;
+            if(result.data && 'px_per_um' in result.data)
+                result.data.px_per_um = 
+                    this.$settings.value?.micrometer_factor ?? 1;
+        }
 
         // saved results do not contain all information that is needed
         // have to send those files to the backend for further processing
@@ -57,16 +61,19 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
 
             if(result instanceof CARROT_Result
             && base.util.is_string(result.inputname)
-            && (
-                has_cellsmap_but_no_cells(result)
-                || has_treeringsmap_but_no_treerings(result)
-            )){
+            && result.data
+            && is_unfinished(result.data) ){
+                const data:LegacySavedMapOnlyUnfinishedData = result.data;
                 pair.$result.value = 
                     await backend.process_cell_association({
                         status:       'processing',
                         inputname:    result.inputname,
-                        cellsmap:     result.cellsmap as File,
-                        treeringsmap: result.treeringsmap as File,
+                        data: {
+                            // @ts-ignore too tired to fight with typescript
+                            cellmap:     data.cellmap,
+                            // @ts-ignore too tired to fight with typescript
+                            treeringmap: data.treeringmap,
+                        }
                     })
             } else {
                 console.error('Unexpected unfinished result:', result)
@@ -76,12 +83,12 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
 }
 
 
-function has_cellsmap_but_no_cells(x:CARROT_Result): 
-x is CARROT_Result & {cells:null, cellsmap:File} {
-    return (x.cells == null && x.cellsmap instanceof File);
+function is_unfinished(x:CARROT_Data): x is LegacySavedMapOnlyUnfinishedData {
+    if('cellmap' in x && !('cells' in x))
+        return true;
+    else if('treeringmap' in x && !('treerings' in x))
+        return true;
+    else
+        return false
 }
 
-function has_treeringsmap_but_no_treerings(x:CARROT_Result):
-x is CARROT_Result & {treerings:null, treeringsmap:File} {
-    return (x.treerings == null && x.treeringsmap instanceof File)
-}
