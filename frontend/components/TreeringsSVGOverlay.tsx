@@ -19,12 +19,11 @@ type TreeringsSVGOverlayProps = {
 
     /** The current zoom level of the image */
     $scale?: Readonly<Signal<number>>;
-
-}
+} & base.ui_util.MaybeHiddenProps;
 
 
 export
-class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
+class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayProps>{
     ref: preact.RefObject<SVGSVGElement> = preact.createRef()
 
     render(props:TreeringsSVGOverlayProps): JSX.Element {
@@ -58,6 +57,7 @@ class TreeringsSVGOverlay extends preact.Component<TreeringsSVGOverlayProps> {
             style   = { {
                 pointerEvents:'none',
                 ...base.styles.overlay_css,
+                ...super.get_display_css(),
             } }
         >
             { treerings_svg }

@@ -40,6 +40,11 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         return this.props.$result.value.get_treering_coordinates_if_loaded() ?? [] 
     })
 
+    $overlays_visible:Readonly<Signal<boolean>> = signals.computed(() => {
+        console.log('$overlays_visible:', this.$result_visible.value, this.$active_editing_mode.value, this.$result_visible.value && (this.$active_editing_mode.value == null) )
+        return this.$result_visible.value && (this.$active_editing_mode.value == null)
+    })
+
 
     override result_overlays(): JSX.Element {
         const result:CARROT_Result = this.props.$result.value;
@@ -49,15 +54,15 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             ('cellmap' in result.data)? result.data.cellmap :
             ('treeringmap' in result.data)? result.data.treeringmap : null;
         return <>
-            {/* TODO: need to hide overlays when editing is active. */}
             <base.imageoverlay.ImageOverlay 
                 image     = {overlayimage}        
-                $visible  = {this.$result_visible}
+                $visible  = {this.$overlays_visible}
             />
             <TreeringsSVGOverlay 
                 size = { this.$og_imagesize.value ?? {height:0, width:0} }
                 $result = { this.props.$result }
                 $scale  = { this.$scale }
+                $visible = { this.$overlays_visible }
             />
             <EditCanvas 
                 ref = {this.canvas_ref} 
