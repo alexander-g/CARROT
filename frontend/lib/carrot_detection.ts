@@ -452,7 +452,7 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
         return null;
     
     const boundariespath  = `${inputname}/${inputname}.treerings.png`
-    const associationpath = `${inputname}.associationdata.json`
+    const associationpath = `${inputname}/treerings.json`
     const boundarymap:File|undefined = zipdata[boundariespath]
     const association:File|undefined = zipdata[associationpath]
     if(association == undefined

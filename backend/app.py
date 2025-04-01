@@ -130,6 +130,7 @@ class App(BaseApp):
         if not all(targetfiles):
             flask.abort(404)
         
+        # learning rate & epochs, ne?
         ok = backend.training.start_training(imagefiles, targetfiles, trainingtype, self.settings)
         return ok
 
@@ -137,7 +138,7 @@ class App(BaseApp):
     def save_model(self):
         newname      = flask.request.args['newname']
         print('Saving training model as:', newname)
-        trainingtype = flask.request.args['options[training_type]']
+        trainingtype = flask.request.args['training_type']
         if trainingtype not in ['cells', 'treerings']:
             flask.abort(400) #bad request
         

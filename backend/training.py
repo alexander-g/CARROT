@@ -15,7 +15,7 @@ def start_training(imagefiles, targetfiles, trainingtype, settings):
         #indicate that the current model is unsaved
         settings.active_models[trainingtype] = ''
         ok = model.start_training(imagefiles, targetfiles, epochs='auto', num_workers=0, callback=training_progress_callback)
-        return 'OK' if ok else 'INTERRUPTED'
+        return 'OK' if ok in [True, None] else 'INTERRUPTED'
 
 def training_progress_callback(x):
     pubsub.PubSub.publish({'progress':x,  'description':'Training...'}, event='training')
