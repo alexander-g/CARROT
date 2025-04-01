@@ -930,11 +930,32 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         return full_result ?? new CARROT_Result('failed')
     }
 
+    #event_source?:EventSource;
+
     override async process(
         input: File, 
         on_progress?: ((x: base.files.InputResultPair<File, CARROT_Result>
     ) => void) | undefined): Promise<CARROT_Result> {
         on_progress?.({input, result:new this.ResultClass("processing")})
+
+        // TODO: refactor
+        this.#event_source?.close()
+        this.#event_source = new EventSource('stream');
+        this.#event_source.onmessage = (event:MessageEvent) => {
+            const data:ProgressMessage = JSON.parse(event.data)
+            if(data.image != input.name)
+                return;
+            
+            const r = new CARROT_Result('processing')
+            // TODO: this should be part of the constructor
+            r.progress = data.progress;
+            r.message  = (
+                data.stage == 'cells'? 'Detecting cells ...' :
+                data.stage == 'treerings'? 'Detecting tree rings ...':
+                undefined
+            )
+            on_progress?.({input, result:r })
+        }
 
         const upload_ok:Response|Error = await base.util.upload_file_no_throw(input)
         if(upload_ok instanceof Error)
@@ -964,4 +985,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         else 
             return new CARROT_Result('failed')
     }
+}
+
+
+type ProgressMessage = {
+    stage:    'cells'|'treerings';
+    progress: number;
+    image:    string;
 }
