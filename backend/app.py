@@ -1,4 +1,4 @@
-from base.backend.app import App as BaseApp, DenoConfig, get_models_path
+from base.backend.app import App as BaseApp, DenoConfig, get_models_path, is_debug
 from base.backend.paths import get_static_path, path_to_main_module
 
 
@@ -17,14 +17,15 @@ class App(BaseApp):
     def __init__(self, *args, **kw):
         backend.settings.ensure_pretrained_models()
 
-        deno = DenoConfig(
-            root      = path_to_main_module(),
-            static    = get_static_path(),
-            index_tsx = 'index.tsx',
-            dep_ts    = 'dep.ts',
-            copy_globs= 'css/treerings.css,favicon.ico',
-        )
-        kw['deno_cfg'] = deno
+        if is_debug():
+            deno = DenoConfig(
+                root      = path_to_main_module(),
+                static    = get_static_path(),
+                index_tsx = 'index.tsx',
+                dep_ts    = 'dep.ts',
+                copy_globs= 'css/treerings.css,favicon.ico',
+            )
+            kw['deno_cfg'] = deno
         
         super().__init__(*args, **kw)
         if self.is_reloader:

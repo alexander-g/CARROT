@@ -11,7 +11,7 @@
   "tasks": {
     "compile_index": "./build.ts",
     "bundle_deps"  : "./backend/ts/esbuild.ts",
-    "cache":         "./deno.sh cache --allow-import ./build.ts ./frontend/dep.ts ./tests/testcases_deno/dep.ts",
+    "cache":         "deno cache --allow-import ./base/backend/ts/build.ts ./frontend/dep.ts ./tests/testcases_deno/dep.ts",
   },
 
   "imports": {

@@ -1,17 +1,14 @@
 --find-links https://download.pytorch.org/whl/torch_stable.html
-torch==1.10.1+cpu
-torchvision==0.11.2+cpu
-onnxruntime==1.7.0
+torch==2.2.1
+torchvision==0.17.1
 
-dill==0.3.2
-cloudpickle==2.0.0
-Flask==2.0.3
-numpy==1.17.2
-Pillow==7.1.2
-scikit-image==0.19.2
-
+Flask==3.0.3
 setuptools<45.0.0
-pyinstaller==3.5
+pyinstaller==6.12
 
-scipy==1.4.1
-matplotlib<3.2
+numpy==1.26.4
+pillow==10.2.0
+imagecodecs==2024.12.30
+scikit-image==0.23.2
+scipy==1.12.0
+matplotlib==3.8.4

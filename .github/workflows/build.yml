@@ -12,19 +12,21 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: 'recursive'
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.7'
+          python-version: '3.11'
           #cache: 'pip' # caching pip dependencies
       
       - name: Install requirements
-        run: pip install -r requirements.txt
+        run: |
+          ./deno.bat task cache
+          pip install -r requirements.frozen.txt
         
       - name: Build
         run: python build.py --zip
       
       - name: Archive binaries
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: binaries
           path: builds/*.zip

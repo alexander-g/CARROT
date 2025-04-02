@@ -12,18 +12,28 @@ os.environ['DO_NOT_RELOAD'] = 'true'
 from backend.app import App
 App().recompile_static(force=True)        #make sure the static/ folder is up to date
 
-build_name = '%s_CARROT'%(datetime.datetime.now().strftime('%Y-%m-%d_%Hh%Mm%Ss') )
-build_dir  = 'builds/%s'%build_name
+build_name = f'{datetime.datetime.now().strftime("%Y-%m-%d_%Hh%Mm%Ss")}_CARROT'
+build_dir  = f'builds/{build_name}'
 
-rc = subprocess.call(f'''pyinstaller --noupx                            \
-              --hidden-import=sklearn.utils._cython_blas     \
-              --hidden-import=skimage.io._plugins.tifffile_plugin   \
-              --hidden-import=skimage.morphology                    \
-              --hidden-import=skimage.graph                         \
-              --hidden-import=skimage.graph.heap                    \
-              --hidden-import=torchvision                           \
-              --additional-hooks-dir=./hooks                        \
-              --distpath {build_dir} main.py''')
+
+rc = subprocess.call(' '.join([
+    #'pyi-makespec',
+    'pyinstaller',
+    '--noupx',
+    '--hidden-import=sklearn.utils._cython_blas',
+    '--hidden-import=skimage.io._plugins.tifffile_plugin',
+    '--hidden-import=skimage.morphology',
+    '--hidden-import=skimage.graph',
+    '--hidden-import=skimage.graph.heap',
+    '--hidden-import=torchvision',
+    '--hidden-import=torchvision.models.feature_extraction',
+    '--exclude-module=_bootlocale',
+    '--additional-hooks-dir=./hooks',
+    f'--distpath={build_dir} ',
+    'main.py',
+]), shell=True)
+
+
 if rc!=0:
     print(f'PyInstaller exited with code {rc}')
     sys.exit(rc)
@@ -35,7 +45,7 @@ shutil.copy('models/pretrained_models.txt', build_dir+'/models/')
 if 'linux' in sys.platform:
     os.symlink('/main/main', build_dir+'/main.run')
 else:
-    open(build_dir+'/main.bat', 'w').write(r'main\main.exe'+'\npause')
+    shutil.copy('.github/workflows/scripts/main.bat', build_dir+'/main.bat')
 shutil.rmtree('./build')
 #shutil.copyfile('settings.json', build_dir+'/settings.json')
 os.remove('./main.spec')
