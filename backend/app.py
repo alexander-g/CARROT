@@ -15,8 +15,6 @@ import backend.settings  #important for some reason
 
 class App(BaseApp):
     def __init__(self, *args, **kw):
-        backend.settings.ensure_pretrained_models()
-
         if is_debug():
             deno = DenoConfig(
                 root      = path_to_main_module(),
