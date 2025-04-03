@@ -28,7 +28,7 @@ def process_cells(image_path:str, settings) -> str:
     #x     = model.load_image(image_path)
     x = image_path
     with GLOBALS.processing_lock:
-        print(f'Processing file {image_path} with model {settings.active_models["cells"]}')
+        print(f'Processing file {image_path} with cell model {settings.active_models["cells"]}')
         def on_progress(p):
             PubSub.publish({'progress':p, 'image':os.path.basename(image_path), 'stage':'cells'})
         y:np.ndarray|tp.Dict[str,np.ndarray] = \
@@ -50,7 +50,7 @@ def get_treeringsmap_name(image_path:str) -> str:
 def process_treerings(image_path, settings):
     model = settings.models['treerings']
     with GLOBALS.processing_lock:
-        print(f'Processing file {image_path} with model {settings.active_models["treerings"]}')
+        print(f'Processing file {image_path} with treering model {settings.active_models["treerings"]}')
         #x = model.load_image(image_path)
         x = image_path
         def on_progress(p):
@@ -85,7 +85,7 @@ def cache_treerings(result, image_path:str):
 def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
     '''Assign a tree ring label to each cell'''
     model = settings.models['treerings']
-    print(f'Processing file {image_path} with model {settings.active_models["treerings"]}')
+    print(f'Processing cells in file {image_path} with treering model {settings.active_models["treerings"]}')
 
     result = {
         'ring_map'    : None,

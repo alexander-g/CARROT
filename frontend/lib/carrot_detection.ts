@@ -599,17 +599,18 @@ function format_cells_for_export(
     ]
 
     let csv_text:string = header.join(', ')+'\n';
+    cells = cells.sort( (c0:CellInfo, c1:CellInfo) => c0.year_index - c1.year_index )
 
     for(const i in cells){
         const cell:CellInfo = cells[i]!
-        if(cell.year_index == 0)
+        if(cell.year_index == -1)
             continue;
         
         if(box_distance_from_border(cell.box_xy, imagesize) < ignore_buffer_px)
             continue;
         
         const celldata:string[] = [
-            years[cell.year_index-1]?.toFixed(0) ?? '',
+            years[cell.year_index]?.toFixed(0) ?? '',
             box_center(cell.box_xy)[0].toFixed(0),
             box_center(cell.box_xy)[1].toFixed(0),
             cell.area.toFixed(1),
@@ -812,7 +813,7 @@ function export_cellsonly(
 ): Record<string, File> {
     console.warn('TODO: get ignore_buffer_px from settings')
     const ignore_buffer_px:number = 8;
-    years = years ?? data.cells.map( (c:CellInfo) => c.year_index )
+    years = years ?? [...new Set(data.cells.map( (c:CellInfo) => c.year_index ))].sort()
     const celldata:CellsAssociationData = {
         cells:     data.cells,
         imagesize: [data.imagesize.width, data.imagesize.height],
@@ -855,8 +856,9 @@ function export_full(
     data:CellsAndTreeringsData, 
     inputname:string
 ): Record<string, File> {
+    const years:number[] = data.treerings.map( (r:TreeringInfo) => r.year )
     return {
-        ...export_cellsonly(data, inputname),
+        ...export_cellsonly(data, inputname, years),
         ...export_treeringsonly(data, inputname),
         [`${inputname}.ring_map.png`]: data.colored_cellmap,
     }

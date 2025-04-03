@@ -316,7 +316,7 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
         let parentwidth:number = 
             this.props.parentsvg?.getBoundingClientRect().width
             // deno-lint-ignore no-window
-            ?? window.innerWidth * 0.9;
+            || window.innerWidth * 0.9;
         const scale:number = this.props.$scale?.value ?? 1.0
         parentwidth = parentwidth / scale
         const imagewidth:number = 

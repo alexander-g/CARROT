@@ -41,7 +41,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     })
 
     $overlays_visible:Readonly<Signal<boolean>> = signals.computed(() => {
-        console.log('$overlays_visible:', this.$result_visible.value, this.$active_editing_mode.value, this.$result_visible.value && (this.$active_editing_mode.value == null) )
         return this.$result_visible.value && (this.$active_editing_mode.value == null)
     })
 
