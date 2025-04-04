@@ -20,8 +20,8 @@ class Settings(BaseSettings):
     
     #override
     @classmethod
-    def get_available_models(cls, *a, **kw) -> tp.Dict[str, tp.List]:
-        downloaded_models = super().get_available_models(*a, **kw)
+    def get_available_models(cls, with_properties=False, **kw) -> tp.Dict[str, tp.List]:
+        downloaded_models = super().get_available_models(with_properties, **kw)
         downloaded_modelnames = [
             info_or_name if isinstance(info_or_name, str) else info_or_name['name'] 
                 for _, modelslist in downloaded_models.items() 
@@ -35,12 +35,13 @@ class Settings(BaseSettings):
             if modelname in downloaded_modelnames:
                 continue
             modeltype = os.path.dirname(modelpath)
-            all_models[modeltype] = all_models.get(modeltype, []) + [{
+            modelinfo = modelname if not with_properties else {
                 'name': modelname,
                 'url':  modelurl,
                 'path': modelpath,
                 'properties': None,
-            }]
+            }
+            all_models[modeltype] = all_models.get(modeltype, []) + [modelinfo]
         return all_models
 
     @classmethod
@@ -50,8 +51,9 @@ class Settings(BaseSettings):
         additional_models = parse_pretrained_models_file()
         endings    = ['.pt.zip', '.pt']
         for ending in endings:
-            relpath = os.path.join(modeltype, f'{modelname}{ending}')
-            abspath = os.path.join(models_dir, relpath)
+            # NOTE: not using os.path.join because of windows
+            relpath = f'{modeltype}/{modelname}{ending}'
+            abspath = os.path.join(models_dir, modeltype, f'{modelname}{ending}')
             if not os.path.exists(abspath) and relpath in additional_models:
                 download_file(additional_models[relpath], abspath)
             
