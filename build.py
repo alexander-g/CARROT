@@ -27,6 +27,7 @@ rc = subprocess.call(' '.join([
     '--hidden-import=skimage.graph.heap',
     '--hidden-import=torchvision',
     '--hidden-import=torchvision.models.feature_extraction',
+    '--hidden-import=imagecodecs._imcd',
     '--exclude-module=_bootlocale',
     '--additional-hooks-dir=./hooks',
     f'--distpath={build_dir} ',
