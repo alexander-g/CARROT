@@ -67,7 +67,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 ref = {this.canvas_ref} 
                 $active_mode = { this.$active_editing_mode }
                 $erase       = { this.$erase }
-                $imagesize   = { this.$og_imagesize }
+                $imagesize   = { this.$imagesize }
                 $brush_size  = { this.$editing_brush_size }
                 $inputblob   = { signals.computed(() => 
                     _get_map_for_editmode(

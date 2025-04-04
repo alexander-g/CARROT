@@ -101,6 +101,9 @@ def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
         #cannot do anything without tree ring data
         return None
 
+    if os.path.exists(image_path):
+        result['imagesize']   = PIL.Image.open(image_path).size
+    
     if os.path.exists(treerings_cachefile):
         # load previously computed boundary points from cache
         cached_treerings = json.load(open(treerings_cachefile))
@@ -111,14 +114,18 @@ def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
         treering_segmentation  = PIL.Image.open(
             get_treeringsmap_name(image_path)
         ).convert('L')
-        result['imagesize']    = treering_segmentation.size
+        if result['imagesize'] is None:
+            # shouldnt happend
+            result['imagesize'] = treering_segmentation.size
         treering_segmentation  = treering_segmentation / np.float32(255)
-        y                      = model.segmentation_to_points(treering_segmentation)
-        ring_points            = y['ring_points']    
+        method = model.segmentation_to_points
+        if accepts_argument(method, 'og_size'):
+            y = method(treering_segmentation, og_size=result['imagesize'])
+        else:
+            y = method(treering_segmentation)
+        ring_points = y['ring_points']    
 
     result['ring_points'] = [np.stack([a, b], axis=1).tolist() for a,b in ring_points]
-    if os.path.exists(image_path):
-        result['imagesize']   = PIL.Image.open(image_path).size
 
     cellmap_path = get_cellsmap_name(image_path)
     # NOTE: useless when editing

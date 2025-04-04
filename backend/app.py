@@ -48,7 +48,7 @@ class App(BaseApp):
                 _ignored = backend.processing.process_cells(full_path, self.settings)
             if treerings:
                 result = backend.processing.process_treerings(full_path, self.settings)
-                results[f'{imagename}.associationdata.json'] = json.dumps({
+                results[f'{imagename}/treerings.json'] = json.dumps({
                     'ring_points': result['ring_points'],
                 }).encode('utf8')
             
