@@ -63,17 +63,11 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
             && base.util.is_string(result.inputname)
             && result.data
             && is_unfinished(result.data) ){
-                const data:LegacySavedMapOnlyUnfinishedData = result.data;
                 pair.$result.value = 
                     await backend.process_cell_association({
                         status:       'processing',
                         inputname:    result.inputname,
-                        data: {
-                            // @ts-ignore too tired to fight with typescript
-                            cellmap:     data.cellmap,
-                            // @ts-ignore too tired to fight with typescript
-                            treeringmap: data.treeringmap,
-                        }
+                        data:         result.data
                     })
             } else {
                 console.error('Unexpected unfinished result:', result)

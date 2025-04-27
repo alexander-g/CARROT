@@ -150,8 +150,9 @@ export class CARROT_Result extends base.files.Result {
         if(result != null)
             return result as T;
         
-
-        // TODO: single or multiple .png files
+        result = await validate_mask_file(raw, this)
+        if(result != null)
+            return result as T;
        
         return null
     }
@@ -406,6 +407,55 @@ async function validate_backend_response<T extends BaseResult>(
             return result;
 
         return null;
+    }
+    else return null;
+}
+
+/** Validate if result file is a potential cells or treerings mask */
+async function validate_mask_file<T extends BaseResult>(
+    raw:unknown, 
+    ctor:base.util.ClassWithValidate<
+        T & CARROT_Result, 
+        ConstructorParameters<typeof CARROT_Result>
+    >
+): Promise<T|null> {
+    if(base.files.is_input_and_file_pair(raw)){
+        if(base.files.match_resultfile_to_inputfile(
+            raw.input, 
+            raw.file, 
+            ['.treerings.png']
+        ) && await base.imagetools.is_png(raw.file)){
+            const data:TreeringMapOnlyUnfinishedData = {
+                treeringmap: raw.file,
+            }
+
+            // 'processing' because need to send to a backend to extract 
+            // ring coordinates
+            return new ctor(
+                'processing', 
+                raw, 
+                raw.input.name,
+                data,
+            )
+        } else if(base.files.match_resultfile_to_inputfile(
+            raw.input, 
+            raw.file, 
+            ['.cells.png']
+        ) && await base.imagetools.is_png(raw.file)){
+            const data:CellMapOnlyUnfinishedData = {
+                cellmap: raw.file,
+            }
+
+            // 'processing' because need to send to a backend to extract 
+            // cell coordinates
+            return new ctor(
+                'processing', 
+                raw, 
+                raw.input.name,
+                data,
+            )
+        }
+        else return null;
     }
     else return null;
 }
@@ -909,7 +959,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             return new CARROT_Result('failed')
         
         const recluster:boolean = !!('treeringmap' in data)
-        if('cellmap' in data)
+        if('cellmap' in data) // TODO: && data.cellmap != undefined
             await base.util.upload_file_no_throw(
                 new File([data.cellmap], `${r.inputname}.cells.png`)
             )
