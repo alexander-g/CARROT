@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_requests:
+    branches:
+      - master
+
+  workflow_dispatch:
+
+env:
+  NO_COLOR: "true"
+
+
+jobs:
+  unittests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+
+      - name: Cache deno dependencies
+        run: |
+          ./deno.sh task cache
+
+      - name: Deno check
+        run: |
+          ./deno.sh check frontend/ts/index.tsx
+
+      - name: Run unit tests
+        id:   unittests
+        run: ./run_tests_deno.sh
+
