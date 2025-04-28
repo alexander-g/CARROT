@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  pull_requests:
+  pull_request:
     branches:
       - master
 
@@ -26,7 +26,7 @@ jobs:
 
       - name: Deno check
         run: |
-          ./deno.sh check frontend/ts/index.tsx
+          ./deno.sh check frontend/index.tsx
 
       - name: Run unit tests
         id:   unittests
