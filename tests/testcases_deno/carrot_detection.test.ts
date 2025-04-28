@@ -154,3 +154,28 @@ Deno.test('import.legacy_v0', async () => {
     asserts.assertInstanceOf(imported.data.cellmap, File)
     asserts.assertInstanceOf(imported.data.treeringmap, File)
 })
+
+
+Deno.test('import.treeringsrings-png', async () => {
+    const rawdata:Uint8Array = Deno.readFileSync(
+        import.meta.resolve('./assets/ringsonly/ELD_QURO_637A_4.jpg.treerings.png')
+        .replace('file://', '')
+    )
+    const inputname = 'ELD_QURO_637A_4.jpg'
+
+    const maskfile:File = 
+        new File([rawdata], `${inputname}.treerings.png`)
+    
+    const input_file_pair = {input:{name:inputname}, file:maskfile}
+    const imported:CARROT_Result|null 
+        = await CARROT_Result.validate<CARROT_Result>(input_file_pair)
+
+    asserts.assertExists(imported)
+    asserts.assertEquals(imported.status, 'processing')
+    asserts.assert( !('cellmap' in imported.data) )
+    asserts.assert('treeringmap' in imported.data)
+    asserts.assertInstanceOf(imported.data.treeringmap, File)
+})
+
+
+
