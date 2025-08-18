@@ -44,6 +44,12 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         return this.$result_visible.value && (this.$active_editing_mode.value == null)
     })
 
+    $dim_input_image_when_editing: Readonly< Signal<JSX.CSSProperties> > = 
+        signals.computed( () => {
+            const edit_on:boolean = (this.$active_editing_mode.value != null)
+            return (edit_on) ? {filter:'brightness(0.7)'} : {};
+        } )
+
 
     override result_overlays(): JSX.Element {
         const result:CARROT_Result = this.props.$result.value;
@@ -154,6 +160,11 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         this.props.$result.value = 
             CARROT_Result.reverse_growth_direction(this.props.$result.value)
     }
+
+    override input_image_css(): 
+    Readonly<signals.Signal<JSX.CSSProperties>> | undefined {
+        return this.$dim_input_image_when_editing
+    }
 }
 
 
@@ -201,11 +212,21 @@ class EditMenu extends preact.Component<EditMenuProps> {
         () => this.props.$active_mode.value ? 'active': null
     )
 
+    /** Whether the "Erase" button should be active */
     $erase_active: Readonly<Signal<'active'|null>> = signals.computed(
         () => this.props.$erase.value ? 'active' : null
     )
+    /** Whether the "Paint" button should be active */
     $paint_active: Readonly<Signal<'active'|null>> = signals.computed(
         () => this.props.$erase.value ? null : 'active'
+    )
+    /** Whether the "Reverse direction" button should be active */
+    $reverse_active: Readonly<Signal<JSX.CSSProperties>> = signals.computed(
+        () => ({
+            display:base.ui_util.boolean_to_display_css(
+                (this.props.$active_mode.value == null)
+            )
+        })
     )
 
 
@@ -235,6 +256,7 @@ class EditMenu extends preact.Component<EditMenuProps> {
                 </div>
                 <div
                     class = "item edit-mode edit-growth-direction" 
+                    style = { this.$reverse_active.value }
                     onClick = {this.props.on_reverse_growth_direction}
                 >
                     <i class="exchange alternate icon"></i>
@@ -395,6 +417,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
                 class  = "editing-canvas overlay" 
                 style  = {css}
                 onMouseDown = { this.on_mousedown }
+                onMouseMove = { this.on_mousemove }
             > </canvas>
         }
 
@@ -412,17 +435,6 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         paste_blob_onto_canvas(this.ref.current, this.props.$inputblob.value)
     }
 
-    apply() {
-        this.ref.current?.toBlob( (blob:Blob|null) => {
-            if(!blob){
-                console.error('Could not convert canvas to blob')
-                return;
-            }
-
-
-        } )
-    }
-
     clear() {
         
     }
@@ -434,6 +446,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         return promise;
     }
 
+    _dragging:boolean = false;
     on_mousedown = (mousedown_event:MouseEvent):boolean => {
         if(this.ref.current == null
         || this.props.$active_mode.value == null)
@@ -449,17 +462,32 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         
         const erase:boolean = this.props.$erase.value;
         ctx.strokeStyle = erase? "black" : "white";
-        ctx.lineWidth   = this.props.$brush_size.value;
+        ctx.lineWidth   = Math.max(1, this.props.$brush_size.value);
         //double size for easier removing
         ctx.lineWidth = erase? ctx.lineWidth*2 : ctx.lineWidth;
         ctx.lineCap   = 'round';
+        // actually erase, not just paint over
+        ctx.globalCompositeOperation = erase? 'destination-out': 'source-over';
         
+        this._dragging = true;
+        //TODO: make this a function
+        if(this._previous_patch){
+            const patchdata = new ImageData(
+                new Uint8ClampedArray(this._previous_patch.pixels), 
+                this._previous_patch.coords[2], 
+                this._previous_patch.coords[3], 
+            );
+            ctx.putImageData(patchdata, this._previous_patch.coords[0], this._previous_patch.coords[1])
+        }
+        this._previous_patch = undefined;
+
         type Point = base.util.Point;
         let _prev:Point|null = null
         base.ui_util.start_drag(
             mousedown_event, 
             this.ref.current, 
             this.props.$imagesize.value!,
+            // on_move
             (start:Point, end:Point) => { 
                 ctx.beginPath();
                 
@@ -470,12 +498,99 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
                 ctx.stroke();
                 
                 _prev = end;
+            },
+            // on_end
+            () => {
+                this._dragging = false;
             }
         )
 
         // stop propagating event
         return true;
     }
+
+   
+
+    on_mousemove = (mouse_event:MouseEvent):boolean => {
+
+        if(this.ref.current == null)
+            return false;
+        
+        // ignore if shift key is pressed; user wants to move the image
+        if(mouse_event.shiftKey)
+            return false;
+
+        if(this._dragging)
+            return false;
+
+        const ctx:CanvasRenderingContext2D|null = this.ref.current.getContext('2d')
+        if(ctx == null)
+            return false;
+        
+        this._restore_cursor_patch(ctx)
+        
+        const erase:boolean = this.props.$erase.value;
+        ctx.strokeStyle = "red";
+        ctx.lineWidth   = Math.max(1, this.props.$brush_size.value)
+        //double size for easier removing
+        ctx.lineWidth = erase? ctx.lineWidth*2 : ctx.lineWidth;
+        ctx.lineCap   = 'round';
+        ctx.globalCompositeOperation = 'source-over';
+
+        const p: base.util.Point = base.ui_util.page2element_coordinates(
+            {x:mouse_event.pageX, y:mouse_event.pageY},
+            this.ref.current, 
+            this.props.$imagesize.value!,
+        )
+
+        
+        this._save_cursor_patch(ctx, p)
+
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+
+        // dont stop propagating event
+        return false;
+    }
+
+
+    /** A patch of image data before drawing the cursor */
+    _previous_patch?:{
+        coords: [number,number,number,number],
+        pixels: Uint8ClampedArray,
+    } = undefined;
+
+    /** Store a patch of image data before drawring the cursor */
+    _save_cursor_patch(ctx:CanvasRenderingContext2D, p:base.util.Point) {
+        const patchsize:number = ctx.lineWidth*2+1;
+        const patch_coords:[number,number,number,number] = 
+            [p.x-patchsize, p.y-patchsize, patchsize*2, patchsize*2]
+        const patchpixels:Uint8ClampedArray = 
+            ctx.getImageData(...patch_coords).data;
+        this._previous_patch = {
+            coords: patch_coords,
+            pixels: patchpixels,
+        }
+    }
+
+    /** Restore a patch of image data before drawring the cursor */
+    _restore_cursor_patch(ctx:CanvasRenderingContext2D) {
+        if(this._previous_patch){
+            const patchdata = new ImageData(
+                new Uint8ClampedArray(this._previous_patch.pixels), 
+                this._previous_patch.coords[2], 
+                this._previous_patch.coords[3], 
+            );
+            ctx.putImageData(
+                patchdata, 
+                this._previous_patch.coords[0], 
+                this._previous_patch.coords[1]
+            )
+        }
+    }
+
 }
 
 //TODO: move to imagetools
