@@ -440,6 +440,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
     }
 
     to_blob(): Promise<Blob|null> {
+        this._restore_cursor_patch(null)
         const promise = new Promise( (resolve:(x:Blob|null) => void) => {
             this.ref.current?.toBlob( resolve )
         } )
@@ -576,7 +577,12 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
     }
 
     /** Restore a patch of image data before drawring the cursor */
-    _restore_cursor_patch(ctx:CanvasRenderingContext2D) {
+    _restore_cursor_patch(ctx:CanvasRenderingContext2D|null) {
+        if(ctx == null){
+            ctx = this.ref.current!.getContext('2d')
+            if(ctx == null)
+                return false;
+        }
         if(this._previous_patch){
             const patchdata = new ImageData(
                 new Uint8ClampedArray(this._previous_patch.pixels), 
