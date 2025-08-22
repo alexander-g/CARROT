@@ -49,6 +49,14 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             const edit_on:boolean = (this.$active_editing_mode.value != null)
             return (edit_on) ? {filter:'brightness(0.7)'} : {};
         } )
+    
+    #_ = signals.effect( () => {
+        if(this.$active_editing_mode.value != null) {
+            document.addEventListener('keydown', this.handle_ctrl_z);
+        } else {
+            document.removeEventListener('keydown', this.handle_ctrl_z);
+        }
+    } )
 
 
     override result_overlays(): JSX.Element {
@@ -94,6 +102,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 ref = {this.edit_menu_ref}
                 on_apply = { this.on_apply_editing_changes }
                 on_clear = { () => this.canvas_ref.current?.clear() }
+                on_undo  = { () => this.canvas_ref.current?.undo() }
                 on_reverse_growth_direction = {this.on_reverse_growth_direction}
                 $active_mode = { this.$active_editing_mode }
                 $erase       = { this.$erase }
@@ -165,6 +174,13 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     Readonly<signals.Signal<JSX.CSSProperties>> | undefined {
         return this.$dim_input_image_when_editing
     }
+
+    handle_ctrl_z = (e:KeyboardEvent) => {
+        if(e.ctrlKey && e.key === 'z') {
+            e.preventDefault();
+            this.canvas_ref.current!.undo()
+        }
+    }
 }
 
 
@@ -196,6 +212,9 @@ type EditMenuProps = {
 
     /** Callback issued when user wants to cancel the editing process */
     on_clear: () => void;
+
+    /** Callback issued when user wants to undo the last step */
+    on_undo: () => void;
 
     /** Callback, user wants to reverse the direction of tree rings */
     on_reverse_growth_direction: () => void;
@@ -281,7 +300,7 @@ class EditMenu extends preact.Component<EditMenuProps> {
                 </div>
         
                 <div class="divider hidden-when-disabled"></div>
-                <div class="item brightness hidden-when-disabled">
+                <div class="item brushsize hidden-when-disabled">
                     <i class="brush icon"></i>
                     Brush size
                     <div 
@@ -290,20 +309,29 @@ class EditMenu extends preact.Component<EditMenuProps> {
                         ref   = {this.brush_size_slider}
                     ></div>
                 </div>
+
+                <div class="divider hidden-when-disabled"></div>
+                <div 
+                    class = "item edit-undo hidden-when-disabled" 
+                    onClick = {this.on_undo}
+                >
+                    <i class="undo icon"></i>
+                    Undo
+                </div>
             
                 <div class="divider hidden-when-disabled"></div>
                 <div 
                     class = "item edit-clear hidden-when-disabled" 
                     onClick = {this.on_clear}
                 >
-                    <i class="times icon"></i>
+                    <i class="times red icon"></i>
                     Reset
                 </div>
                 <div 
                     class = "item edit-apply hidden-when-disabled" 
                     onClick = {this.on_apply}
                 >
-                    <i class="check icon"></i>
+                    <i class="check green icon"></i>
                     Apply
                 </div>
             </div>
@@ -351,19 +379,7 @@ class EditMenu extends preact.Component<EditMenuProps> {
 
     /** Cancel the editing process. */
     on_clear = () => {
-        //$root.find('.edit-menu .hidden-when-disabled').hide()
-        //$root.find('.edit-menu-button, .edit-mode').removeClass('active disabled')
-
         this.props.on_clear()
-
-        // TODO: overlays
-        // const canvas = $root.find('.editing-canvas.overlay')[0]
-        // canvas.getContext('2d').clearRect(0,0,canvas.width, canvas.height)
-        // $(canvas).css('pointer-events', 'none')
-
-        // //show the other overlays again
-        // const $other_overlays  = $(`[filename="${filename}"] .overlay:not(canvas)`)
-        // $other_overlays.css('visibility', '')
 
         this.edit_cells_button.current?.classList.remove('disabled', 'active')
         this.edit_treerings_button.current?.classList.remove('disabled', 'active')
@@ -376,6 +392,10 @@ class EditMenu extends preact.Component<EditMenuProps> {
     on_apply = async () => {
         await this.props.on_apply()
         this.on_clear()
+    }
+
+    on_undo = async () => {
+        await this.props.on_undo()
     }
 }
 
@@ -399,6 +419,14 @@ type EditCanvasProps = {
 
 class EditCanvas extends preact.Component<EditCanvasProps> {
     ref: preact.RefObject<HTMLCanvasElement> = preact.createRef()
+
+    /** The full image is stored after each modification in here. */
+    undo_history: Blob[] = [];
+
+    /** Clear the undo_history on every mode change */
+    #_ = this.props.$active_mode.subscribe( () => {
+        this.undo_history = [];
+    } )
 
     render(props:EditCanvasProps): JSX.Element {
         let canvas: JSX.Element|null = null
@@ -436,7 +464,25 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
     }
 
     clear() {
+        const canvas:HTMLCanvasElement|null = this.ref.current;
+        if(canvas == null)
+            return;
         
+        const ctx:CanvasRenderingContext2D|null = canvas.getContext('2d')
+        if(ctx == null)
+            return false;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    async undo() {
+        if(this.ref.current == null
+        || this.undo_history.length == 0)
+            return;
+        
+        const blob:Blob = this.undo_history.pop()!
+        this.clear()
+        await paste_blob_onto_canvas(this.ref.current, blob)
     }
 
     to_blob(): Promise<Blob|null> {
@@ -447,8 +493,10 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         return promise;
     }
 
-    _dragging:boolean = false;
-    on_mousedown = (mousedown_event:MouseEvent):boolean => {
+    /** Internal flag. Set when user is actively drawing. */
+    _drawing:boolean = false;
+
+    on_mousedown = async (mousedown_event:MouseEvent): Promise<boolean> => {
         if(this.ref.current == null
         || this.props.$active_mode.value == null)
             return false;
@@ -470,17 +518,10 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         // actually erase, not just paint over
         ctx.globalCompositeOperation = erase? 'destination-out': 'source-over';
         
-        this._dragging = true;
-        //TODO: make this a function
-        if(this._previous_patch){
-            const patchdata = new ImageData(
-                new Uint8ClampedArray(this._previous_patch.pixels), 
-                this._previous_patch.coords[2], 
-                this._previous_patch.coords[3], 
-            );
-            ctx.putImageData(patchdata, this._previous_patch.coords[0], this._previous_patch.coords[1])
-        }
-        this._previous_patch = undefined;
+        this._drawing = true;
+
+        this._restore_cursor_patch(ctx)
+        await this._push_undo()
 
         type Point = base.util.Point;
         let _prev:Point|null = null
@@ -502,7 +543,11 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
             },
             // on_end
             () => {
-                this._dragging = false;
+                this._drawing = false;
+                if(_prev == null){
+                    // no changes, pop previously pushed undo history state
+                    this.undo_history.pop()
+                }
             }
         )
 
@@ -511,9 +556,8 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
     }
 
    
-
+    /** Draw a cursor to indicate the brush size */
     on_mousemove = (mouse_event:MouseEvent):boolean => {
-
         if(this.ref.current == null)
             return false;
         
@@ -521,7 +565,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         if(mouse_event.shiftKey)
             return false;
 
-        if(this._dragging)
+        if(this._drawing)
             return false;
 
         const ctx:CanvasRenderingContext2D|null = this.ref.current.getContext('2d')
@@ -563,7 +607,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         pixels: Uint8ClampedArray,
     } = undefined;
 
-    /** Store a patch of image data before drawring the cursor */
+    /** Store a patch of image data before drawing the cursor */
     _save_cursor_patch(ctx:CanvasRenderingContext2D, p:base.util.Point) {
         const patchsize:number = ctx.lineWidth*2+1;
         const patch_coords:[number,number,number,number] = 
@@ -576,7 +620,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         }
     }
 
-    /** Restore a patch of image data before drawring the cursor */
+    /** Restore a patch of image data before drawing the new cursor */
     _restore_cursor_patch(ctx:CanvasRenderingContext2D|null) {
         if(ctx == null){
             ctx = this.ref.current!.getContext('2d')
@@ -595,6 +639,18 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
                 this._previous_patch.coords[1]
             )
         }
+        this._previous_patch = undefined;
+    }
+
+    async _push_undo(): Promise<void> {
+        const blob:Blob|Error = 
+            await base.imagetools.canvas_to_blob(this.ref.current!)
+        if(blob instanceof Blob)
+            this.undo_history.push(blob);
+        
+        // limited to 10 undos to conserve memory
+        if(this.undo_history.length > 10)
+            this.undo_history.shift()
     }
 
 }
