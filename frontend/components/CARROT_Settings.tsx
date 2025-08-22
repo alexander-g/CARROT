@@ -40,7 +40,7 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
         avmodels_treerings?.sort( sort_fn )
 
         const micrometer_factor:string = settings.micrometer_factor.toFixed(1)
-        const ignore_buffer_px:string  = settings.ignore_buffer_px.toFixed(0);
+        //const ignore_buffer_px:string  = settings.ignore_buffer_px.toFixed(0);
 
         return [
             <div class="field">
