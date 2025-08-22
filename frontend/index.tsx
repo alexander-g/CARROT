@@ -8,7 +8,7 @@ import {
     CARROT_Result, 
     is_CARROT_Backend,
 } from "./lib/carrot_detection.ts";
-import { CARROT_TopMenu } from "./components/CARROT_Settings.tsx";
+import { CARROT_SettingsModal } from "./components/CARROT_Settings.tsx";
 import { TrainingTab }    from "./components/TrainingTab.tsx"
 
 
@@ -22,7 +22,7 @@ class CARROT_App extends base.create_App({
     // @ts-ignore type hell
     backend:         CARROT_RemoteBackend,
     settingshandler: new CARROT_SettingsHandler,
-    TopMenu:         CARROT_TopMenu,
+    SettingsModal:   CARROT_SettingsModal,
     tabs:{
         'Detection': CARROT_DetectionTab,
         'Training':  TrainingTab,
@@ -33,11 +33,14 @@ class CARROT_App extends base.create_App({
         const backend = 
             new this.backend(CARROT_Result, this.appstate.$settings.value!)
         
-        if(is_CARROT_Backend(backend)){
-            return await this.appstate.set_files(files, backend)
+        if(is_CARROT_Backend(backend))
+            await this.appstate.set_files(files, backend)
+        else
+            await this.appstate.set_files(files)
+
+        if(this.appstate.$files.value.length > 0){
+            this.settings_modal.current!.show_modal()
         }
-        // else
-        return await this.appstate.set_files(files)
     }
 }
 

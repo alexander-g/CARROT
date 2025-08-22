@@ -4,11 +4,6 @@ import { CARROT_Settings, CARROT_AvailableModels } from "../lib/carrot_settings.
 export 
 class AvailableModelsSignal extends Signal<CARROT_AvailableModels|undefined> {}
 
-export class CARROT_TopMenu extends base.TopMenu {
-    /** @override */
-    override SettingsModal = CARROT_SettingsModal;
-}
-
 
 
 
@@ -48,6 +43,44 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
         const ignore_buffer_px:string  = settings.ignore_buffer_px.toFixed(0);
 
         return [
+            <div class="field">
+                {/* <label>Statistics</label>
+                <div class="ui right labeled input" id="settings-ignore-buffer">
+                    <input 
+                        type  = "number" 
+                        step  = "1" 
+                        min   = "0" 
+                        style = "width: 5ch;" 
+                        value = {ignore_buffer_px} 
+                        id    = 'settings-ignore-buffer-input'
+                        ref   = {this.ignore_buffer_ref}
+                    />
+                    <div class="ui basic label" style="width:15%;"> px </div>
+                    <label style="padding:10px; width:65%;">
+                        Ignore cells within this distance from the border
+                    </label>
+                </div> */}
+
+                <label>Image Resolution</label>
+                <div class="ui right labeled input" id="settings-micrometers">
+                    <input 
+                        type  = "number" 
+                        step  = "0.01" 
+                        min   = "0" 
+                        style = "width: 5ch;" 
+                        value = {micrometer_factor} 
+                        id    = 'settings-micrometers-input' 
+                        ref   = {this.micrometers_ref}
+                    />
+                    <div class="ui basic label" style="width:15%;"> px/μm </div>
+                    <label style="padding:10px; width:65%;">
+                        Pixel to micrometer conversion factor
+                    </label>
+                </div>
+            </div>,
+            
+            <div class="ui divider"></div>,
+
             <base.CheckboxedField
                 checkbox_title = "Cell detection"
                 checkbox_label = "Enable detection of cells"
@@ -79,44 +112,6 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
                     label            = {"Tree ring detection model"}
                 />
             </base.CheckboxedField>,
-
-            <div class="ui divider"></div>,
-
-            <div class="field">
-                <label>Statistics</label>
-                <div class="ui right labeled input" id="settings-ignore-buffer">
-                    <input 
-                        type  = "number" 
-                        step  = "1" 
-                        min   = "0" 
-                        style = "width: 5ch;" 
-                        value = {ignore_buffer_px} 
-                        id    = 'settings-ignore-buffer-input'
-                        ref   = {this.ignore_buffer_ref}
-                    />
-                    <div class="ui basic label" style="width:15%;"> px </div>
-                    <label style="padding:10px; width:65%;">
-                        Ignore cells within this distance from the border
-                    </label>
-                </div>
-
-                <label></label>
-                <div class="ui right labeled input" id="settings-micrometers">
-                    <input 
-                        type  = "number" 
-                        step  = "0.01" 
-                        min   = "0" 
-                        style = "width: 5ch;" 
-                        value = {micrometer_factor} 
-                        id    = 'settings-micrometers-input' 
-                        ref   = {this.micrometers_ref}
-                    />
-                    <div class="ui basic label" style="width:15%;"> px/μm </div>
-                    <label style="padding:10px; width:65%;">
-                        Pixel to micrometer conversion factor
-                    </label>
-                </div>
-            </div>,
         ]
     }
 
@@ -126,7 +121,8 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
         || this.cells_selection.current == null
         || this.cells_checkbox.current == null
         || this.micrometers_ref.current == null
-        || this.ignore_buffer_ref.current == null)
+        //|| this.ignore_buffer_ref.current == null
+        )
             return new Error()
 
         const treerings_enabled:boolean = 
@@ -139,7 +135,7 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
             this.cells_selection.current.get_selected()?.name!
         
         const micrometers:number = Number(this.micrometers_ref.current.value)
-        const ignore_px:number   = Number(this.ignore_buffer_ref.current.value)
+        //const ignore_px:number   = Number(this.ignore_buffer_ref.current.value)
         
         return {
             active_models: {
@@ -150,7 +146,7 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
             cells_enabled:     cells_enabled,
             treerings_enabled: treerings_enabled,
             
-            ignore_buffer_px:  ignore_px,
+            //ignore_buffer_px:  ignore_px,
             micrometer_factor: micrometers,
         }
     }

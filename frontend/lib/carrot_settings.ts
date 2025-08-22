@@ -6,7 +6,7 @@ export type CARROT_ActiveModels = base.settings.ActiveModels<CARROT_ModelTypes>;
 export type CARROT_Settings     = base.settings.Settings<CARROT_ModelTypes> & {
     cells_enabled:     boolean;
     treerings_enabled: boolean;
-    ignore_buffer_px:  number;
+    //ignore_buffer_px:  number;
     micrometer_factor: number;
 }
 export type CARROT_AvailableModels = base.settings.AvailableModels<CARROT_Settings>
@@ -19,7 +19,7 @@ extends base.settings.RemoteSettingsHandler<CARROT_Settings>{
         && base.util.has_property_of_type(x, 'active_models', validate_active_models)
         && base.util.has_boolean_property(x, 'treerings_enabled')
         && base.util.has_boolean_property(x, 'cells_enabled')
-        && base.util.has_number_property(x, 'ignore_buffer_px')
+        //&& base.util.has_number_property(x, 'ignore_buffer_px')
         && base.util.has_number_property(x, 'micrometer_factor')) {
             return x;
         } 
