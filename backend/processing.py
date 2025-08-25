@@ -4,6 +4,8 @@ import typing as tp
 
 from base.backend.pubsub import PubSub
 from base.backend import GLOBALS
+# needed
+from base.backend.processing import resize_image
 
 import threading, pickle, os
 import numpy as np
@@ -153,21 +155,6 @@ def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
     #else: ???
     
     return result
-
-def convert_tiff_to_jpeg(path:str, max_size:int) -> tp.Tuple[str, tp.Tuple[int,int]]:
-    imagedata = tifffile.imread(path)
-    H,W = og_size = imagedata.shape[:2]
-    if H > max_size:
-        W = int(max_size * W/H)
-        H = int(max_size)
-    if W > max_size:
-        H = int(max_size * H/W)
-        W = int(max_size)
-
-    im = PIL.Image.fromarray(imagedata).resize([W,H]).convert('RGB')
-    jpeg_path = path+'.jpg'
-    im.save(jpeg_path)
-    return jpeg_path, og_size
 
 
 
