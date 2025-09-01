@@ -20,9 +20,9 @@ class App(BaseApp):
             deno = DenoConfig(
                 root      = path_to_main_module(),
                 static    = get_static_path(),
-                index_tsx = 'index.tsx',
-                dep_ts    = 'dep.ts',
-                copy_globs= 'css/treerings.css,favicon.ico',
+                index_tsx = 'frontend/index.tsx',
+                srcdirs   = 'frontend/,base/frontend/',
+                copy_globs= 'frontend/css/treerings.css,frontend/favicon.ico',
             )
             kw['deno_cfg'] = deno
         
