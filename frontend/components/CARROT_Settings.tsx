@@ -1,10 +1,15 @@
-import { base, Signal, JSX, preact } from "../dep.ts"
+import { base, Signal, JSX, preact, signals } from "../dep.ts"
 import { CARROT_Settings, CARROT_AvailableModels } from "../lib/carrot_settings.ts";
+
+
+
+const HARDCODED_MIN_RESOLUTION =  0.1
+const HARDCODED_MAX_RESOLUTION = 10.0
+
+
 
 export 
 class AvailableModelsSignal extends Signal<CARROT_AvailableModels|undefined> {}
-
-
 
 
 type CARROT_SettingsModalProps = base.SettingsModalProps<CARROT_Settings> & {
@@ -23,11 +28,22 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
     ignore_buffer_ref: preact.RefObject<HTMLInputElement> = preact.createRef()
     micrometers_ref:   preact.RefObject<HTMLInputElement> = preact.createRef()
 
+    /** The raw value of the resolution <input> */
+    $micrometers_val: Signal<string> = new Signal("")
 
-    override form_content(): JSX.Element[] {
+    override $ok_disabled = signals.computed( () => {
+        const resolution_ok:boolean = is_resolution_ok(this.$micrometers_val.value)
+        return !resolution_ok;
+    })
+
+
+    override form_content(): JSX.Element|null {
         const settings: CARROT_Settings|undefined = this.props.$settings.value;
         if(settings == undefined)
-            return []
+            return null
+        
+        // NOTE: interpreting this as user has to select values
+        const cancel_ok:boolean = this.$cancel_ok.value;
         
         const activemodel_cells:string     = settings.active_models.cells
         const activemodel_treerings:string = settings.active_models.treerings
@@ -39,10 +55,11 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
         avmodels_cells?.sort( sort_fn )
         avmodels_treerings?.sort( sort_fn )
 
-        const micrometer_factor:string = settings.micrometer_factor.toFixed(1)
+        const micrometer_factor:string = 
+            cancel_ok ? settings.micrometer_factor.toFixed(1) : '';
         //const ignore_buffer_px:string  = settings.ignore_buffer_px.toFixed(0);
 
-        return [
+        return <>
             <div class="field">
                 {/* <label>Statistics</label>
                 <div class="ui right labeled input" id="settings-ignore-buffer">
@@ -65,21 +82,27 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
                 <div class="ui right labeled input" id="settings-micrometers">
                     <input 
                         type  = "number" 
-                        step  = "0.01" 
-                        min   = "0" 
+                        step  = "0.1" 
+                        min   = {HARDCODED_MIN_RESOLUTION.toFixed()}
+                        max   = {HARDCODED_MAX_RESOLUTION.toFixed()}
                         style = "width: 5ch;" 
                         value = {micrometer_factor} 
                         id    = 'settings-micrometers-input' 
                         ref   = {this.micrometers_ref}
+                        //onInput = {this.check_resolution_input}
+                        onInput = { 
+                            () => this.$micrometers_val.value = 
+                                this.micrometers_ref.current!.value 
+                        }
                     />
                     <div class="ui basic label" style="width:15%;"> px/μm </div>
                     <label style="padding:10px; width:65%;">
                         Pixel to micrometer conversion factor
                     </label>
                 </div>
-            </div>,
+            </div>
             
-            <div class="ui divider"></div>,
+            <div class="ui divider"></div>
 
             <base.CheckboxedField
                 checkbox_title = "Cell detection"
@@ -92,11 +115,11 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
                     active_model     = {activemodel_cells}
                     available_models = {avmodels_cells}
                     ref              = {this.cells_selection}
-                    label            = {"Cell detection model"}
+                    label            = "Cell detection model"
                 />
-            </base.CheckboxedField>,
+            </base.CheckboxedField>
 
-            <div class="ui divider"></div>,
+            <div class="ui divider"></div>
 
             <base.CheckboxedField
                 checkbox_title = "Tree ring detection"
@@ -109,10 +132,10 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
                     active_model     = {activemodel_treerings}
                     available_models = {avmodels_treerings}
                     ref              = {this.treerings_selection}
-                    label            = {"Tree ring detection model"}
+                    label            = "Tree ring detection model"
                 />
-            </base.CheckboxedField>,
-        ]
+            </base.CheckboxedField>
+        </>
     }
 
     override collect_settings_from_widgets(): CARROT_Settings|Error {
@@ -150,6 +173,16 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
             micrometer_factor: micrometers,
         }
     }
+}
+
+function is_resolution_ok(raw:string): boolean {
+    const resolution:number = Number(raw)
+    const notok:boolean = ( 
+        isNaN(resolution) 
+        ||  resolution < HARDCODED_MIN_RESOLUTION
+        ||  resolution > HARDCODED_MAX_RESOLUTION
+    )
+    return !notok;
 }
 
 

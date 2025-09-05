@@ -25,8 +25,8 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
     override async set_files(
         files_raw: FileList|File[], 
         backend?:  CARROT_Backend,
-    ): Promise<void>{
-        await super.set_files(files_raw);
+    ): Promise<boolean>{
+        const changed:boolean = await super.set_files(files_raw);
 
         for(const pair of this.$files.value){
             const result = pair.$result.value as CARROT_Result;
@@ -43,7 +43,7 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
             )
         
         if(unfinished_results.length == 0)
-            return;
+            return changed;
         
         if(backend == undefined) {
             console.error('Unfinished results but no backend provided')
@@ -53,7 +53,7 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
                 pair.$result.value = 
                     new CARROT_Result('failed', pair.$result.value.raw)
 
-            return;
+            return changed;
         }
 
         for(const pair of unfinished_results){
@@ -73,6 +73,7 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
                 console.error('Unexpected unfinished result:', result)
             }
         }
+        return changed;
     }
 }
 
