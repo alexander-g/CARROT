@@ -463,7 +463,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         paste_blob_onto_canvas(this.ref.current, this.props.$inputblob.value)
     }
 
-    clear() {
+    async clear() {
         const canvas:HTMLCanvasElement|null = this.ref.current;
         if(canvas == null)
             return;
@@ -472,6 +472,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         if(ctx == null)
             return false;
         
+        await this._restore_cursor_patch(ctx)
         ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
