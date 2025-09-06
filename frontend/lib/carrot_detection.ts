@@ -834,10 +834,22 @@ export function validate_cellinfo_array(x: unknown): CellInfo[]|null {
 
 
 /** `"/process/inputfile3231.jpg?cells=true" -> "inputfile3231.jpg"` */
-function parse_inputfile_from_process_response(url:string): string|null{
+export function parse_inputfile_from_process_response(url:string): string|null{
     try {
         const pathname:string = new URL(url).pathname;
-        return pathname.split('/').filter(Boolean).reverse()[0] ?? null;
+        const raw:string|null = 
+            pathname.split('/').filter(Boolean).reverse()[0] ?? null;
+        
+        if (!raw)
+            return null;
+
+        // chatgpt:
+        // Replace URL-encoded spaces and common mangled variants with a normal space,
+        // then collapse multiple spaces into a single space and trim edges.
+        const decoded:string = raw.replace(/%20|%u00A0|\u00A0|\s+/g, ' ');
+        // Also decode any other percent-encoded sequences
+        const fully_decoded:string = decodeURIComponent(decoded);
+        return fully_decoded.replace(/\s+/g, ' ').trim();
     } catch {
         return null;
     }
