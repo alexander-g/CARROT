@@ -944,6 +944,11 @@ export type UnfinishedCARROT_Result = {
 export abstract class CARROT_Backend
 extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Settings> {
     abstract process_cell_association(r:UnfinishedCARROT_Result): Promise<CARROT_Result>;
+
+    /** Process an image with the segment-anything encoder */
+    abstract sam_encode(image:File): Promise<Float32Array|Error>;
+    /** Perform segment-anything with a box prompt */
+    abstract sam_decode(encoding:Float32Array, box:base.boxes.Box): Promise<unknown>;
 }
 
 export function validate_CARROT_Backend(x:unknown): CARROT_Backend|null {
@@ -1028,9 +1033,15 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         const cells:boolean     = this.settings.cells_enabled;
         const treerings:boolean = this.settings.treerings_enabled;
         const recluster:boolean = treerings;
+        const px_per_um:number  = this.settings.micrometer_factor;
         const filename:string   = input.name;
-        const args:string = `cells=${cells}&treerings=${treerings}&recluster=${recluster}`
-        const url = `process/${filename}?${args}`
+        const params = new URLSearchParams({
+            cells:     cells.toString(),
+            treerings: treerings.toString(),
+            recluster: recluster.toString(),
+            px_per_um: px_per_um.toFixed(5),
+        })
+        const url = `process/${filename}?${params}`
         const response:Response|Error = await base.util.fetch_no_throw(url)
 
         if(response instanceof Error)
@@ -1048,6 +1059,31 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             return result as CARROT_Result
         else 
             return new CARROT_Result('failed')
+    }
+
+
+
+    override async sam_encode(image:File): Promise<Float32Array|Error> {
+        const upload_ok:Response|Error = 
+            await base.util.upload_file_no_throw(image)
+        if(upload_ok instanceof Error)
+            return upload_ok as Error
+        
+        const url:string = `sam_encode/${image.name}`                           // TODO: px/um
+        const sam_response:Response|Error = 
+            await base.util.fetch_no_throw(url)
+        if(sam_response instanceof Error)
+            return sam_response as Error
+        
+        return new Float32Array(await sam_response.arrayBuffer())
+    }
+
+    override async sam_decode(
+        _encoding: Float32Array, 
+        _box:      base.boxes.Box
+    ): Promise<unknown> {
+        // onnx!
+        return await '???'
     }
 }
 

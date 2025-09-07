@@ -30,6 +30,7 @@ class App(BaseApp):
         if self.is_reloader:
             return
         
+        self.route('/sam_encode/<imagename>')(self.sam_encode)
 
         @self.route('/process/<imagename>')
         def process(imagename):
@@ -129,6 +130,21 @@ class App(BaseApp):
         self.settings.models[trainingtype].save(path)
         self.settings.active_models[trainingtype] = newname
         return 'OK'
+    
+    def sam_encode(self, imagename:str):
+        full_path = self.path_in_cache(imagename, abort_404=False)
+        encoding = backend.processing.sam_encode(full_path)
+
+        return flask.Response(
+            encoding.tobytes(), 
+            mimetype = 'application/octet-stream',
+            headers  = {
+                'X-DTYPE': 'float32', 
+                'X-SHAPE': ','.join(map(str, encoding.shape))
+            }
+        )
+    
+
 
 def zip_results(result:tp.Dict[str, bytes], inputfile:str) -> str:
     zipfilepath = inputfile + '.results.zip'

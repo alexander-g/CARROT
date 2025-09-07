@@ -12,6 +12,7 @@ import numpy as np
 import PIL.Image
 PIL.Image.MAX_IMAGE_PIXELS = None
 import tifffile
+import torch
 
 # NOTE: np.bool got removed in numpy v 1.20, but used by some older models
 np.bool = np.bool_
@@ -165,3 +166,14 @@ def accepts_argument(func:tp.Callable, arg_name:str) -> bool:
         # In case func is not compatible with inspect.signature
         return False
 
+
+HARDCODED_SAM_ENCODER_PATH = 'models/sam_DEBUG/sam_encoder_vit_b.torchscript'
+
+def sam_encode(imagepath:str) -> np.ndarray:
+    sam_encoder = torch.jit.load(HARDCODED_SAM_ENCODER_PATH)
+    imagedata   = torch.as_tensor(
+        np.array(PIL.Image.open(imagepath))
+    )
+    output = sam_encoder(imagedata).detach()
+    print(output.dtype, output.shape)
+    return output.numpy()
