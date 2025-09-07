@@ -1025,6 +1025,12 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             )
             on_progress?.({input, result:r })
         }
+        const og_size: base.util.ImageSize|Error = 
+            await base.imagetools.read_image_size(input)
+        if(og_size instanceof Error)
+            return new CARROT_Result('failed')
+        const display_size: base.util.ImageSize = 
+            base.imagetools.get_display_size(og_size)
 
         const upload_ok:Response|Error = await base.util.upload_file_no_throw(input)
         if(upload_ok instanceof Error)
@@ -1040,6 +1046,8 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             treerings: treerings.toString(),
             recluster: recluster.toString(),
             px_per_um: px_per_um.toFixed(5),
+            width:     display_size.width.toFixed(),
+            height:    display_size.height.toFixed(),
         })
         const url = `process/${filename}?${params}`
         const response:Response|Error = await base.util.fetch_no_throw(url)

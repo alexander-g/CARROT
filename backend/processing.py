@@ -26,19 +26,30 @@ def write_image(path:str, x:np.ndarray):
     x.save(path)
 
 
-def process_cells(image_path:str, settings, px_per_um:float) -> str:
+def process_cells(
+    image_path:   str, 
+    settings, 
+    px_per_um:    float, 
+    displayshape: tp.Optional[tp.Tuple[int,int]]
+) -> str:
     model = settings.models['cells']
-    #x     = model.load_image(image_path)
-    x = image_path
     with GLOBALS.processing_lock:
         print(f'Processing file {image_path} with cell model {settings.active_models["cells"]}')
         def on_progress(p):
             PubSub.publish({'progress':p, 'image':os.path.basename(image_path), 'stage':'cells'})
         px_per_mm = px_per_um * 1000
-        y:np.ndarray|tp.Dict[str,np.ndarray] = \
-            model.process_image(x, progress_callback=on_progress, px_per_mm=px_per_mm)
+        y:np.ndarray|tp.Dict[str,np.ndarray] = model.process_image(
+            image_path, 
+            progress_callback = on_progress, 
+            px_per_mm         = px_per_mm, 
+            displayshape      = displayshape,
+        )
     if isinstance(y, dict):
-        y = y['classmap']
+        print(
+            'DEBUG:', 
+            {k:v.shape for k,v in y.items()}
+        )
+        y = y['classmap_for_display'] if 'classmap_for_display' in y else y['classmap']
     output_path = get_cellsmap_name(image_path)
     write_image(output_path, y)
     return output_path

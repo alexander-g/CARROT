@@ -40,7 +40,15 @@ class App(BaseApp):
                 flask.request.args.get('treerings', type=json.loads, default=False)
             recluster = \
                 flask.request.args.get('recluster', type=json.loads, default=False)
+            displaywidth = \
+                flask.request.args.get('width', type=int, default=None)
+            displayheight = \
+                flask.request.args.get('height', type=int, default=None)
             px_per_um = flask.request.args.get('px_per_um', type=float)
+
+            displayshape = (displayheight, displaywidth)
+            if None in displayshape:
+                displayshape = None
 
             #if not cells and not treerings and not recluster:
             #    flask.abort(400)  #bad request
@@ -48,8 +56,12 @@ class App(BaseApp):
             results:tp.Dict[str, bytes] = {}
             full_path = self.path_in_cache(imagename, abort_404=False)
             if cells:
-                _ignored = \
-                    backend.processing.process_cells(full_path, self.settings, px_per_um)
+                _ignored = backend.processing.process_cells(
+                    full_path, 
+                    self.settings, 
+                    px_per_um, 
+                    displayshape
+                )
             if treerings:
                 result = backend.processing.process_treerings(full_path, self.settings)
                 results[f'{imagename}/treerings.json'] = json.dumps({
