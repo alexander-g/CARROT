@@ -25,7 +25,7 @@ def write_image(path:str, x:np.ndarray):
     x.save(path)
 
 
-def process_cells(image_path:str, settings) -> str:
+def process_cells(image_path:str, settings, px_per_um:float) -> str:
     model = settings.models['cells']
     #x     = model.load_image(image_path)
     x = image_path
@@ -33,11 +33,10 @@ def process_cells(image_path:str, settings) -> str:
         print(f'Processing file {image_path} with cell model {settings.active_models["cells"]}')
         def on_progress(p):
             PubSub.publish({'progress':p, 'image':os.path.basename(image_path), 'stage':'cells'})
+        px_per_mm = px_per_um * 1000
         y:np.ndarray|tp.Dict[str,np.ndarray] = \
-            model.process_image(x, progress_callback=on_progress)
+            model.process_image(x, progress_callback=on_progress, px_per_mm=px_per_mm)
     if isinstance(y, dict):
-        open(image_path+'.cell_points.pkl','wb').write(pickle.dumps(y['cell_points']))
-        open(image_path+'.instancemap.pkl','wb').write(pickle.dumps(y['instancemap']))
         y = y['classmap']
     output_path = get_cellsmap_name(image_path)
     write_image(output_path, y)

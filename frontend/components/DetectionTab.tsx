@@ -436,6 +436,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
             const css = {
                 ...base.styles.overlay_css,
                 cursor: 'crosshair',
+                imageRendering:   'pixelated',
                 'pointer-events': 'all',
             }
             canvas = <canvas 
@@ -482,7 +483,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
             return;
         
         const blob:Blob = this.undo_history.pop()!
-        this.clear()
+        await this.clear()
         await paste_blob_onto_canvas(this.ref.current, blob)
     }
 
@@ -528,7 +529,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         let _prev:Point|null = null
         base.ui_util.start_drag(
             mousedown_event, 
-            this.ref.current, 
+            this.ref.current!, 
             this.props.$imagesize.value!,
             // on_move
             (start:Point, end:Point) => { 

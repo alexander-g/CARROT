@@ -3,6 +3,7 @@ import { base }    from "../../frontend/dep.ts"
 import { 
     CARROT_Result,
     CellsAndTreeringsData,
+    parse_inputfile_from_process_response,
 } from "../../frontend/lib/carrot_detection.ts"
 
 

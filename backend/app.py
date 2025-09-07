@@ -33,12 +33,13 @@ class App(BaseApp):
 
         @self.route('/process/<imagename>')
         def process(imagename):
-            cells = flask.request.args.get('cells', "false")
-            cells = json.loads(cells)
-            treerings = flask.request.args.get('treerings', "false")
-            treerings = json.loads(treerings)
-            recluster = flask.request.args.get('recluster', "false")
-            recluster = json.loads(recluster)
+            cells = \
+                flask.request.args.get('cells', type=json.loads, default=False)
+            treerings = \
+                flask.request.args.get('treerings', type=json.loads, default=False)
+            recluster = \
+                flask.request.args.get('recluster', type=json.loads, default=False)
+            px_per_um = flask.request.args.get('px_per_um', type=float)
 
             #if not cells and not treerings and not recluster:
             #    flask.abort(400)  #bad request
@@ -46,7 +47,8 @@ class App(BaseApp):
             results:tp.Dict[str, bytes] = {}
             full_path = self.path_in_cache(imagename, abort_404=False)
             if cells:
-                _ignored = backend.processing.process_cells(full_path, self.settings)
+                _ignored = \
+                    backend.processing.process_cells(full_path, self.settings, px_per_um)
             if treerings:
                 result = backend.processing.process_treerings(full_path, self.settings)
                 results[f'{imagename}/treerings.json'] = json.dumps({
