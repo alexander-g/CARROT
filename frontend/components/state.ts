@@ -60,15 +60,19 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
             const result = pair.$result.value;
 
             if(result instanceof CARROT_Result
+            && pair.input instanceof File
             && base.util.is_string(result.inputname)
             && result.data
             && is_unfinished(result.data) ){
                 pair.$result.value = 
-                    await backend.process_cell_association({
-                        status:       'processing',
-                        inputname:    result.inputname,
-                        data:         result.data
-                    })
+                    await backend.postprocess_result(
+                        {
+                            status:       'processing',
+                            inputname:    result.inputname,
+                            data:         result.data
+                        }, 
+                        pair.input
+                    )
             } else {
                 console.error('Unexpected unfinished result:', result)
             }

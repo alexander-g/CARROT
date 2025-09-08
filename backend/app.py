@@ -31,79 +31,102 @@ class App(BaseApp):
             return
         
         self.route('/sam_encode/<imagename>')(self.sam_encode)
+        self.route('/process/<imagename>')(self.process)
 
-        @self.route('/process/<imagename>')
-        def process(imagename):
-            cells = \
-                flask.request.args.get('cells', type=json.loads, default=False)
-            treerings = \
-                flask.request.args.get('treerings', type=json.loads, default=False)
-            recluster = \
-                flask.request.args.get('recluster', type=json.loads, default=False)
-            displaywidth = \
-                flask.request.args.get('width', type=int, default=None)
-            displayheight = \
-                flask.request.args.get('height', type=int, default=None)
-            px_per_um = flask.request.args.get('px_per_um', type=float)
+    def process(self, imagename:str):
+        process_cells = \
+            flask.request.args.get('cells', type=json.loads, default=False)
+        process_treerings = \
+            flask.request.args.get('treerings', type=json.loads, default=False)
+        displaywidth  = flask.request.args.get('width', type=int, default=None)
+        displayheight = flask.request.args.get('height', type=int, default=None)
+        og_width      = flask.request.args.get('width', type=int, default=None)
+        og_height     = flask.request.args.get('height', type=int, default=None)
+        px_per_um     = flask.request.args.get('px_per_um', type=float)
+        postprocess_cells = process_cells or flask.request.args.get(
+            'postprocess_cells', 
+            type    = json.loads, 
+            default = False,
+        )
+        postprocess_rings = process_treerings or flask.request.args.get(
+            'postprocess_treerings', 
+            type    = json.loads, 
+            default = False,
+        )
+        # combine both results
+        postprocess_combined = postprocess_cells and postprocess_rings
 
-            displayshape = (displayheight, displaywidth)
-            if None in displayshape:
-                displayshape = None
+        displayshape = (displayheight, displaywidth)
+        if None in displayshape:
+            displayshape = None
+        
+        og_shape = (og_height, og_width)
+        if None in og_shape:
+            # TODO: read the size from input image file
+            og_shape = None
 
-            #if not cells and not treerings and not recluster:
-            #    flask.abort(400)  #bad request
+        #if not cells and not treerings and not recluster:
+        #    flask.abort(400)  #bad request
 
-            results:tp.Dict[str, bytes] = {}
-            full_path = self.path_in_cache(imagename, abort_404=False)
-            if cells:
-                _ignored = backend.processing.process_cells(
-                    full_path, 
-                    self.settings, 
-                    px_per_um, 
-                    displayshape
-                )
-            if treerings:
-                result = backend.processing.process_treerings(full_path, self.settings)
-                results[f'{imagename}/treerings.json'] = json.dumps({
-                    'ring_points': result['ring_points'],
-                }).encode('utf8')
-            
-
-            cellsmap = backend.processing.get_cellsmap_name(full_path)
-            if os.path.exists(cellsmap):
-                results[f'{imagename}/{imagename}.cells.png'] = \
-                    open(cellsmap, 'rb').read()
-            treeringsmap = backend.processing.get_treeringsmap_name(full_path)
-            if os.path.exists(treeringsmap):
-                results[f'{imagename}/{imagename}.treerings.png'] = \
-                    open(treeringsmap, 'rb').read()
-
-            
-            result = backend.processing.associate_cells(
+        results:tp.Dict[str, bytes] = {}
+        full_path = self.path_in_cache(imagename, abort_404=False)
+        if process_cells:
+            _ignored = backend.processing.process_cells(
                 full_path, 
                 self.settings, 
-                recluster
+                px_per_um, 
+                displayshape
             )
-            if result is not None:
-                # TODO: split into cells.json and treerings.json
-                ringdata = {
-                    'ring_points': result['ring_points'],
-                }
-                results[f'{imagename}/treerings.json'] = \
-                    json.dumps(ringdata).encode('utf8')
-                if result['ring_map'] is not None:
-                    results[f'{imagename}.ring_map.png'] = \
-                        open(result['ring_map'], 'rb').read()
-                    celldata = {
-                        'cells' : result['cells'],
-                        'imagesize' : result['imagesize'],
-                    }
-                    results[f'{imagename}/cells.json'] = \
-                        json.dumps(celldata).encode('utf8')
+        if process_treerings:
+            output = backend.processing.process_treerings(full_path, self.settings)
+            results[f'{imagename}/treerings.json'] = json.dumps({
+                'ring_points': output['ring_points'],
+            }).encode('utf8')
+        
+
+        cellsmap = backend.processing.get_cellsmap_name(full_path)
+        if os.path.exists(cellsmap):
+            results[f'{imagename}/{imagename}.cells.png'] = \
+                open(cellsmap, 'rb').read()
+        treeringsmap = backend.processing.get_treeringsmap_name(full_path)
+        if os.path.exists(treeringsmap):
+            results[f'{imagename}/{imagename}.treerings.png'] = \
+                open(treeringsmap, 'rb').read()
+
+        if postprocess_cells:
+            output = backend.processing.postprocess_cells(cellsmap, og_shape)
+            celldata = output['cells']
+            results[f'{imagename}/cells.json'] = \
+                json.dumps(celldata).encode('utf8')
 
 
-            path = zip_results(results, full_path)
-            return flask.send_file(path)
+        # TODO:
+
+        # result = backend.processing.associate_cells(
+        #     full_path, 
+        #     self.settings, 
+        #     recluster
+        # )
+        # if result is not None:
+        #     # TODO: split into cells.json and treerings.json
+        #     ringdata = {
+        #         'ring_points': result['ring_points'],
+        #     }
+        #     results[f'{imagename}/treerings.json'] = \
+        #         json.dumps(ringdata).encode('utf8')
+        #     if result['ring_map'] is not None:
+        #         results[f'{imagename}.ring_map.png'] = \
+        #             open(result['ring_map'], 'rb').read()
+        #         celldata = {
+        #             'cells' : result['cells'],
+        #             'imagesize' : result['imagesize'],
+        #         }
+        #         results[f'{imagename}/cells.json'] = \
+        #             json.dumps(celldata).encode('utf8')
+
+
+        path = zip_results(results, full_path)
+        return flask.send_file(path)
 
 
     def path_in_cache(self, filename, abort_404=True):

@@ -7,6 +7,8 @@ from base.backend import GLOBALS
 # needed
 from base.backend.processing import resize_image
 
+from carrot_ml.src import cc_postprocessing
+
 import threading, pickle, os
 import numpy as np
 import PIL.Image
@@ -38,14 +40,12 @@ def process_cells(
         def on_progress(p):
             PubSub.publish({'progress':p, 'image':os.path.basename(image_path), 'stage':'cells'})
         px_per_mm = px_per_um * 1000
-        y:np.ndarray|tp.Dict[str,np.ndarray] = model.process_image(
+        y:np.ndarray = model.process_image(
             image_path, 
             progress_callback = on_progress, 
             px_per_mm         = px_per_mm, 
-            displayshape      = displayshape,
+            outputshape       = displayshape,
         )
-    if isinstance(y, dict):
-        y = y['classmap_for_display'] if 'classmap_for_display' in y else y['classmap']
     output_path = get_cellsmap_name(image_path)
     write_image(output_path, y)
     return output_path
@@ -162,6 +162,26 @@ def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
     #else: ???
     
     return result
+
+
+def postprocess_cells(cellmap_path:str, og_shape:tp.Tuple[int,int]):
+    HARDCODED_MIN_OBJECT_SIZE = 10
+    output = \
+        cc_postprocessing.postprocess_cellmapfile(
+            cellmap_path, 
+            og_shape, 
+            min_object_size_px=HARDCODED_MIN_OBJECT_SIZE
+        )
+    
+    print('TODO TODO TODO: CELLS')
+    return {
+        'cells': [],
+    }
+
+
+
+
+
 
 
 

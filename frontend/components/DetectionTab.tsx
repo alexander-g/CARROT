@@ -151,29 +151,22 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             (ring:TreeringInfo) => ring.year
         )
         const filename = `${this.props.input.name}.${mode}.png`
-        const file = new File([blob], filename)
-        
-        const maybe_cellmap:File|null = 
-            ('cellmap' in current_data)? current_data.cellmap : null;
-        const maybe_treeringmap:File|null = 
-            ('treeringmap' in current_data)? current_data.treeringmap : null;
-        const unfinished_result:UnfinishedCARROT_Result = {
+        const edited_file = new File([blob], filename)
+        const attribute:'cellmap'|'treeringmap'= 
+            mode == 'cells'? 'cellmap' : 'treeringmap';
+
+        const unfinished_result: UnfinishedCARROT_Result = {
             status:    'processing',
             inputname: this.props.input.name,
-            data: (mode == 'cells')? {
-                cellmap:     file,
-                //treeringmap: maybe_treeringmap,
-                ...(maybe_treeringmap? {treeringmap:maybe_treeringmap} : {})
-            } : {
-                //cellmap:     maybe_cellmap,
-                ...(maybe_cellmap? {cellmap:maybe_cellmap} : {}),
-                treeringmap: file,
+            data: {
+                ...current_data,
+                [attribute]:edited_file,
             }
         }
         // awkward
         this.props.$result.value = new CARROT_Result('processing');
         const edited_result:CARROT_Result = 
-            await backend.process_cell_association(unfinished_result)
+            await backend.postprocess_result(unfinished_result, this.props.input)
 
         // re-apply potentially edited years
         const edited_ring_points:PointPair[][] = 
