@@ -194,7 +194,7 @@ Deno.test('parse_inputfile_from_process_response', () => {
     //chatgpt suggestions
     const url2 = "https://example.com/uploads/space%20at%20end%20%20%20.png"
     const out2 = parse_inputfile_from_process_response(url2)
-    asserts.assertEquals(out2, "space at end .png")
+    asserts.assertEquals(out2, "space at end   .png")
     
 
     const url3 = "https://a/b/c/Name%20With%u00A0NonBreakingSpace.txt"
@@ -212,5 +212,9 @@ Deno.test('parse_inputfile_from_process_response', () => {
     
     const url6 = "https://weird/%u00A0%20%20file%20name.pdf"
     const out6 = parse_inputfile_from_process_response(url6)
-    asserts.assertEquals(out6, "file name.pdf")
+    asserts.assertEquals(out6, "   file name.pdf")
+
+    const url7 = "http://localhost:5082/process/Acer%20%20amoenum_24702b.jpg"
+    const out7 = parse_inputfile_from_process_response(url7)
+    asserts.assertEquals(out7, "Acer  amoenum_24702b.jpg")
 })

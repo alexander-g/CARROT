@@ -22,10 +22,19 @@ export type TreeringInfo = {
 /** Result loaded from a single cell mask, still needs to be processed */
 export type CellMapOnlyUnfinishedData = {
     cellmap: File;
+    /** A potentially smaller version of `cellmap`, intended for display */
+    cellmap_for_display?: File;
 }
 
 export type CellsOnlyData = {
+    /** Binary image with detected or manually annotated cells */
     cellmap: File;
+    /** A potentially smaller version of `cellmap`, intended for display */
+    cellmap_for_display?: File;
+
+    /** RGB image with each cell in a random color */
+    instancemap: File;
+
     cells:   CellInfo[];
     imagesize: base.util.ImageSize;
     px_per_um: number;
@@ -150,6 +159,7 @@ export class CARROT_Result extends base.files.Result {
         if(result != null)
             return result as T;
         
+        // TODO: multiple .png files!
         result = await validate_mask_file(raw, this)
         if(result != null)
             return result as T;
@@ -470,16 +480,35 @@ async function validate_cells_only_unzipped<T extends BaseResult>(
     >
 ): Promise<T|null> {
     await 0;
-    const nfiles:number = Object.keys(zipdata).length;
-    if(nfiles != 1)
-        return null;
+    //const nfiles:number = Object.keys(zipdata).length;
+    // if(nfiles != 1)
+    //     return null;
 
     const cellmappath = `${inputname}/${inputname}.cells.png`
     const cellmap:File|undefined = zipdata[cellmappath]
     if(!cellmap)
         return null;
+    
+    const instancemappath = `${inputname}/${inputname}.instances.png`
+    const instancemap:File|undefined = zipdata[instancemappath]
+    if(!instancemap)
+        return null;
+    
+    const cellmap_for_display_path = 
+        `${inputname}/${inputname}.cells_for_display.png`
+    const cellmap_for_display:File|undefined = zipdata[cellmap_for_display_path]
 
-    const data:CellMapOnlyUnfinishedData = {cellmap};
+    console.error('TODO: cells and imagesize')
+    const data:CellsOnlyData = {
+        cellmap, 
+        cellmap_for_display,
+        instancemap,
+        // TODO:
+        cells:     [],
+        imagesize: {width:-1, height:-1},
+        // NOTE: px_per_um is updated in state.ts (for now)
+        px_per_um: NaN,
+    };
     return new ctor(
         'processed',
         zipdata,
@@ -849,7 +878,7 @@ export function parse_inputfile_from_process_response(url:string): string|null{
         const decoded:string = raw.replace(/%20|%u00A0|\u00A0|\s+/g, ' ');
         // Also decode any other percent-encoded sequences
         const fully_decoded:string = decodeURIComponent(decoded);
-        return fully_decoded.replace(/\s+/g, ' ').trim();
+        return fully_decoded
     } catch {
         return null;
     }
@@ -928,22 +957,22 @@ function export_full(
 
 
 
+
 export type UnfinishedCARROT_Result = {
-        status:       Extract<CARROT_Result['status'], 'processing'>
-        inputname:    Extract<CARROT_Result['inputname'], string>
-        data: LegacySavedMapOnlyUnfinishedData
+        status:    Extract<CARROT_Result['status'], 'processing'>
+        inputname: Extract<CARROT_Result['inputname'], string>
+        data:      CARROT_Data;
 }
-// } & ({
-//         cellsmap:     Extract<CARROT_Result['cellsmap'],     Blob>;
-//         treeringsmap: Extract<CARROT_Result['treeringsmap'], Blob|null>;
-// } | {
-//         cellsmap:     Extract<CARROT_Result['cellsmap'],     Blob|null>;
-//         treeringsmap: Extract<CARROT_Result['treeringsmap'], Blob>;
-// })
+
+
 
 export abstract class CARROT_Backend
 extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Settings> {
-    abstract process_cell_association(r:UnfinishedCARROT_Result): Promise<CARROT_Result>;
+    //abstract process_cell_association(r:UnfinishedCARROT_Result): Promise<CARROT_Result>;
+
+    /** Finalize a result, e.g. cell association etc. */
+    abstract postprocess_result(r:UnfinishedCARROT_Result, input:File):
+    Promise<CARROT_Result>;
 
     /** Process an image with the segment-anything encoder */
     abstract sam_encode(image:File): Promise<Float32Array|Error>;
@@ -953,7 +982,7 @@ extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Sett
 
 export function validate_CARROT_Backend(x:unknown): CARROT_Backend|null {
     if(base.util.is_object(x)
-    && 'process_cell_association' in x){
+    && 'postprocess_result' in x){
         return x as CARROT_Backend;
     }
     else return null
@@ -968,14 +997,18 @@ export function is_CARROT_Backend(x:unknown): x is CARROT_Backend {
  *  including some CARROT-specific ones. */
 export class CARROT_RemoteBackend extends CARROT_Backend {
     
-    async process_cell_association(r:UnfinishedCARROT_Result): 
+    async postprocess_result(r:UnfinishedCARROT_Result, input:File): 
     Promise<CARROT_Result>{
-        const data:LegacySavedMapOnlyUnfinishedData = r.data
+        const data:CARROT_Data = r.data
         
         if(!('cellmap' in data) && !('treeringmap' in data))
             return new CARROT_Result('failed')
         
-        const recluster:boolean = !!('treeringmap' in data)
+        const og_size: base.util.ImageSize|Error = 
+            await base.imagetools.read_image_size(input)
+        if(og_size instanceof Error)
+            return new CARROT_Result('failed')
+        
         if('cellmap' in data) // TODO: && data.cellmap != undefined
             await base.util.upload_file_no_throw(
                 new File([data.cellmap], `${r.inputname}.cells.png`)
@@ -985,9 +1018,25 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                 new File([data.treeringmap], `${r.inputname}.treerings.png`)
             )
         
+        const postprocess_cells:boolean = ('cellmap' in data);
+        const postprocess_rings:boolean = ('treeringmap' in data);
+        
+        console.warn('TODO: reapply modified rings')
+        // const current_rings:TreeringInfo[] = 
+        //     ('treerings' in data)? data.treerings : []
+        
+        const params = new URLSearchParams({
+            cells:     false.toString(),  // do not detect cells
+            treerings: false.toString(),  // do not detect tree rings
+            postprocess_cells:     postprocess_cells.toString(),
+            postprocess_treerings: postprocess_rings.toString(),
+            //px_per_um: px_per_um.toFixed(5),  // not needed (for now?)
+            width:     og_size.width.toFixed(),
+            height:    og_size.height.toFixed(),
+        })
         const response:Error|Response = 
             await base.util.fetch_no_throw(
-                `process/${r.inputname}?recluster=${recluster}`
+                `process/${r.inputname}?${params}`
             )
         if(response instanceof Error)
             return new CARROT_Result('failed')
@@ -998,6 +1047,9 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             full_result.data.px_per_um = this.settings.micrometer_factor
         return full_result ?? new CARROT_Result('failed')
     }
+
+
+
 
     #event_source?:EventSource;
 
