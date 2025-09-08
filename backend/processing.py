@@ -45,10 +45,6 @@ def process_cells(
             displayshape      = displayshape,
         )
     if isinstance(y, dict):
-        print(
-            'DEBUG:', 
-            {k:v.shape for k,v in y.items()}
-        )
         y = y['classmap_for_display'] if 'classmap_for_display' in y else y['classmap']
     output_path = get_cellsmap_name(image_path)
     write_image(output_path, y)
