@@ -56,7 +56,12 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     $dim_input_image_when_editing: Readonly< Signal<JSX.CSSProperties> > = 
         signals.computed( () => {
             const edit_on:boolean = (this.$active_editing_mode.value != null)
-            return (edit_on) ? {filter:'brightness(0.7)'} : {};
+            const result_processed:boolean = 
+                this.props.$result.value.status == 'processed';
+            const result_visible:boolean = this.$overlays_visible.value
+            const should_dim:boolean = 
+                edit_on || (result_processed && result_visible);
+            return (should_dim) ? {filter:'brightness(0.7)'} : {};
         } )
     
     #_ = signals.effect( () => {
@@ -73,6 +78,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         // TODO: not only colored_cellmap
         const overlayimage:File|null = 
             ('colored_cellmap' in result.data)? result.data.colored_cellmap : 
+            ('instancemap' in result.data)? result.data.instancemap :
             ('cellmap' in result.data)? result.data.cellmap :
             ('treeringmap' in result.data)? result.data.treeringmap : null;
         return <>

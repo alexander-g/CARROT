@@ -69,6 +69,9 @@ export type CellsAndTreeringsData = {
     /** Intermediate image file containing detected cells that needs 
      *  to be processed to extract coordinates */
     cellmap:         File;
+
+    /** RGB image with each cell in a random color */
+    instancemap: File;
     
     /** Intermediate image file containing detected boundaries that needs 
      *  to be processed to extract coordinates */
@@ -287,12 +290,15 @@ async function validate_zipped_result<T extends BaseResult>(
         const ringmappath   = `${raw.input.name}.ring_map.png`
         const treeringspath = `${raw.input.name}/treerings.json`
         const cellspath     = `${raw.input.name}/cells.json`
+        const instancemappath = `${raw.input.name}.instances.png`
         const ringmap:      File|undefined = zipcontents[ringmappath]
         const treeringsfile:File|undefined = zipcontents[treeringspath]
         const cellsfile:    File|undefined = zipcontents[cellspath]
+        const instancemapfile:    File|undefined = zipcontents[instancemappath]
         if(treeringsfile == undefined
         || cellsfile == undefined
-        || ringmap == undefined)
+        || ringmap == undefined
+        || instancemapfile == undefined)
             return null;
         
         const cellsdata:CellsAssociationData|null = 
@@ -318,6 +324,7 @@ async function validate_zipped_result<T extends BaseResult>(
             colored_cellmap: ringmap,
             cellmap:         baseresult.data.cellmap,
             treeringmap:     baseresult.data.treeringmap,
+            instancemap:     instancemapfile,
             cells:     cellsdata.cells,
             treerings: rings,
             imagesize: imagesize,

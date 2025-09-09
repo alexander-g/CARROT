@@ -94,10 +94,12 @@ class App(BaseApp):
                 open(treeringsmap, 'rb').read()
 
         if postprocess_cells:
-            output = backend.processing.postprocess_cells(cellsmap, og_shape)
+            output = backend.processing.postprocess_cells(full_path, og_shape)
             celldata = output['cells']
             results[f'{imagename}/cells.json'] = \
                 json.dumps(celldata).encode('utf8')
+            results[f'{imagename}/{imagename}.instances.png'] = \
+                open(output['instancemap'], 'rb').read()
 
 
         # TODO:

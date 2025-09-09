@@ -17,15 +17,15 @@ import tifffile
 import torch
 
 # NOTE: np.bool got removed in numpy v 1.20, but used by some older models
-np.bool = np.bool_
+np.bool = np.bool_          # type: ignore
 
 
 def write_image(path:str, x:np.ndarray):
     if np.max(x) <= 1.0:
         x = x*255
     x = x.astype('uint8')
-    x = PIL.Image.fromarray(x).convert('RGB')
-    x.save(path)
+    im = PIL.Image.fromarray(x).convert('RGB')
+    im.save(path)
 
 
 def process_cells(
@@ -52,6 +52,9 @@ def process_cells(
 
 def get_cellsmap_name(image_path:str) -> str:
     return image_path+'.cells.png'
+
+def get_instancemap_name(image_path:str) -> str:
+    return image_path+'.instances.png'
 
 def get_treeringsmap_name(image_path:str) -> str:
     return image_path+'.treerings.png'
@@ -164,18 +167,24 @@ def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
     return result
 
 
-def postprocess_cells(cellmap_path:str, og_shape:tp.Tuple[int,int]):
+def postprocess_cells(image_path:str, og_shape:tp.Tuple[int,int]):
     HARDCODED_MIN_OBJECT_SIZE = 10
-    output = \
+
+    cellmap_path = get_cellsmap_name(image_path)
+    output:tp.Dict[str, np.ndarray] = \
         cc_postprocessing.postprocess_cellmapfile(
             cellmap_path, 
             og_shape, 
             min_object_size_px=HARDCODED_MIN_OBJECT_SIZE
         )
     
+    instancemap_path = get_instancemap_name(image_path)
+    write_image(instancemap_path, output['instancemap_for_display'])
+
     print('TODO TODO TODO: CELLS')
     return {
-        'cells': [],
+        'cells':       [],
+        'instancemap': instancemap_path,
     }
 
 
