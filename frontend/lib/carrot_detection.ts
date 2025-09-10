@@ -258,7 +258,7 @@ export class CARROT_Result extends base.files.Result {
     }
 }
 
-
+// full result
 async function validate_zipped_result<T extends BaseResult>(
     raw:unknown, 
     ctor:base.util.ClassWithValidate<
@@ -287,10 +287,10 @@ async function validate_zipped_result<T extends BaseResult>(
         if(zipcontents instanceof Error)
             return null;
         
-        const ringmappath   = `${raw.input.name}.ring_map.png`
+        const ringmappath   = `${raw.input.name}/${raw.input.name}.ring_map.png`
         const treeringspath = `${raw.input.name}/treerings.json`
         const cellspath     = `${raw.input.name}/cells.json`
-        const instancemappath = `${raw.input.name}.instances.png`
+        const instancemappath = `${raw.input.name}/${raw.input.name}.instances.png`
         const ringmap:      File|undefined = zipcontents[ringmappath]
         const treeringsfile:File|undefined = zipcontents[treeringspath]
         const cellsfile:    File|undefined = zipcontents[cellspath]
@@ -547,6 +547,7 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
     
     const adata:RingsAssociationData|null = 
         validate_ringsonly_association_data(await association.text())
+    console.log('DBG:', adata)
     if(adata == null)
         return null;
     

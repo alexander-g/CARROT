@@ -13,6 +13,18 @@ import backend.processing
 import backend.training
 import backend.settings  #important for some reason
 
+# NOTE: mypy complains that it cannot find backend.processing.process_cells etc
+from backend.processing import (
+    process_cells as process_cells_fn,
+    process_treerings as process_treerings_fn,
+    postprocess_cells as postprocess_cells_fn,
+    postprocess_treerings as postprocess_treerings_fn,
+    postprocess_combined  as postprocess_combined_fn,
+    get_cellsmap_name,
+    get_treeringsmap_name,
+    sam_encode,
+)
+
 
 class App(BaseApp):
     def __init__(self, *args, **kw):
@@ -34,21 +46,21 @@ class App(BaseApp):
         self.route('/process/<imagename>')(self.process)
 
     def process(self, imagename:str):
-        process_cells = \
-            flask.request.args.get('cells', type=json.loads, default=False)
-        process_treerings = \
-            flask.request.args.get('treerings', type=json.loads, default=False)
-        displaywidth  = flask.request.args.get('width', type=int, default=None)
-        displayheight = flask.request.args.get('height', type=int, default=None)
-        og_width      = flask.request.args.get('width', type=int, default=None)
-        og_height     = flask.request.args.get('height', type=int, default=None)
-        px_per_um     = flask.request.args.get('px_per_um', type=float)
-        postprocess_cells = process_cells or flask.request.args.get(
+        args = flask.request.args
+
+        process_cells     = args.get('cells', type=json.loads, default=False)
+        process_treerings = args.get('treerings', type=json.loads, default=False)
+        displaywidth  = args.get('width', type=int, default=None)
+        displayheight = args.get('height', type=int, default=None)
+        og_width      = args.get('width', type=int, default=None)
+        og_height     = args.get('height', type=int, default=None)
+        px_per_um     = args.get('px_per_um', type=float)
+        postprocess_cells = process_cells or args.get(
             'postprocess_cells', 
             type    = json.loads, 
             default = False,
         )
-        postprocess_rings = process_treerings or flask.request.args.get(
+        postprocess_rings = process_treerings or args.get(
             'postprocess_treerings', 
             type    = json.loads, 
             default = False,
@@ -71,38 +83,60 @@ class App(BaseApp):
         results:tp.Dict[str, bytes] = {}
         full_path = self.path_in_cache(imagename, abort_404=False)
         if process_cells:
-            _ignored = backend.processing.process_cells(
+            _ignored = process_cells_fn(
                 full_path, 
                 self.settings, 
                 px_per_um, 
                 displayshape
             )
         if process_treerings:
-            output = backend.processing.process_treerings(full_path, self.settings)
+            output = process_treerings_fn(full_path, self.settings)
             results[f'{imagename}/treerings.json'] = json.dumps({
                 'ring_points': output['ring_points'],
             }).encode('utf8')
         
 
-        cellsmap = backend.processing.get_cellsmap_name(full_path)
+        cellsmap = get_cellsmap_name(full_path)
         if os.path.exists(cellsmap):
             results[f'{imagename}/{imagename}.cells.png'] = \
                 open(cellsmap, 'rb').read()
-        treeringsmap = backend.processing.get_treeringsmap_name(full_path)
+        treeringsmap = get_treeringsmap_name(full_path)
         if os.path.exists(treeringsmap):
             results[f'{imagename}/{imagename}.treerings.png'] = \
                 open(treeringsmap, 'rb').read()
 
         if postprocess_cells:
-            output = backend.processing.postprocess_cells(full_path, og_shape)
-            celldata = output['cells']
+            output = postprocess_cells_fn(full_path, og_shape)
+            celldata = {
+                'cells': output['cells'],
+                'imagesize': [-999,-999],
+            }
             results[f'{imagename}/cells.json'] = \
                 json.dumps(celldata).encode('utf8')
             results[f'{imagename}/{imagename}.instances.png'] = \
-                open(output['instancemap'], 'rb').read()
+                open(output['instancemap_rgb'], 'rb').read()
+            instancemap = output['instancemap']
+            cell_points = output['cell_points']
 
 
-        # TODO:
+        if postprocess_rings:
+            output = postprocess_treerings_fn(full_path, og_shape)
+            ringdata = {
+                'ring_points': output['ring_points_json'],
+            }
+            results[f'{imagename}/treerings.json'] = \
+                json.dumps(ringdata).encode('utf8')
+            ring_points = output['ring_points']
+
+        if postprocess_combined:
+            output = postprocess_combined_fn(
+                full_path, 
+                cell_points, 
+                ring_points, 
+                instancemap
+            )
+            results[f'{imagename}/{imagename}.ring_map.png'] = \
+                open(output['ringmap_rgb'], 'rb').read()
 
         # result = backend.processing.associate_cells(
         #     full_path, 
@@ -170,7 +204,7 @@ class App(BaseApp):
     
     def sam_encode(self, imagename:str):
         full_path = self.path_in_cache(imagename, abort_404=False)
-        encoding = backend.processing.sam_encode(full_path)
+        encoding = sam_encode(full_path)
 
         return flask.Response(
             encoding.tobytes(), 

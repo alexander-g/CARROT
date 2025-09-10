@@ -7,7 +7,7 @@ from base.backend import GLOBALS
 # needed
 from base.backend.processing import resize_image
 
-from carrot_ml.src import cc_postprocessing
+from carrot_ml.src import cc_postprocessing, treerings_clustering_legacy
 
 import threading, pickle, os
 import numpy as np
@@ -94,84 +94,84 @@ def cache_treerings(result, image_path:str):
 
 
 
-def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
-    '''Assign a tree ring label to each cell'''
-    model = settings.models['treerings']
-    print(f'Processing cells in file {image_path} with treering model {settings.active_models["treerings"]}')
+# def associate_cells(image_path:str, settings, recluster=False) -> tp.Dict:
+#     '''Assign a tree ring label to each cell'''
+#     model = settings.models['treerings']
+#     print(f'Processing cells in file {image_path} with treering model {settings.active_models["treerings"]}')
 
-    result = {
-        'ring_map'    : None,
-        'cells'       : [],
-        'ring_points' : [],
-        'ring_areas'  : [],
-        'imagesize'   : None,  #currently needed when loading results from file
-    }
+#     result = {
+#         'ring_map'    : None,
+#         'cells'       : [],
+#         'ring_points' : [],
+#         'ring_areas'  : [],
+#         'imagesize'   : None,  #currently needed when loading results from file
+#     }
     
-    treerings_cachefile = get_cached_treerings_file(image_path)
+#     treerings_cachefile = get_cached_treerings_file(image_path)
     
-    if not recluster and not os.path.exists(treerings_cachefile):
-        #cannot do anything without tree ring data
-        return None
+#     if not recluster and not os.path.exists(treerings_cachefile):
+#         #cannot do anything without tree ring data
+#         return None
 
-    if os.path.exists(image_path):
-        result['imagesize']   = PIL.Image.open(image_path).size
+#     if os.path.exists(image_path):
+#         result['imagesize']   = PIL.Image.open(image_path).size
     
-    if os.path.exists(treerings_cachefile):
-        # load previously computed boundary points from cache
-        cached_treerings = json.load(open(treerings_cachefile))
-        ring_points = cached_treerings['ring_points']
+#     if os.path.exists(treerings_cachefile):
+#         # load previously computed boundary points from cache
+#         cached_treerings = json.load(open(treerings_cachefile))
+#         ring_points = cached_treerings['ring_points']
     
-    if recluster:
-        # convert boundary segmentation to points (e.g. after user edited it)
-        treering_segmentation  = PIL.Image.open(
-            get_treeringsmap_name(image_path)
-        ).convert('L')
-        if result['imagesize'] is None:
-            # shouldnt happend
-            result['imagesize'] = treering_segmentation.size
-        treering_segmentation  = treering_segmentation / np.float32(255)
-        method = model.segmentation_to_points
-        if accepts_argument(method, 'og_size'):
-            y = method(treering_segmentation, og_size=result['imagesize'])
-        else:
-            y = method(treering_segmentation)
-        ring_points = y['ring_points']    
+#     if recluster:
+#         # convert boundary segmentation to points (e.g. after user edited it)
+#         treering_segmentation  = PIL.Image.open(
+#             get_treeringsmap_name(image_path)
+#         ).convert('L')
+#         if result['imagesize'] is None:
+#             # shouldnt happend
+#             result['imagesize'] = treering_segmentation.size
+#         treering_segmentation  = treering_segmentation / np.float32(255)
+#         method = model.segmentation_to_points
+#         if accepts_argument(method, 'og_size'):
+#             y = method(treering_segmentation, og_size=result['imagesize'])
+#         else:
+#             y = method(treering_segmentation)
+#         ring_points = y['ring_points']    
 
-    result['ring_points'] = [np.stack([a, b], axis=1).tolist() for a,b in ring_points]
+#     result['ring_points'] = [np.stack([a, b], axis=1).tolist() for a,b in ring_points]
 
-    cellmap_path = get_cellsmap_name(image_path)
-    # NOTE: useless when editing
-    # cell_points_path = image_path+'.cell_points.pkl'
-    # instancemap_path = image_path+'.instancemap.pkl'
-    # if os.path.exists(cell_points_path) and os.path.exists(instancemap_path):
-    #     cell_points = pickle.load(open(cell_points_path, 'rb'))
-    #     instancemap = pickle.load(open(instancemap_path, 'rb'))
-    #     cells, ring_map_rgb = \
-    #         model.associate_cells(cell_points, ring_points, instancemap)
-    if os.path.exists(cellmap_path):
-        cell_map = PIL.Image.open(cellmap_path).convert('L')
-        cell_map = cell_map / np.float32(255)
-        method   = model.associate_cells_from_segmentation
-        if accepts_argument(method, 'og_size'):
-            cells, ring_map_rgb = method(cell_map, ring_points, og_size=result['imagesize'])
-        else:
-            cells, ring_map_rgb = method(cell_map, ring_points)
-        for c in cells:
-            c['year_index'] = c['year']
-        result['cells'] = cells
-        ring_map_path = image_path+'.ring_map.png'
-        write_image(ring_map_path, ring_map_rgb)
-        result['ring_map'] = ring_map_path
-    #else: ???
+#     cellmap_path = get_cellsmap_name(image_path)
+#     # NOTE: useless when editing
+#     # cell_points_path = image_path+'.cell_points.pkl'
+#     # instancemap_path = image_path+'.instancemap.pkl'
+#     # if os.path.exists(cell_points_path) and os.path.exists(instancemap_path):
+#     #     cell_points = pickle.load(open(cell_points_path, 'rb'))
+#     #     instancemap = pickle.load(open(instancemap_path, 'rb'))
+#     #     cells, ring_map_rgb = \
+#     #         model.associate_cells(cell_points, ring_points, instancemap)
+#     if os.path.exists(cellmap_path):
+#         cell_map = PIL.Image.open(cellmap_path).convert('L')
+#         cell_map = cell_map / np.float32(255)
+#         method   = model.associate_cells_from_segmentation
+#         if accepts_argument(method, 'og_size'):
+#             cells, ring_map_rgb = method(cell_map, ring_points, og_size=result['imagesize'])
+#         else:
+#             cells, ring_map_rgb = method(cell_map, ring_points)
+#         for c in cells:
+#             c['year_index'] = c['year']
+#         result['cells'] = cells
+#         ring_map_path = image_path+'.ring_map.png'
+#         write_image(ring_map_path, ring_map_rgb)
+#         result['ring_map'] = ring_map_path
+#     #else: ???
     
-    return result
+#     return result
 
 
 def postprocess_cells(image_path:str, og_shape:tp.Tuple[int,int]):
     HARDCODED_MIN_OBJECT_SIZE = 10
 
     cellmap_path = get_cellsmap_name(image_path)
-    output:tp.Dict[str, np.ndarray] = \
+    output:cc_postprocessing.CellPostprocessingResult = \
         cc_postprocessing.postprocess_cellmapfile(
             cellmap_path, 
             og_shape, 
@@ -179,15 +179,50 @@ def postprocess_cells(image_path:str, og_shape:tp.Tuple[int,int]):
         )
     
     instancemap_path = get_instancemap_name(image_path)
-    write_image(instancemap_path, output['instancemap_for_display'])
+    write_image(instancemap_path, output.instancemap_rgb)
 
-    print('TODO TODO TODO: CELLS')
+    
     return {
-        'cells':       [],
-        'instancemap': instancemap_path,
+        'cells': [], # TODO
+        'cell_points':     output.cell_points,
+        'instancemap_rgb': instancemap_path,
+        'instancemap':     output.instancemap,
     }
 
 
+def postprocess_treerings(image_path:str, og_shape:tp.Tuple[int,int]):
+    treeringmap_path = get_treeringsmap_name(image_path)
+    output:treerings_clustering_legacy.TreeringPostprocessingResult = \
+        treerings_clustering_legacy.postprocess_treeringmapfile(
+            treeringmap_path, 
+            og_shape,
+        )
+    ring_points_json = \
+        [np.stack([a, b], axis=1).tolist() for a,b in output.ring_points]
+    return {
+        'ring_points_json': ring_points_json,
+        'ring_points': output.ring_points,
+    }
+
+
+def postprocess_combined(
+    image_path:  str,
+    cell_points: tp.List[np.ndarray], 
+    ring_points: tp.List[tp.Tuple[np.ndarray, np.ndarray]],
+    instancemap: np.ndarray,
+):
+    output:cc_postprocessing.CombinedPostprocessingResult = \
+        cc_postprocessing.postprocess_cells_and_rings_combined(
+            cell_points,
+            ring_points,
+            instancemap,
+        )
+    
+    ringmap_path = image_path+'.ring_map.png'
+    write_image(ringmap_path, output.ringmap_rgb)
+    return {
+        'ringmap_rgb': ringmap_path
+    }
 
 
 

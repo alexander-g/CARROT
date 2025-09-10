@@ -151,11 +151,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             return;
         
         const current_data:CARROT_Data = this.props.$result.value.data;
-        const current_rings:TreeringInfo[] = 
-            ('treerings' in current_data)? current_data.treerings : []
-        const current_years:number[] = current_rings.map(
-            (ring:TreeringInfo) => ring.year
-        )
         const filename = `${this.props.input.name}.${mode}.png`
         const edited_file = new File([blob], filename)
         const attribute:'cellmap'|'treeringmap'= 
@@ -173,14 +168,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         this.props.$result.value = new CARROT_Result('processing');
         const edited_result:CARROT_Result = 
             await backend.postprocess_result(unfinished_result, this.props.input)
-
-        // re-apply potentially edited years
-        const edited_ring_points:PointPair[][] = 
-            edited_result.get_treering_coordinates_if_loaded() ?? []
-        const finished_rings:TreeringInfo[] = 
-            _zip_into_treerings(edited_ring_points, current_years)
-        if('treerings' in edited_result.data)
-            edited_result.data.treerings = finished_rings;
 
         this.props.$result.value = edited_result;
     }
