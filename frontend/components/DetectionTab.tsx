@@ -139,16 +139,16 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         ]
     }
 
-    on_apply_editing_changes = async () => {
+    on_apply_editing_changes: () => Promise<boolean> = async () => {
         const backend:GenericBackend|CARROT_Backend|null = 
             this.props.$processingmodule.value
         const mode:CARROT_ModelTypes|null = this.$active_editing_mode.value
         if(!(backend instanceof CARROT_Backend)
         || mode == null)
-            return;
+            return false;
         const blob:Blob|null = await this.canvas_ref.current!.to_blob()
         if(blob == null)
-            return;
+            return false;
         
         const current_data:CARROT_Data = this.props.$result.value.data;
         const filename = `${this.props.input.name}.${mode}.png`
@@ -170,6 +170,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             await backend.postprocess_result(unfinished_result, this.props.input)
 
         this.props.$result.value = edited_result;
+        return (edited_result.status == 'processed');
     }
 
     on_reverse_growth_direction = () => {
@@ -316,8 +317,9 @@ type EditMenuProps = {
     /** @output The brush size as selected by the user in the slider */
     $brush_size: Signal<number>;
 
-    /** Callback issued when user wants to apply editing changes */
-    on_apply: () => void;
+    /** Callback issued when user wants to apply editing changes. 
+     *  Should return false if something went wrong. */
+    on_apply: () => boolean|Promise<boolean>;
 
     /** Callback issued when user wants to cancel the editing process */
     on_clear: () => void;
@@ -496,8 +498,10 @@ class EditMenu extends preact.Component<EditMenuProps> {
 
     /** Apply editing changes. */
     on_apply = async () => {
-        await this.props.on_apply()
-        this.on_clear()
+        const status:boolean = await this.props.on_apply()
+        // only clear if successful
+        if(status)
+            this.on_clear()
     }
 
     on_undo = async () => {
