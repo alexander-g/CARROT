@@ -90,10 +90,12 @@ class App(BaseApp):
                 displayshape
             )
         if process_treerings:
-            output = process_treerings_fn(full_path, self.settings)
-            results[f'{imagename}/treerings.json'] = json.dumps({
-                'ring_points': output['ring_points'],
-            }).encode('utf8')
+            output = process_treerings_fn(
+                full_path, 
+                self.settings, 
+                px_per_um, 
+                displayshape
+            )
         
 
         cellsmap = get_cellsmap_name(full_path)
