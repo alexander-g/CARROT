@@ -48,8 +48,9 @@ export type TreeringMapOnlyUnfinishedData = {
 export type TreeringsOnlyData = {
     treeringmap: File;
     treerings:    TreeringInfo[];
-    px_per_um:    number;
     reversed_growth_direction: boolean;
+    px_per_um:    number;
+    imagesize:    base.util.ImageSize;
 }
 
 /** An old version of saved results that did not contain association data. */
@@ -547,7 +548,6 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
     
     const adata:RingsAssociationData|null = 
         validate_ringsonly_association_data(await association.text())
-    console.log('DBG:', adata)
     if(adata == null)
         return null;
     
@@ -562,6 +562,7 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
         reversed_growth_direction: adata.reversed_growth_direction ?? false,
         // NOTE: px_per_um is updated in state.ts (for now)
         px_per_um:   NaN,
+        imagesize:   {width:adata.imagesize[0], height:adata.imagesize[1]}
     }
     return new ctor(
         'processed',
@@ -627,6 +628,7 @@ type RingsAssociationData = {
     ring_points: TwoNumberTuple[][]; 
     reversed_growth_direction?: boolean;
     ring_years?: number[];
+    imagesize:   TwoNumbers;
 }
 
 function validate_ringsonly_association_data(raw:string): RingsAssociationData|null {
@@ -639,7 +641,12 @@ function validate_ringsonly_association_data(raw:string): RingsAssociationData|n
     && base.util.has_property_of_type(
         jsondata, 
         'ring_points', 
-        validate_2x2_number_tuple_dual_array)){
+        validate_2x2_number_tuple_dual_array)
+    && base.util.has_property_of_type(
+        jsondata, 
+        'imagesize', 
+        validate_2_number_tuple)
+    ){
         return jsondata;
     }
     else return null;
@@ -941,6 +948,7 @@ function export_treeringsonly(
         ring_points: convert_treerings_to_points(data.treerings),
         ring_years:  years,
         reversed_growth_direction: data.reversed_growth_direction,
+        imagesize:   [data.imagesize.width, data.imagesize.height],
     }
     return {
         [`${inputname}.tree_ring_statistics.csv`] :
@@ -1017,14 +1025,21 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         if(og_size instanceof Error)
             return new CARROT_Result('failed')
         
-        if('cellmap' in data) // TODO: && data.cellmap != undefined
-            await base.util.upload_file_no_throw(
+        // TODO: combine file upload and postprocessing in one fetch()
+        if('cellmap' in data){
+            const response:Response|Error = await base.util.upload_file_no_throw(
                 new File([data.cellmap], `${r.inputname}.cells.png`)
             )
-        if('treeringmap' in data)
-            await base.util.upload_file_no_throw(
+            if(response instanceof Error)
+                return new CARROT_Result('failed')
+        }
+        if('treeringmap' in data){
+            const response:Response|Error = await base.util.upload_file_no_throw(
                 new File([data.treeringmap], `${r.inputname}.treerings.png`)
             )
+            if(response instanceof Error)
+                return new CARROT_Result('failed')
+        }
         
         const postprocess_cells:boolean = ('cellmap' in data);
         const postprocess_rings:boolean = ('treeringmap' in data);
@@ -1039,8 +1054,8 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             postprocess_cells:     postprocess_cells.toString(),
             postprocess_treerings: postprocess_rings.toString(),
             //px_per_um: px_per_um.toFixed(5),  // not needed (for now?)
-            width:     og_size.width.toFixed(),
-            height:    og_size.height.toFixed(),
+            og_width:      og_size.width.toFixed(),
+            og_height:     og_size.height.toFixed(),
         })
         const response:Error|Response = 
             await base.util.fetch_no_throw(
@@ -1106,8 +1121,10 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             treerings: treerings.toString(),
             recluster: recluster.toString(),
             px_per_um: px_per_um.toFixed(5),
-            width:     display_size.width.toFixed(),
-            height:    display_size.height.toFixed(),
+            displaywidth:  display_size.width.toFixed(),
+            displayheight: display_size.height.toFixed(),
+            og_width:      og_size.width.toFixed(),
+            og_height:     og_size.height.toFixed(),
         })
         const url = `process/${filename}?${params}`
         const response:Response|Error = await base.util.fetch_no_throw(url)

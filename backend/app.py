@@ -50,10 +50,10 @@ class App(BaseApp):
 
         process_cells     = args.get('cells', type=json.loads, default=False)
         process_treerings = args.get('treerings', type=json.loads, default=False)
-        displaywidth  = args.get('width', type=int, default=None)
-        displayheight = args.get('height', type=int, default=None)
-        og_width      = args.get('width', type=int, default=None)
-        og_height     = args.get('height', type=int, default=None)
+        displaywidth  = args.get('displaywidth',  type=int, default=None)
+        displayheight = args.get('displayheight', type=int, default=None)
+        og_width      = args.get('og_width',  type=int, default=None)
+        og_height     = args.get('og_height', type=int, default=None)
         px_per_um     = args.get('px_per_um', type=float)
         postprocess_cells = process_cells or args.get(
             'postprocess_cells', 
@@ -67,22 +67,18 @@ class App(BaseApp):
         )
         # combine both results
         postprocess_combined = postprocess_cells and postprocess_rings
-
-        displayshape = (displayheight, displaywidth)
-        if None in displayshape:
-            displayshape = None
         
+        if og_height is None or og_width is None:
+            # TODO: instead, read the size from input image file if available
+            flask.abort(400)
         og_shape = (og_height, og_width)
-        if None in og_shape:
-            # TODO: read the size from input image file
-            og_shape = None
-
-        #if not cells and not treerings and not recluster:
-        #    flask.abort(400)  #bad request
 
         results:tp.Dict[str, bytes] = {}
         full_path = self.path_in_cache(imagename, abort_404=False)
         if process_cells:
+            if displayheight is None or displaywidth is None:
+                flask.abort(400)
+            displayshape = (displayheight, displaywidth)
             _ignored = process_cells_fn(
                 full_path, 
                 self.settings, 
@@ -90,6 +86,9 @@ class App(BaseApp):
                 displayshape
             )
         if process_treerings:
+            if displayheight is None or displaywidth is None:
+                flask.abort(400)
+            displayshape = (displayheight, displaywidth)
             output = process_treerings_fn(
                 full_path, 
                 self.settings, 
@@ -111,7 +110,7 @@ class App(BaseApp):
             output = postprocess_cells_fn(full_path, og_shape)
             celldata = {
                 'cells': output['cells'],
-                'imagesize': [-999,-999],
+                'imagesize': [og_width, og_height],
             }
             results[f'{imagename}/cells.json'] = \
                 json.dumps(celldata).encode('utf8')
@@ -125,6 +124,7 @@ class App(BaseApp):
             output = postprocess_treerings_fn(full_path, og_shape)
             ringdata = {
                 'ring_points': output['ring_points_json'],
+                'imagesize':   [og_width, og_height],
             }
             results[f'{imagename}/treerings.json'] = \
                 json.dumps(ringdata).encode('utf8')

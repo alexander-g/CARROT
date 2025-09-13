@@ -99,6 +99,7 @@ def cache_treerings(result, image_path:str):
 
 def postprocess_cells(image_path:str, og_shape:tp.Tuple[int,int]):
     HARDCODED_MIN_OBJECT_SIZE = 10
+    print('DBG: og_shape', og_shape)
 
     cellmap_path = get_cellsmap_name(image_path)
     output:cc_postprocessing.CellPostprocessingResult = \
@@ -176,5 +177,4 @@ def sam_encode(imagepath:str) -> np.ndarray:
         np.array(PIL.Image.open(imagepath))
     )
     output = sam_encoder(imagedata).detach()
-    print(output.dtype, output.shape)
     return output.numpy()
