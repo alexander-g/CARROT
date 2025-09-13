@@ -82,7 +82,7 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
 }
 
 
-function is_unfinished(x:CARROT_Data): x is LegacySavedMapOnlyUnfinishedData {
+export function is_unfinished(x:CARROT_Data): x is LegacySavedMapOnlyUnfinishedData {
     if('cellmap' in x && !('cells' in x))
         return true;
     else if('treeringmap' in x && !('treerings' in x))

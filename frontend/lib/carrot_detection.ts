@@ -1020,9 +1020,8 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         if(!('cellmap' in data) && !('treeringmap' in data))
             return new CARROT_Result('failed')
         
-        const og_size: base.util.ImageSize|Error = 
-            await base.imagetools.read_image_size(input)
-        if(og_size instanceof Error)
+        const sizes:OGandDisplaySizes|Error = await get_og_and_display_sizes(input)
+        if(sizes instanceof Error)
             return new CARROT_Result('failed')
         
         // TODO: combine file upload and postprocessing in one fetch()
@@ -1054,8 +1053,10 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             postprocess_cells:     postprocess_cells.toString(),
             postprocess_treerings: postprocess_rings.toString(),
             //px_per_um: px_per_um.toFixed(5),  // not needed (for now?)
-            og_width:      og_size.width.toFixed(),
-            og_height:     og_size.height.toFixed(),
+            displaywidth:  sizes.display_size.width.toFixed(),
+            displayheight: sizes.display_size.height.toFixed(),
+            og_width:      sizes.og_size.width.toFixed(),
+            og_height:     sizes.og_size.height.toFixed(),
         })
         const response:Error|Response = 
             await base.util.fetch_no_throw(
@@ -1100,12 +1101,9 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             )
             on_progress?.({input, result:r })
         }
-        const og_size: base.util.ImageSize|Error = 
-            await base.imagetools.read_image_size(input)
-        if(og_size instanceof Error)
+        const sizes:OGandDisplaySizes|Error = await get_og_and_display_sizes(input)
+        if(sizes instanceof Error)
             return new CARROT_Result('failed')
-        const display_size: base.util.ImageSize = 
-            base.imagetools.get_display_size(og_size)
 
         const upload_ok:Response|Error = await base.util.upload_file_no_throw(input)
         if(upload_ok instanceof Error)
@@ -1121,10 +1119,10 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             treerings: treerings.toString(),
             recluster: recluster.toString(),
             px_per_um: px_per_um.toFixed(5),
-            displaywidth:  display_size.width.toFixed(),
-            displayheight: display_size.height.toFixed(),
-            og_width:      og_size.width.toFixed(),
-            og_height:     og_size.height.toFixed(),
+            displaywidth:  sizes.display_size.width.toFixed(),
+            displayheight: sizes.display_size.height.toFixed(),
+            og_width:      sizes.og_size.width.toFixed(),
+            og_height:     sizes.og_size.height.toFixed(),
         })
         const url = `process/${filename}?${params}`
         const response:Response|Error = await base.util.fetch_no_throw(url)
@@ -1170,6 +1168,22 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         // onnx!
         return await '???'
     }
+}
+
+
+type OGandDisplaySizes = {
+    display_size: base.util.ImageSize;
+    og_size:      base.util.ImageSize;
+}
+
+async function get_og_and_display_sizes(image:File): Promise<OGandDisplaySizes|Error> {
+    const og_size: base.util.ImageSize|Error = 
+        await base.imagetools.read_image_size(image)
+    if(og_size instanceof Error)
+        return og_size as Error;
+    const display_size: base.util.ImageSize = 
+        base.imagetools.get_display_size(og_size)
+    return {og_size, display_size}
 }
 
 

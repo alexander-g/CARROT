@@ -1,5 +1,5 @@
 import { base, Signal, signals, JSX, preact } from "../dep.ts"
-import { CARROT_State }  from "./state.ts"
+import { CARROT_State, is_unfinished }  from "./state.ts"
 import { 
     CARROT_Result, 
     CARROT_Data,
@@ -74,17 +74,10 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
 
     override result_overlays(): JSX.Element {
-        const result:CARROT_Result = this.props.$result.value;
-        // TODO: not only colored_cellmap
-        const overlayimage:File|null = 
-            ('colored_cellmap' in result.data)? result.data.colored_cellmap : 
-            ('instancemap' in result.data)? result.data.instancemap :
-            ('cellmap' in result.data)? result.data.cellmap :
-            ('treeringmap' in result.data)? result.data.treeringmap : null;
         return <>
             <base.imageoverlay.ImageOverlay 
-                image     = {overlayimage}        
-                $visible  = {this.$overlays_visible}
+                image     = { this.get_overlayimage() }
+                $visible  = { this.$overlays_visible }
             />
             <TreeringsSVGOverlay 
                 size = { this.$og_imagesize.value ?? {height:0, width:0} }
@@ -110,6 +103,23 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             {/* <SAM_Modal ref={this.sam_modal_ref} /> */}
         </>
     }
+
+    get_overlayimage(): File|null {
+        const resultdata_:CARROT_Data = this.props.$result.value.data;
+        if(is_unfinished(resultdata_))
+            return null;
+        
+        // NOTE: re-declaring because typescript complains
+        const resultdata:CARROT_Data = this.props.$result.value.data;
+
+        // TODO: let user decide
+        return ('colored_cellmap' in resultdata)? resultdata.colored_cellmap : 
+               ('instancemap'     in resultdata)? resultdata.instancemap :
+               ('cellmap'         in resultdata)? resultdata.cellmap :
+               ('treeringmap'     in resultdata)? resultdata.treeringmap : 
+               null;
+    }
+
 
     // NOTE: adding <SAM_Modal /> in result_overlays() caused issues
     // TODO: does not belong here, should exist only once

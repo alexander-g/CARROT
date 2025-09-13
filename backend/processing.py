@@ -97,20 +97,25 @@ def cache_treerings(result, image_path:str):
 
 
 
-def postprocess_cells(image_path:str, og_shape:tp.Tuple[int,int]):
+def postprocess_cells(
+    image_path:   str, 
+    displayshape: tp.Tuple[int,int],
+    og_shape:     tp.Tuple[int,int],
+):
     HARDCODED_MIN_OBJECT_SIZE = 10
-    print('DBG: og_shape', og_shape)
 
     cellmap_path = get_cellsmap_name(image_path)
     output:cc_postprocessing.CellPostprocessingResult = \
         cc_postprocessing.postprocess_cellmapfile(
             cellmap_path, 
+            displayshape,
             og_shape, 
             min_object_size_px=HARDCODED_MIN_OBJECT_SIZE
         )
     
     instancemap_path = get_instancemap_name(image_path)
     write_image(instancemap_path, output.instancemap_rgb)
+    replace_image_if_size_changed(cellmap_path, output.classmap)
 
     print('TODO TODO TODO: CELLS')
     return {
@@ -121,15 +126,21 @@ def postprocess_cells(image_path:str, og_shape:tp.Tuple[int,int]):
     }
 
 
-def postprocess_treerings(image_path:str, og_shape:tp.Tuple[int,int]):
+def postprocess_treerings(
+    image_path:   str, 
+    displayshape: tp.Tuple[int,int],
+    og_shape:     tp.Tuple[int,int],
+):
     treeringmap_path = get_treeringsmap_name(image_path)
     output:treerings_clustering_legacy.TreeringPostprocessingResult = \
         treerings_clustering_legacy.postprocess_treeringmapfile(
             treeringmap_path, 
+            displayshape,
             og_shape,
         )
     ring_points_json = \
         [np.stack([a, b], axis=1).tolist() for a,b in output.ring_points_yx]
+    replace_image_if_size_changed(treeringmap_path, output.treeringmap)
     return {
         'ring_points_json': ring_points_json,
         'ring_points': output.ring_points_yx,
@@ -156,6 +167,12 @@ def postprocess_combined(
     }
 
 
+def replace_image_if_size_changed(path:str, newdata:np.ndarray):
+    assert newdata.ndim == 2
+    old_size = PIL.Image.open(path).size
+    new_size = newdata.shape[::-1]
+    if old_size != new_size:
+        write_image(path, newdata)
 
 
 
