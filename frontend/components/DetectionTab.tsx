@@ -32,6 +32,17 @@ type Box = base.boxes.Box;
 
 type GenericBackend = base.files.ProcessingModule<File, CARROT_Result>;
 
+
+/** Global sam onnx session because only one model */
+let sam_onnx_session:onnx_sam.ONNX_SamSession|undefined = undefined;
+
+const HARDCODED_ENCODER_FILENAME = '2025-03-18_beech_cells_large.pt'
+const HARDCODED_ENCODER_URL = `https://github.com/alexander-g/assets/releases/download/2025-04-03/${HARDCODED_ENCODER_FILENAME}`
+const HARDCODED_ONNX_FILENAME = 'sam_decoder_vit_b.onnx'
+const HARDCODED_ONNX_URL = `https://github.com/alexander-g/assets/releases/download/2025-04-03/${HARDCODED_ONNX_FILENAME}`
+
+
+
 export 
 class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     canvas_ref: preact.RefObject<EditCanvas> = preact.createRef()
@@ -149,6 +160,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         ]
     }
 
+    // TODO: needs error messages to user
     on_apply_editing_changes: () => Promise<boolean> = async () => {
         const backend:GenericBackend|CARROT_Backend|null = 
             this.props.$processingmodule.value
@@ -179,6 +191,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         const edited_result:CARROT_Result = 
             await backend.postprocess_result(unfinished_result, this.props.input)
 
+        // TODO: if not succesful then maybe shouldnt set $result.value ?
         this.props.$result.value = edited_result;
         return (edited_result.status == 'processed');
     }
@@ -205,6 +218,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
     #_prev_drawing_mode:DrawingMode = this.$drawing_mode.value;
     #_1 = this.$drawing_mode.subscribe( (mode:DrawingMode) => {
+        // TODO: clear cursor when activating sam
         if(mode == 'sam')
             this.on_sam_activate(this.#_prev_drawing_mode)
         
@@ -214,7 +228,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
 
     #sam_embeddings?:Float32Array;
-    #sam_onnx_session?:onnx_sam.ONNX_SamSession;
     #sam_orig_im_size?:base.util.ImageSize;
 
     // TODO:
@@ -227,21 +240,54 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             return;
         }
         
+        if(sam_onnx_session != undefined
+        && this.#sam_embeddings != undefined
+        && this.#sam_orig_im_size != undefined)
+            return;
+        
         // TODO: check if sam is already available
         // TODO: check if image not too large, incl px/um
         //  - download SAM
         //  - download onnxruntime wasm
-        const proceed:boolean = await this.sam_modal_ref.current!.show()
-        console.log('proceed:',proceed)
+        const proceed:boolean = 
+            await this.sam_modal_ref.current!.show_download_required()
         if(!proceed) {
             // user cancelled or something went wrong, back to previous mode
             this.$drawing_mode.value = prev_mode;
             return;
         }
 
+        await this.sam_modal_ref.current!.show_downloading()
+
+        // // NOTE: starting onnx download first, because smaller, no await here
+        // const onnxfilepromise:Promise<Error|Response> = 
+        //     base.util.fetch_no_throw(`proxy?url=${HARDCODED_ONNX_URL}`)
+        // const encoderfile:File|Error = await fetch_with_progress(
+        //     new URL(`proxy?url=${HARDCODED_ENCODER_URL}`, self.location.origin),
+        //     (progress:{total:number, received:number}) => {
+        //         const percent:number = 100 * progress.received / progress.total;
+        //         this.sam_modal_ref.current!.show_downloading(percent)
+        //     }
+        // )
+        // const onnxfileresponse:Response|Error = await onnxfilepromise;
+        // if(encoderfile instanceof Error || onnxfileresponse instanceof Error){
+        //     // TODO: unlock modal / show error
+        //     base.errors.show_error_toast('Failed to download Segment Anything')
+        //     this.$drawing_mode.value = prev_mode;
+        //     return;
+        // }
+        // const response0:Response|Error = 
+        //     await base.util.upload_file_no_throw(encoderfile, `upload_model/sam/${HARDCODED_ENCODER_FILENAME}`)
+        // const onnxfile = new File([await onnxfileresponse.blob()], HARDCODED_ONNX_FILENAME)
+        // const response1:Response|Error = 
+        //     await base.util.upload_file_no_throw(onnxfile, `upload_model/sam/${HARDCODED_ONNX_FILENAME}`)
+        // // TODO: check responses
+
+        await this.sam_modal_ref.current!.show_initializing()
         const imsize:base.util.ImageSize|Error = 
             await base.imagetools.read_image_size(this.props.input)
         if(imsize instanceof Error){
+            // TODO: unlock modal / show error
             base.errors.show_error_toast('Failed to initialize Segment Anything')
             // back to previous mode
             this.$drawing_mode.value = prev_mode;
@@ -254,18 +300,19 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         const embedding:Float32Array|Error = 
             await backend.sam_encode(this.props.input)
         if(embedding instanceof Error){
+            // TODO: unlock modal / show error
             base.errors.show_error_toast('Failed to initialize Segment Anything')
             // back to previous mode
             this.$drawing_mode.value = prev_mode;
             return;
         }
         
-        
         const session:Error|onnx_sam.ONNX_SamSession = 
             await onnx_sam.ONNX_SamSession.initialize(
-                'models/sam_DEBUG/sam_decoder_vit_b.onnx'
+                `models/sam_DEBUG/${HARDCODED_ONNX_FILENAME}`
             )
         if(session instanceof Error){
+            // TODO: unlock modal / show error
             console.error('ONNX session error: ', session)
             base.errors.show_error_toast('Failed to initialize Segment Anything')
             // back to previous mode
@@ -274,20 +321,22 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         }
 
         this.#sam_embeddings = embedding;
-        this.#sam_onnx_session = session;
+        sam_onnx_session = session;
+
+        await this.sam_modal_ref.current!.close()
     }
 
     on_sam_new_box = async (box:Box) => {
         // send embeddings + box to onnx
         if(!this.#sam_embeddings 
-        || !this.#sam_onnx_session 
+        || !sam_onnx_session 
         || !this.#sam_orig_im_size){
             console.error('Cannot run SAM decoder. Not preprocessed')
             return;
         }
 
         const output:onnx_sam.SamOutput|Error = 
-            await this.#sam_onnx_session.process_box(
+            await sam_onnx_session.process_box(
                 this.#sam_embeddings, 
                 box, 
                 this.#sam_orig_im_size
@@ -313,6 +362,45 @@ function _get_map_for_editmode(
         return result.data.treeringmap;
     return null;
 }
+
+async function fetch_with_progress(
+    url: URL,
+    on_progess: (x:{total:number, received:number}) => void
+): Promise<File|Error> {
+    const filename:string = 
+        url.pathname.substring(url.pathname.lastIndexOf('/') + 1);
+
+    const response:Response|Error = await base.util.fetch_no_throw(url);
+    if(response instanceof Error)
+        return response as Error;
+    
+    const total:number = Number(response.headers.get('content-length'));
+    if(!total) 
+        return new Error('Content-Length header missing');
+    
+    const reader:ReadableStreamDefaultReader<Uint8Array>|undefined = 
+        response.body?.getReader()
+    if(reader == undefined)
+        return new Error('Internal Error')
+    
+    let received:number = 0
+    const chunks:Uint8Array[] = []
+    while(true) {
+        try {
+            const {done, value} = await reader.read();
+            if(value != undefined){
+                chunks.push(value)
+                received += value.length
+                on_progess({total, received})
+            }
+            if(done)
+                return new File(chunks, filename)
+        } catch (error) {
+            return error as Error;
+        }
+    }
+}
+
 
 
 
@@ -598,6 +686,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         if(this.props.$active_modality.value != null){
             const css:JSX.CSSProperties = {
                 ...base.styles.overlay_css,
+                // TODO: maybe no cursor at all, bc of the rendering offset issue
                 cursor: 'crosshair',
                 imageRendering:   'pixelated',
                 'pointer-events': 'all',
@@ -935,13 +1024,20 @@ async function paste_blob_onto_canvas(canvas:HTMLCanvasElement, blob:Blob){
 
 
 
+type SAM_Modal_States = 
+    'download-required'|'downloading'|'initializing'|'error';
+
 
 class SAM_Modal extends preact.Component {
     ref: preact.RefObject<HTMLDivElement> = preact.createRef()
+    progress_ref: preact.RefObject<HTMLDivElement> = preact.createRef()
+
+    $state:Signal<SAM_Modal_States> = new Signal('download-required')
+
+
 
     render(): JSX.Element {
         return <div class="ui modal" ref={this.ref}>
-            <i class="close icon"></i>
             <div class="header">
                 Segment Anything
             </div>
@@ -949,16 +1045,29 @@ class SAM_Modal extends preact.Component {
                 <div class="ui small image">
                     <i class="massive magic icon"></i>
                 </div>
-                <div class="description">
-                    {/* <div class="ui header">Segment Anything</div> */}
-                    <p>Segment Anything is a foundation model by <a href="https://openaccess.thecvf.com/content/ICCV2023/papers/Kirillov_Segment_Anything_ICCV_2023_paper.pdf" target="_blank">Kirillov et al. (2023)</a> that can be used to accelerate annotation of cells.</p>
-                </div>
+                {
+                    (this.$state.value == 'download-required')?
+                        this.#download_required_description() :
+                    (this.$state.value == 'downloading')?
+                        this.#downloading_description() :
+                    (this.$state.value == 'initializing')?
+                        this.#initializing_description() :
+                        null
+                }
             </div>
             <div class="actions">
-                <button class="ui black deny button">
+                <button 
+                    class = "ui black deny button" 
+                    style = { this.#$cancel_visible.value } 
+                    type  = "button"
+                >
                     Cancel
                 </button>
-                <button class="ui positive right labeled icon button">
+                <button 
+                    class = "ui positive right labeled icon button" 
+                    style = { this.#$OK_visible.value }
+                    type  = "button"
+                >
                     Download
                     <i class="angle right icon"></i>
                 </button>
@@ -967,21 +1076,113 @@ class SAM_Modal extends preact.Component {
     }
 
 
-    show(): Promise<boolean> {
+    show_download_required(): Promise<boolean> {
+        this.$state.value = 'download-required';
+
         const promise = new Promise(
             (resolve: (value:boolean) => void) => {
                 $(this.ref.current).modal({
-                    closable: false, 
+                    closable: true, 
                     onDeny:    () => resolve(false),
-                    onApprove: () => resolve(this.on_continue())
+                    onApprove: () => {
+                        resolve(true)
+                        return false;
+                    }
                 }).modal('show');
             }
         )
         return promise;
     }
 
-    on_continue(): boolean {
-        ///console.log('GO GO GO!')
-        return true;
+    async show_downloading(percent:number = 0) {
+        this.$state.value = 'downloading';
+        $(this.ref.current).modal({
+            closable: false, 
+            onDeny:    () => false,
+            onApprove: () => false,
+        }).modal('show')
+        if(this.progress_ref.current != null)
+            $(this.progress_ref.current).progress({percent});
     }
+
+    show_initializing() {
+        this.$state.value = 'initializing';
+
+        $(this.ref.current).modal({
+            closable: false, 
+            onDeny:    () => false,
+            onApprove: () => false,
+        }).modal('show')
+    }
+
+    close() {
+        $(this.ref.current).modal('hide')
+    }
+
+    show_error() {
+        base.errors.show_error_toast('ERROR HANDLING NOT IMPLEMENTED')
+    }
+
+    #download_required_description():JSX.Element {
+        return <div class="description">
+            <p>Segment Anything is a foundation model by <a href="https://openaccess.thecvf.com/content/ICCV2023/papers/Kirillov_Segment_Anything_ICCV_2023_paper.pdf" target="_blank">Kirillov et al. (2023)</a> that can be used to accelerate cell annotation.</p>
+        </div>
+    }
+
+    #downloading_description():JSX.Element {
+        return <div class="description" style="width:100%">
+            <p>Downloading...</p>
+            <div 
+                class = "ui progress" 
+                style = {{marginTop:"30px"}}
+                ref   = {this.progress_ref}
+            >
+                <div class="bar">
+                    <div class="progress"></div>
+                </div>
+            </div>
+        </div>
+    }
+
+    #initializing_description(): JSX.Element {
+        return <div 
+            class = "description" 
+            style = {{
+                width:   '100%',
+                display: 'flex',
+                flexDirection: 'column'
+            }}
+            //style = "width: 100%;display: flex;flex-direction: column;"
+        >
+            Encoding image, this might take several seconds.
+            <div style = {{
+                display: 'flex',
+                width:   '100%',
+                justifyContent: 'center'
+            }}>
+                <i class="spinner huge loading icon" style="margin-top: 20px"></i>
+            </div>
+        </div>
+    }
+
+    #$cancel_visible:Readonly<Signal<JSX.CSSProperties>> = signals.computed(
+        () => { 
+            return {
+                display: base.ui_util.boolean_to_display_css(
+                    this.$state.value == 'download-required'
+                    || this.$state.value == 'error'
+                )
+            }
+        }
+    )
+
+    #$OK_visible:Readonly<Signal<JSX.CSSProperties>> = signals.computed(
+        () => { 
+            return {
+                display: base.ui_util.boolean_to_display_css(
+                    this.$state.value == 'download-required'
+                )
+            }
+        }
+    )
 }

@@ -9,6 +9,8 @@ import typing as tp
 import zipfile
 
 import flask
+from werkzeug.security import safe_join
+
 import backend.processing
 import backend.training
 import backend.settings  #important for some reason
@@ -45,6 +47,7 @@ class App(BaseApp):
             return
         
         self.route('/sam_encode/<imagename>')(self.sam_encode)
+        self.route('/upload_model/<path:path>', methods=['POST'])(self.upload_model)
         self.route('/process/<imagename>')(self.process)
 
     def process(self, imagename:str):
@@ -205,6 +208,17 @@ class App(BaseApp):
             }
         )
     
+    def upload_model(self, path:str):
+        files = flask.request.files.getlist("files")
+        for f in files:
+            print('Upload model: %s'%f.filename)
+            fullpath = safe_join(get_models_path(), path)
+            if fullpath is None:
+                flask.abort(403)
+            os.makedirs(os.path.dirname(fullpath), exist_ok=True)
+            f.save(fullpath)
+        return 'OK'
+
 
 
 def zip_results(result:tp.Dict[str, bytes], inputfile:str) -> str:
