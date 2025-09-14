@@ -21,7 +21,9 @@ from backend.processing import (
     postprocess_treerings as postprocess_treerings_fn,
     postprocess_combined  as postprocess_combined_fn,
     get_cellsmap_name,
+    get_cellsmap_og_name,
     get_treeringsmap_name,
+    get_treeringsmap_og_name,
     sam_encode,
 )
 
@@ -104,7 +106,7 @@ class App(BaseApp):
             }
             results[f'{imagename}/cells.json'] = \
                 json.dumps(celldata).encode('utf8')
-            results[f'{imagename}/{imagename}.instances.png'] = \
+            results[f'{imagename}/internal/{imagename}.instancemap.png'] = \
                 open(output['instancemap_rgb'], 'rb').read()
             instancemap = output['instancemap']
             cell_points = output['cell_points']
@@ -127,18 +129,27 @@ class App(BaseApp):
                 ring_points, 
                 instancemap
             )
-            results[f'{imagename}/{imagename}.ring_map.png'] = \
+            results[f'{imagename}/internal/{imagename}.ring_map.png'] = \
                 open(output['ringmap_rgb'], 'rb').read()
 
         
-        cellsmap = get_cellsmap_name(full_path)
+        cellsmap = get_cellsmap_og_name(full_path)
         if os.path.exists(cellsmap):
             results[f'{imagename}/{imagename}.cells.png'] = \
                 open(cellsmap, 'rb').read()
-        treeringsmap = get_treeringsmap_name(full_path)
+        cellsmap_resized = get_cellsmap_name(full_path)
+        if os.path.exists(cellsmap_resized):
+            results[f'{imagename}/internal/{imagename}.cells.png'] = \
+                open(cellsmap_resized, 'rb').read()
+        
+        treeringsmap = get_treeringsmap_og_name(full_path)
         if os.path.exists(treeringsmap):
             results[f'{imagename}/{imagename}.treerings.png'] = \
                 open(treeringsmap, 'rb').read()
+        treeringsmap_resized = get_treeringsmap_name(full_path)
+        if os.path.exists(treeringsmap_resized):
+            results[f'{imagename}/internal/{imagename}.treerings.png'] = \
+                open(treeringsmap_resized, 'rb').read()
 
         path = zip_results(results, full_path)
         return flask.send_file(path)

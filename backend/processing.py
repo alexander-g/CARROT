@@ -53,11 +53,18 @@ def process_cells(
 def get_cellsmap_name(image_path:str) -> str:
     return image_path+'.cells.png'
 
+def get_cellsmap_og_name(image_path:str) -> str:
+    return image_path+'.cells_og.png'
+
 def get_instancemap_name(image_path:str) -> str:
     return image_path+'.instances.png'
 
 def get_treeringsmap_name(image_path:str) -> str:
     return image_path+'.treerings.png'
+
+def get_treeringsmap_og_name(image_path:str) -> str:
+    return image_path+'treerings_og.png'
+
 
 def process_treerings(
     image_path:   str, 
@@ -116,6 +123,9 @@ def postprocess_cells(
     instancemap_path = get_instancemap_name(image_path)
     write_image(instancemap_path, output.instancemap_rgb)
     replace_image_if_size_changed(cellmap_path, output.classmap)
+    cellmap_og_path = get_cellsmap_og_name(image_path)
+    write_image(cellmap_og_path, output.classmap_og)
+
 
     print('TODO TODO TODO: CELLS')
     return {
@@ -141,6 +151,9 @@ def postprocess_treerings(
     ring_points_json = \
         [np.stack([a, b], axis=1).tolist() for a,b in output.ring_points_yx]
     replace_image_if_size_changed(treeringmap_path, output.treeringmap)
+    treeringmap_og_path = get_treeringsmap_og_name(image_path)
+    write_image(treeringmap_og_path, output.treeringmap_og)
+    
     return {
         'ring_points_json': ring_points_json,
         'ring_points': output.ring_points_yx,
@@ -191,7 +204,7 @@ HARDCODED_SAM_ENCODER_PATH = 'models/sam_DEBUG/sam_encoder_vit_b.torchscript'
 def sam_encode(imagepath:str) -> np.ndarray:
     sam_encoder = torch.jit.load(HARDCODED_SAM_ENCODER_PATH)
     imagedata   = torch.as_tensor(
-        np.array(PIL.Image.open(imagepath))
+        np.array(PIL.Image.open(imagepath).convert('RGB'))
     )
     output = sam_encoder(imagedata).detach()
     return output.numpy()

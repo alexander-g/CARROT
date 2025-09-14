@@ -22,15 +22,15 @@ export type TreeringInfo = {
 /** Result loaded from a single cell mask, still needs to be processed */
 export type CellMapOnlyUnfinishedData = {
     cellmap: File;
-    /** A potentially smaller version of `cellmap`, intended for display */
-    cellmap_for_display?: File;
 }
 
 export type CellsOnlyData = {
-    /** Binary image with detected or manually annotated cells */
+    /** Binary image with detected or manually annotated cells.
+     *  Potentially resized for display. */
     cellmap: File;
-    /** A potentially smaller version of `cellmap`, intended for display */
-    cellmap_for_display?: File;
+
+    /** Original size cellmap. Might be the same object as `cellmap`. */
+    cellmap_og: File;
 
     /** RGB image with each cell in a random color */
     instancemap: File;
@@ -46,7 +46,12 @@ export type TreeringMapOnlyUnfinishedData = {
 }
 
 export type TreeringsOnlyData = {
-    treeringmap: File;
+    /** Binary image with detected or manually annotated treering boundaries.
+     *  Potentially resized for display. */
+    treeringmap:    File;
+    /** Original size treeringmap. Might be the same object as `treeringmap`. */
+    treeringmap_og: File;
+
     treerings:    TreeringInfo[];
     reversed_growth_direction: boolean;
     px_per_um:    number;
@@ -67,16 +72,20 @@ export type CellsAndTreeringsData = {
     cells:       CellInfo[];
     treerings:   TreeringInfo[];
     
-    /** Intermediate image file containing detected cells that needs 
-     *  to be processed to extract coordinates */
-    cellmap:         File;
+    /** Binary image with detected or manually annotated cells.
+     *  Potentially resized for display. */
+    cellmap:    File;
+    /** Original size cellmap. Might be the same object as `cellmap`. */
+    cellmap_og: File;
 
     /** RGB image with each cell in a random color */
     instancemap: File;
     
-    /** Intermediate image file containing detected boundaries that needs 
-     *  to be processed to extract coordinates */
+    /** Binary image with detected or manually annotated treering boundaries.
+     *  Potentially resized for display. */
     treeringmap:     File;
+    /** Original size treeringmap. Might be the same object as `treeringmap`. */
+    treeringmap_og:  File;
 
     imagesize: base.util.ImageSize;
 
@@ -288,10 +297,10 @@ async function validate_zipped_result<T extends BaseResult>(
         if(zipcontents instanceof Error)
             return null;
         
-        const ringmappath   = `${raw.input.name}/${raw.input.name}.ring_map.png`
+        const ringmappath   = `${raw.input.name}/internal/${raw.input.name}.ring_map.png`
         const treeringspath = `${raw.input.name}/treerings.json`
         const cellspath     = `${raw.input.name}/cells.json`
-        const instancemappath = `${raw.input.name}/${raw.input.name}.instances.png`
+        const instancemappath = `${raw.input.name}/internal/${raw.input.name}.instancemap.png`
         const ringmap:      File|undefined = zipcontents[ringmappath]
         const treeringsfile:File|undefined = zipcontents[treeringspath]
         const cellsfile:    File|undefined = zipcontents[cellspath]
@@ -321,10 +330,31 @@ async function validate_zipped_result<T extends BaseResult>(
             height: cellsdata.imagesize[1],
         }
 
+        // TODO: code re-use
+        let   cellmap:File    = baseresult.data.cellmap;
+        const cellmap_og:File = cellmap;
+        const cellmappath_resized = 
+            `${raw.input.name}/internal/${raw.input.name}.cells.png`
+        const cellmap_resized:File|undefined = zipcontents[cellmappath_resized]
+        if(cellmap_resized)
+            cellmap = cellmap_resized
+        
+        let   treeringmap:File    = baseresult.data.treeringmap;
+        const treeringmap_og:File = treeringmap;
+        const treeringmappath_resized = 
+            `${raw.input.name}/internal/${raw.input.name}.treerings.png`
+        const treeringmap_resized:File|undefined = zipcontents[treeringmappath_resized]
+        if(treeringmap_resized)
+            treeringmap = treeringmap_resized
+
+
         const data:CellsAndTreeringsData = {
+            cellmap:         cellmap,
+            cellmap_og:      cellmap_og,
+            treeringmap:     treeringmap,
+            treeringmap_og:  treeringmap_og,
+
             colored_cellmap: ringmap,
-            cellmap:         baseresult.data.cellmap,
-            treeringmap:     baseresult.data.treeringmap,
             instancemap:     instancemapfile,
             cells:     cellsdata.cells,
             treerings: rings,
@@ -488,28 +518,28 @@ async function validate_cells_only_unzipped<T extends BaseResult>(
     >
 ): Promise<T|null> {
     await 0;
-    //const nfiles:number = Object.keys(zipdata).length;
-    // if(nfiles != 1)
-    //     return null;
 
     const cellmappath = `${inputname}/${inputname}.cells.png`
-    const cellmap:File|undefined = zipdata[cellmappath]
+    let cellmap:File|undefined = zipdata[cellmappath]
     if(!cellmap)
         return null;
     
-    const instancemappath = `${inputname}/${inputname}.instances.png`
+    const cellmap_og:File = cellmap;
+    const cellmappath_resized = `${inputname}/internal/${inputname}.cells.png`
+    const cellmap_resized:File|undefined = zipdata[cellmappath_resized]
+    if(cellmap_resized)
+        cellmap = cellmap_resized
+
+    
+    const instancemappath = `${inputname}/internal/${inputname}.instancemap.png`
     const instancemap:File|undefined = zipdata[instancemappath]
     if(!instancemap)
         return null;
-    
-    const cellmap_for_display_path = 
-        `${inputname}/${inputname}.cells_for_display.png`
-    const cellmap_for_display:File|undefined = zipdata[cellmap_for_display_path]
 
-    console.error('TODO: cells and imagesize')
+    console.error('TODO: cells infos')
     const data:CellsOnlyData = {
         cellmap, 
-        cellmap_for_display,
+        cellmap_og,
         instancemap,
         // TODO:
         cells:     [],
@@ -538,13 +568,20 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
     if(nfiles != 2)
         return null;
     
-    const boundariespath  = `${inputname}/${inputname}.treerings.png`
+    const treeringmappath = `${inputname}/${inputname}.treerings.png`
     const associationpath = `${inputname}/treerings.json`
-    const boundarymap:File|undefined = zipdata[boundariespath]
+    let   treeringmap:File|undefined = zipdata[treeringmappath]
     const association:File|undefined = zipdata[associationpath]
     if(association == undefined
-    || boundarymap == undefined)
+    || treeringmap == undefined)
         return null;
+
+    const treeringmap_og:File = treeringmap;
+    const treeringmappath_resized = `${inputname}/internal/${inputname}.treerings.png`
+    const treeringmap_resized:File|undefined = zipdata[treeringmappath_resized]
+    if(treeringmap_resized)
+        treeringmap = treeringmap_resized
+    
     
     const adata:RingsAssociationData|null = 
         validate_ringsonly_association_data(await association.text())
@@ -557,8 +594,10 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
         _zip_into_treerings(ring_points, adata.ring_years)
 
     const data:TreeringsOnlyData = {
+        treeringmap:    treeringmap,
+        treeringmap_og: treeringmap_og,
+
         treerings:   rings,
-        treeringmap: boundarymap,
         reversed_growth_direction: adata.reversed_growth_direction ?? false,
         // NOTE: px_per_um is updated in state.ts (for now)
         px_per_um:   NaN,
@@ -924,7 +963,7 @@ function export_cellsonly(
         cells:     data.cells,
         imagesize: [data.imagesize.width, data.imagesize.height],
     }
-    return {
+    const output:Record<string, File> = {
         [`${inputname}.cell_statistics.csv`] : format_cells_for_export(
             data.cells, 
             years, 
@@ -934,8 +973,12 @@ function export_cellsonly(
         ),
         [`${inputname}/cells.json`]: 
             new File([JSON.stringify(celldata)], 'cells.json'),
-        [`${inputname}/${inputname}.cells.png`]: data.cellmap,
+        [`${inputname}/${inputname}.cells.png`]: data.cellmap_og,
+        [`${inputname}/internal/${inputname}.instancemap.png`]: data.instancemap,
     }
+    if(data.cellmap_og != data.cellmap)
+        output[`${inputname}/internal/${inputname}.cells.png`] = data.cellmap;
+    return output
 }
 
 function export_treeringsonly(
@@ -950,13 +993,16 @@ function export_treeringsonly(
         reversed_growth_direction: data.reversed_growth_direction,
         imagesize:   [data.imagesize.width, data.imagesize.height],
     }
-    return {
+    const output:Record<string, File> =  {
         [`${inputname}.tree_ring_statistics.csv`] :
             format_treerings_for_export(data.treerings, data.px_per_um),
         [`${inputname}/treerings.json`]: 
             new File([JSON.stringify(associationdata)], 'treerings.json'),
-        [`${inputname}/${inputname}.treerings.png`]: data.treeringmap,
+        [`${inputname}/${inputname}.treerings.png`]: data.treeringmap_og,
     }
+    if(data.treeringmap_og != data.treeringmap)
+        output[`${inputname}/internal/${inputname}.treerings.png`] = data.treeringmap;
+    return output
 }
 
 function export_full(
@@ -967,7 +1013,7 @@ function export_full(
     return {
         ...export_cellsonly(data, inputname, years),
         ...export_treeringsonly(data, inputname),
-        [`${inputname}.ring_map.png`]: data.colored_cellmap,
+        [`${inputname}/internal/${inputname}.ring_map.png`]: data.colored_cellmap,
     }
 }
 
