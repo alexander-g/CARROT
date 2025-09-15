@@ -11,6 +11,7 @@ import {
 import { TreeringsSVGOverlay, PointPair } from "./TreeringsSVGOverlay.tsx"
 import { CARROT_ModelTypes } from "../lib/carrot_settings.ts";
 import * as onnx_sam from "../lib/onnx_sam.ts"
+import { CURSORS_B64, base64_to_uint8 } from "./cursors.ts"
 
 
 export 
@@ -27,7 +28,9 @@ class CARROT_DetectionTab extends base.detectiontab.DetectionTab<CARROT_State> {
 
 
 type DrawingMode = 'brush' | 'erase' | 'sam';
-type Box = base.boxes.Box;
+type Box   = base.boxes.Box;
+type Point = base.util.Point;
+type ImageSize = base.util.ImageSize;
 
 
 type GenericBackend = base.files.ProcessingModule<File, CARROT_Result>;
@@ -215,7 +218,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
     #sam_embeddings?:Float32Array;
     #sam_onnx_session?:onnx_sam.ONNX_SamSession;
-    #sam_orig_im_size?:base.util.ImageSize;
+    #sam_orig_im_size?:ImageSize;
 
     // TODO:
     on_sam_activate = async (prev_mode:DrawingMode) => {
@@ -239,7 +242,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             return;
         }
 
-        const imsize:base.util.ImageSize|Error = 
+        const imsize:ImageSize|Error = 
             await base.imagetools.read_image_size(this.props.input)
         if(imsize instanceof Error){
             base.errors.show_error_toast('Failed to initialize Segment Anything')
@@ -697,35 +700,40 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         // dont draw if in SAM mode
         if(this.props.$drawing_mode.value == 'sam')
             return false;
+        
+        const erase:boolean    = this.props.$drawing_mode.value == 'erase';
+        const brushsize:number = Math.max(1, this.props.$brush_size.value)
+        let   diameter:number  = erase? brushsize*2 : brushsize;
+        const cursor_b64:string|undefined = CURSORS_B64[diameter]
+        if(!cursor_b64)
+            return false
+        const cursormask:Uint8Array = base64_to_uint8(cursor_b64)
+        // actual diameter depends on mask
+        diameter = Math.sqrt(cursormask.length)
 
         const ctx:CanvasRenderingContext2D|null = this.ref.current.getContext('2d')
         if(ctx == null)
             return false;
-        
         this._restore_cursor_patch(ctx)
-        
-        const erase:boolean = this.props.$drawing_mode.value == 'erase';
-        ctx.strokeStyle = "red";
-        ctx.lineWidth   = Math.max(1, this.props.$brush_size.value)
-        //double size for easier removing
-        ctx.lineWidth = erase? ctx.lineWidth*2 : ctx.lineWidth;
-        ctx.lineCap   = 'round';
-        ctx.globalCompositeOperation = 'source-over';
 
-        let p: base.util.Point = base.ui_util.page2element_coordinates(
+        const p: Point = base.ui_util.page2element_coordinates(
             {x:mouse_event.pageX, y:mouse_event.pageY},
             this.ref.current, 
             this.props.$imagesize.value!,
         )
-        //p = {x:Number(p.x.toFixed(0)), y:Number(p.y.toFixed(0))}
+        this._save_cursor_patch_at_point(ctx, p, diameter*2+1)
 
-        
-        this._save_cursor_patch_at_point(ctx, p)
-
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x, p.y);
-        ctx.stroke();
+        const p0 = {
+            x: Number( (p.x - diameter/2).toFixed(0) ), 
+            y: Number( (p.y - diameter/2).toFixed(0) ),
+        }
+        const box:Box = {
+            x0: p0.x,
+            y0: p0.y,
+            x1: p0.x + diameter,
+            y1: p0.y + diameter,
+        }
+        this._paste_cursor(ctx, cursormask, box, [255,0,0,255])
 
         // dont stop propagating event
         return false;
@@ -737,20 +745,23 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         ctx: CanvasRenderingContext2D,
     ): Promise<boolean> {
         const erase:boolean = this.props.$drawing_mode.value == 'erase';
-        ctx.strokeStyle = erase? "black" : "white";
-        ctx.lineWidth   = Math.max(1, this.props.$brush_size.value);
-        //double size for easier removing
-        ctx.lineWidth = erase? ctx.lineWidth*2 : ctx.lineWidth;
-        ctx.lineCap   = 'round';
-        // actually erase, not just paint over
-        ctx.globalCompositeOperation = erase? 'destination-out': 'source-over';
+        const brushsize:number = Math.max(1, this.props.$brush_size.value)
+        let   diameter:number = erase? brushsize*2 : brushsize;
+        const cursor_b64:string|undefined = CURSORS_B64[diameter]
+        if(!cursor_b64)
+            return false;
+        const cursormask:Uint8Array = base64_to_uint8(cursor_b64)
+        // actual diameter depends on mask
+        diameter = Math.sqrt(cursormask.length)
+
+        const color:[number,number,number,number] = 
+            erase? [0,0,0,0] : [255,255,255,255];
         
         this._drawing = true;
 
         this._restore_cursor_patch(ctx)
         await this._push_undo()
 
-        type Point = base.util.Point;
         let _prev:Point|null = null
         base.ui_util.start_drag(
             mousedown_event, 
@@ -758,13 +769,23 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
             this.props.$imagesize.value!,
             // on_move
             (start:Point, end:Point) => { 
-                ctx.beginPath();
-                
                 if(_prev == null)
                     _prev = start;
-                ctx.moveTo(_prev.x, _prev.y);
-                ctx.lineTo(end.x,   end.y  );
-                ctx.stroke();
+                
+                const steps:Point[] = interpolate_points(_prev, end, diameter/3)
+                for(const p of steps){
+                    const p0 = {
+                        x: Number( (p.x - diameter/2).toFixed(0) ), 
+                        y: Number( (p.y - diameter/2).toFixed(0) ),
+                    }
+                    const box:Box = {
+                        x0: p0.x,
+                        y0: p0.y,
+                        x1: p0.x + diameter,
+                        y1: p0.y + diameter,
+                    }
+                    this._paste_cursor(ctx, cursormask, box, color)
+                }
                 
                 _prev = end;
             },
@@ -782,7 +803,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
     }
 
 
-    sam_paste_result(mask:Uint8Array, size:base.util.ImageSize) {
+    sam_paste_result(mask:Uint8Array, size:ImageSize) {
         const ctx:CanvasRenderingContext2D|null = this.ref.current!.getContext('2d')
         if(ctx == null)
             return;
@@ -803,6 +824,47 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         ctx.putImageData(canvasdata, 0, 0)
     }
 
+    _paste_cursor(
+        ctx: CanvasRenderingContext2D,
+        cursormask: Uint8Array, 
+        box: Box, 
+        color: [number,number,number,number],
+    ) {
+        const x0:number = Math.floor(box.x0)
+        const y0:number = Math.floor(box.y0)
+        const x1:number = Math.ceil(box.x1)
+        const y1:number = Math.ceil(box.y1)
+
+        const canvaswidth:number  = this.ref.current!.width;
+        const canvasheight:number = this.ref.current!.height;
+        const sx:number = Math.max(0, x0);
+        const sy:number = Math.max(0, y0);
+        const sw:number = Math.max(0, Math.min(canvaswidth, x1) - sx);
+        const sh:number = Math.max(0, Math.min(canvasheight, y1) - sy);
+        if (sw === 0 || sh === 0) return;
+
+        const canvasdata:ImageData = 
+            ctx.getImageData(sx, sy, sw, sh);
+        const rgba:Uint8ClampedArray = canvasdata.data;
+
+        let iter:number = 0
+        for (let row:number = 0; row < sh; row++) {
+            for (let col:number = 0; col < sw; col++) {
+                //const p:number = (col + row * canvaswidth) * 4;
+                const p:number = (col + row * sw) * 4;
+
+                if(cursormask[iter]!) {
+                    rgba[p]!   = color[0];  // R
+                    rgba[p+1]! = color[1];  // G
+                    rgba[p+2]! = color[2];  // B
+                    rgba[p+3]! = color[3];  // A
+                }
+                iter++;
+            }
+        }
+        ctx.putImageData(canvasdata, sx, sy)
+    }
+
     async _sam_mousedown(
         mousedown_event: MouseEvent, 
         ctx: CanvasRenderingContext2D,
@@ -816,7 +878,6 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         this._restore_cursor_patch(ctx)
         await this._push_undo()
 
-        type Point = base.util.Point;
         base.ui_util.start_drag(
             mousedown_event, 
             this.ref.current!, 
@@ -857,8 +918,12 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
     } = undefined;
 
     /** Store a patch of image data before drawing the cursor */
-    _save_cursor_patch_at_point(ctx:CanvasRenderingContext2D, p:base.util.Point){
-        const patchsize:number = ctx.lineWidth*2+1;
+    _save_cursor_patch_at_point(
+        ctx:       CanvasRenderingContext2D, 
+        p:         Point, 
+        patchsize: number,
+    ){
+        //const patchsize:number = ctx.lineWidth*2+1;
         const box:Box = {
             x0: p.x - patchsize,
             y0: p.y - patchsize,
@@ -933,6 +998,23 @@ async function paste_blob_onto_canvas(canvas:HTMLCanvasElement, blob:Blob){
     }
 }
 
+/** Returns an array of points starting at a and ending at b, spaced by step */
+function interpolate_points(a: Point, b: Point, step: number): Point[] {
+    if (step <= 0) 
+        return [b];
+    const dx:number = b.x - a.x;
+    const dy:number = b.y - a.y;
+    const distance:number = Math.hypot(dx, dy);
+    if (distance === 0) 
+        return [b];
+    const n:number = Math.ceil(distance / step);
+    const result: Point[] = new Array(n + 1);
+    for (let i:number = 0; i <= n; i++) {
+        const t:number = i / n;
+        result[i] = { x: a.x + dx * t, y: a.y + dy * t };
+    }
+    return result;
+}
 
 
 
