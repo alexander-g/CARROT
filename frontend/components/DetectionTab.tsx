@@ -51,10 +51,14 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         return this.props.$result.value.get_treering_coordinates_if_loaded() ?? [] 
     })
 
+    /** Whether to show overlays */
     $overlays_visible:Readonly<Signal<boolean>> = signals.computed(() => {
         return this.$result_visible.value 
         && (this.$active_editing_mode.value == null)
     })
+
+    /** Checkbox value, whether to show cells grouped by ring or individually */
+    $show_grouped_cells:Signal<boolean> = new Signal(true);
 
     $dim_input_image_when_editing: Readonly< Signal<JSX.CSSProperties> > = 
         signals.computed( () => {
@@ -114,13 +118,16 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         
         // NOTE: re-declaring because typescript complains
         const resultdata:CARROT_Data = this.props.$result.value.data;
-
-        // TODO: let user decide
-        return ('colored_cellmap' in resultdata)? resultdata.colored_cellmap : 
-               ('instancemap'     in resultdata)? resultdata.instancemap :
-               ('cellmap'         in resultdata)? resultdata.cellmap :
-               ('treeringmap'     in resultdata)? resultdata.treeringmap : 
-               null;
+        if('colored_cellmap' in resultdata && this.$show_grouped_cells.value)
+            return resultdata.colored_cellmap;
+        else if('instancemap' in resultdata)
+            return resultdata.instancemap
+        else if('cellmap' in resultdata)
+            return resultdata.cellmap
+        else if('treeringmap' in resultdata)
+            return resultdata.treeringmap
+        else
+            return null;
     }
 
 
@@ -134,7 +141,21 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     }
 
     // TODO: show cells / show treerings
-    //override view_menu_items(): JSX.Element[] {}
+    override view_menu_items(): JSX.Element[] {
+        const base_items:JSX.Element[] = super.view_menu_items()
+
+        const $active: Readonly<Signal<boolean>> = signals.computed(
+            () => this.$treering_points.value.length > 0
+        )
+        base_items.push(
+            <base.Checkbox 
+                label   = "Group cells by tree ring"
+                $active = { $active }
+                $value  = { this.$show_grouped_cells }
+            />
+        )
+        return base_items
+    }
 
     override content_menu_extras(): JSX.Element[] {
         return [
