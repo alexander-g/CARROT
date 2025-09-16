@@ -7,6 +7,7 @@ from base.backend import GLOBALS, pubsub
 from base.backend.processing import resize_image
 
 from carrot_ml.src import treeringmodel as treerings
+from carrot_ml.src import maskrcnn_celldetection as cells
 
 
 def start_training(
@@ -33,9 +34,9 @@ def start_training(
 
         px_per_mm = settings.micrometer_factor * 1000
         outputfile = os.path.join(cachedir, f'unsaved-model-{trainingtype}.pt')
-        epochs = 100
 
         if trainingtype == 'treerings':
+            epochs = 100
             newmodel = treerings.start_training_from_carrot(
                 filepairs,
                 cachedir,
@@ -43,6 +44,16 @@ def start_training(
                 epochs,
                 training_progress_callback,
                 finetunemodule=settings.models[trainingtype].module.module,
+            )
+        elif trainingtype == 'cells':
+            epochs = 25
+            newmodel = cells.start_training_from_carrot(
+                filepairs,
+                cachedir,
+                px_per_mm,
+                epochs,
+                training_progress_callback,
+                #finetunemodule=settings.models[trainingtype].module.module,
             )
         else:
             raise NotImplementedError(trainingtype)
