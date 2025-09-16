@@ -63,7 +63,7 @@ def get_treeringsmap_name(image_path:str) -> str:
     return image_path+'.treerings.png'
 
 def get_treeringsmap_og_name(image_path:str) -> str:
-    return image_path+'treerings_og.png'
+    return image_path+'.treerings_og.png'
 
 
 def process_treerings(

@@ -175,8 +175,15 @@ class App(BaseApp):
         if not all(targetfiles):
             flask.abort(404)
         
+        cachedir = os.path.join(self.cache_path, 'training')
         # learning rate & epochs, ne?
-        ok = backend.training.start_training(imagefiles, targetfiles, trainingtype, self.settings)
+        ok = backend.training.start_training(
+            imagefiles, 
+            targetfiles, 
+            trainingtype,
+            cachedir,
+            self.settings
+        )
         return ok
 
     #override

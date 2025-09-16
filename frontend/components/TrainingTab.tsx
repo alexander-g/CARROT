@@ -173,6 +173,17 @@ export class TrainingTab extends base.TrainingTab<state.CARROT_State> {
             //this.update_model_info()
         }
     }
+
+    override instructions(): JSX.Element {
+        return <base.TrainingInstructions>
+            <li>Load training images and annotations or annotate via the edit tool.</li>
+            <li>Make sure the images are fully annotated. 
+                Partial annotation will result in suboptimal training.</li>
+            <li>Make sure the image resolution (px/μm) is set correctly.</li>
+            <li>Make sure treerings are grouped together correctly in the Detection tab.</li>
+            <li>Make sure annotated cells do not touch.</li>
+        </base.TrainingInstructions>
+    }
 }
 
 
