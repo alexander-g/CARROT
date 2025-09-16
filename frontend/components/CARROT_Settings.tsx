@@ -148,14 +148,16 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
         )
             return new Error()
 
+        // NOTE: values must not be undefined, therefore the "??"
+        const UNSAVED = "";
         const treerings_enabled:boolean = 
             this.treerings_checkbox.current.get_value()
         const treerings_model:string
-            = this.treerings_selection.current.get_selected()?.name!
+            = this.treerings_selection.current.get_selected()?.name ?? UNSAVED
         
         const cells_enabled:boolean = this.cells_checkbox.current.get_value()
         const cells_model:string = 
-            this.cells_selection.current.get_selected()?.name!
+            this.cells_selection.current.get_selected()?.name ?? UNSAVED
         
         const micrometers:number = Number(this.micrometers_ref.current.value)
         //const ignore_px:number   = Number(this.ignore_buffer_ref.current.value)
