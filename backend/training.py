@@ -33,26 +33,28 @@ def start_training(
         # return 'OK' if ok in [True, None] else 'INTERRUPTED'
 
         px_per_mm = settings.micrometer_factor * 1000
-        outputfile = os.path.join(cachedir, f'unsaved-model-{trainingtype}.pt')
+        outputfile = os.path.join(cachedir, f'unsaved-model-{trainingtype}.pt.zip')
 
         if trainingtype == 'treerings':
-            epochs = 100
+            steps = 500
             newmodel = treerings.start_training_from_carrot(
                 filepairs,
                 cachedir,
                 px_per_mm,
-                epochs,
-                training_progress_callback,
+                epochs = None,
+                steps  = steps,
+                progress_callback = training_progress_callback,
                 finetunemodule=settings.models[trainingtype].module.module,
             )
         elif trainingtype == 'cells':
-            epochs = 25
+            steps = 100
             newmodel = cells.start_training_from_carrot(
                 filepairs,
                 cachedir,
                 px_per_mm,
-                epochs,
-                training_progress_callback,
+                epochs = None,
+                steps  = steps,
+                progress_callback = training_progress_callback,
                 #finetunemodule=settings.models[trainingtype].module.module,
             )
         else:

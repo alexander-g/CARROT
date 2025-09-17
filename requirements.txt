@@ -12,3 +12,5 @@ imagecodecs==2024.12.30
 scikit-image==0.23.2
 scipy==1.12.0
 matplotlib==3.8.4
+
+-e git+https://github.com/alexander-g/traininglib@7453971aba0bd40dab0384ab487d391b0a49beca#egg=traininglib

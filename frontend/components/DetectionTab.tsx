@@ -145,7 +145,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         const base_items:JSX.Element[] = super.view_menu_items()
 
         const $active: Readonly<Signal<boolean>> = signals.computed(
-            () => this.$treering_points.value.length > 0
+            () => 'colored_cellmap' in this.props.$result.value.data
         )
         base_items.push(
             <base.Checkbox 
