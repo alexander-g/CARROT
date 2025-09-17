@@ -11,7 +11,7 @@ export type CARROT_Settings     = base.settings.Settings<CARROT_ModelTypes> & {
 }
 export type CARROT_AvailableModels = 
     base.settings.AvailableModels<CARROT_Settings>
-    & Record<'sam', base.settings.ModelInfo[]>
+    //& Record<'sam', base.settings.ModelInfo[]>
 
 
 export class CARROT_SettingsHandler 
@@ -47,7 +47,7 @@ export function validate_available_models(x:unknown): CARROT_AvailableModels|nul
     if(base.util.is_object(x)
     && base.util.has_property_of_type(x, 'cells', base.settings.validate_model_info_array)
     && base.util.has_property_of_type(x, 'treerings', base.settings.validate_model_info_array)
-    && base.util.has_property_of_type(x, 'sam', base.settings.validate_model_info_array)
+    //&& base.util.has_property_of_type(x, 'sam', base.settings.validate_model_info_array)
     ) {
         return x;
     }

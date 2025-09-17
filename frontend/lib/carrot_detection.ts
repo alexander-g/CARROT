@@ -969,8 +969,6 @@ extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Sett
 
     /** Process an image with the segment-anything encoder */
     abstract sam_encode(image:File): Promise<Float32Array|Error>;
-    /** Perform segment-anything with a box prompt */
-    abstract sam_decode(encoding:Float32Array, box:base.boxes.Box): Promise<unknown>;
 }
 
 export function validate_CARROT_Backend(x:unknown): CARROT_Backend|null {
@@ -1150,15 +1148,6 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             return sam_response as Error
         
         return new Float32Array(await sam_response.arrayBuffer())
-    }
-
-    // remove?
-    override async sam_decode(
-        _encoding: Float32Array, 
-        _box:      base.boxes.Box
-    ): Promise<unknown> {
-        // onnx!
-        return await '???'
     }
 }
 

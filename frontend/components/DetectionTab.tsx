@@ -5,7 +5,6 @@ import {
     CARROT_Data,
     CARROT_Backend,
     UnfinishedCARROT_Result,
-    TreeringInfo,
     _zip_into_treerings
 } from "../lib/carrot_detection.ts"
 import { TreeringsSVGOverlay, PointPair } from "./TreeringsSVGOverlay.tsx"
@@ -23,6 +22,25 @@ class CARROT_DetectionTab extends base.detectiontab.DetectionTab<CARROT_State> {
     override file_table_content() {
         return CARROT_Content;
     }
+
+    // ugly
+    #_ = this.props.appstate.$available_models.subscribe(
+        (avmodels:Record<string, base.settings.ModelInfo[]>|undefined) => {
+            let sam_downloaded:boolean = false;
+            if(avmodels && 'sam' in avmodels){
+                const modelnames:string[] = avmodels['sam'].map( 
+                    (info:base.settings.ModelInfo) => info.name 
+                )
+                const encoder_ok:boolean = 
+                    modelnames.includes('sam_encoder_vit_b')
+                const decoder_ok:boolean = 
+                    modelnames.includes('sam_decoder_vit_b')
+                sam_downloaded = (encoder_ok && decoder_ok)
+            }
+
+            CARROT_Content.sam_downloaded = sam_downloaded;
+        }
+    )
 }
 
 
@@ -39,10 +57,10 @@ type GenericBackend = base.files.ProcessingModule<File, CARROT_Result>;
 /** Global sam onnx session because only one model */
 let sam_onnx_session:onnx_sam.ONNX_SamSession|undefined = undefined;
 
-const HARDCODED_ENCODER_FILENAME = '2025-03-18_beech_cells_large.pt'
-const HARDCODED_ENCODER_URL = `https://github.com/alexander-g/assets/releases/download/2025-04-03/${HARDCODED_ENCODER_FILENAME}`
+const HARDCODED_ENCODER_FILENAME = 'sam_encoder_vit_b.torchscript'
+const HARDCODED_ENCODER_URL = `https://github.com/alexander-g/segment-anything/releases/download/v2025-09-17/${HARDCODED_ENCODER_FILENAME}`
 const HARDCODED_ONNX_FILENAME = 'sam_decoder_vit_b.onnx'
-const HARDCODED_ONNX_URL = `https://github.com/alexander-g/assets/releases/download/2025-04-03/${HARDCODED_ONNX_FILENAME}`
+const HARDCODED_ONNX_URL = `https://github.com/alexander-g/segment-anything/releases/download/v2025-09-17/${HARDCODED_ONNX_FILENAME}`
 
 
 
@@ -89,6 +107,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             document.removeEventListener('keydown', this.handle_ctrl_z);
         }
     } )
+
+    /** Indicates if sam is alread downloaded. NOTE: set from outside.*/
+    static sam_downloaded: boolean = false;
 
 
     override result_overlays(): JSX.Element {
@@ -269,50 +290,36 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         && this.#sam_orig_im_size != undefined)
             return;
         
-        // TODO: check if sam is already available
         // TODO: check if image not too large, incl px/um
-        //  - download SAM
-        //  - download onnxruntime wasm
-        const proceed:boolean = 
-            await this.sam_modal_ref.current!.show_download_required()
-        if(!proceed) {
-            // user cancelled or something went wrong, back to previous mode
-            this.$drawing_mode.value = prev_mode;
-            return;
+
+        if(!CARROT_Content.sam_downloaded){
+            const proceed:boolean = 
+                await this.sam_modal_ref.current!.show_download_required()
+            if(!proceed) {
+                // user cancelled or something went wrong, back to previous mode
+                this.$drawing_mode.value = prev_mode;
+                return;
+            }
+
+            const ok:boolean = await this._download_sam()
+            if(!ok){
+                await this.sam_modal_ref.current!.show_error(
+                    "Failed to download Segment Anything"
+                )
+                // back to previous mode
+                this.$drawing_mode.value = prev_mode;
+                return;
+            }
         }
 
-        await this.sam_modal_ref.current!.show_downloading()
-
-        // // NOTE: starting onnx download first, because smaller, no await here
-        // const onnxfilepromise:Promise<Error|Response> = 
-        //     base.util.fetch_no_throw(`proxy?url=${HARDCODED_ONNX_URL}`)
-        // const encoderfile:File|Error = await fetch_with_progress(
-        //     new URL(`proxy?url=${HARDCODED_ENCODER_URL}`, self.location.origin),
-        //     (progress:{total:number, received:number}) => {
-        //         const percent:number = 100 * progress.received / progress.total;
-        //         this.sam_modal_ref.current!.show_downloading(percent)
-        //     }
-        // )
-        // const onnxfileresponse:Response|Error = await onnxfilepromise;
-        // if(encoderfile instanceof Error || onnxfileresponse instanceof Error){
-        //     // TODO: unlock modal / show error
-        //     base.errors.show_error_toast('Failed to download Segment Anything')
-        //     this.$drawing_mode.value = prev_mode;
-        //     return;
-        // }
-        // const response0:Response|Error = 
-        //     await base.util.upload_file_no_throw(encoderfile, `upload_model/sam/${HARDCODED_ENCODER_FILENAME}`)
-        // const onnxfile = new File([await onnxfileresponse.blob()], HARDCODED_ONNX_FILENAME)
-        // const response1:Response|Error = 
-        //     await base.util.upload_file_no_throw(onnxfile, `upload_model/sam/${HARDCODED_ONNX_FILENAME}`)
-        // // TODO: check responses
 
         await this.sam_modal_ref.current!.show_initializing()
         const imsize:base.util.ImageSize|Error = 
             await base.imagetools.read_image_size(this.props.input)
         if(imsize instanceof Error){
-            // TODO: unlock modal / show error
-            base.errors.show_error_toast('Failed to initialize Segment Anything')
+            await this.sam_modal_ref.current!.show_error(
+                "Failed to initialize Segment Anything"
+            )
             // back to previous mode
             this.$drawing_mode.value = prev_mode;
             return;
@@ -324,8 +331,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         const embedding:Float32Array|Error = 
             await backend.sam_encode(this.props.input)
         if(embedding instanceof Error){
-            // TODO: unlock modal / show error
-            base.errors.show_error_toast('Failed to initialize Segment Anything')
+            await this.sam_modal_ref.current!.show_error(
+                "Failed to initialize Segment Anything"
+            )
             // back to previous mode
             this.$drawing_mode.value = prev_mode;
             return;
@@ -333,12 +341,14 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         
         const session:Error|onnx_sam.ONNX_SamSession = 
             await onnx_sam.ONNX_SamSession.initialize(
-                `models/sam_DEBUG/${HARDCODED_ONNX_FILENAME}`
+                `models/sam/${HARDCODED_ONNX_FILENAME}`
             )
         if(session instanceof Error){
             // TODO: unlock modal / show error
             console.error('ONNX session error: ', session)
-            base.errors.show_error_toast('Failed to initialize Segment Anything')
+            await this.sam_modal_ref.current!.show_error(
+                "Failed to initialize Segment Anything"
+            )
             // back to previous mode
             this.$drawing_mode.value = prev_mode;
             return
@@ -348,6 +358,33 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         sam_onnx_session = session;
 
         await this.sam_modal_ref.current!.close()
+    }
+
+    async _download_sam(): Promise<boolean> {
+        await this.sam_modal_ref.current!.show_downloading()
+
+        // NOTE: starting onnx download first, because smaller, no await here
+        const onnxfilepromise:Promise<Error|Response> = 
+            base.util.fetch_no_throw(`proxy?url=${HARDCODED_ONNX_URL}`)
+        const encoderfile:File|Error = await fetch_with_progress(
+            new URL(`proxy?url=${HARDCODED_ENCODER_URL}`, self.location.origin),
+            (progress:{total:number, received:number}) => {
+                const percent:number = 100 * progress.received / progress.total;
+                this.sam_modal_ref.current!.show_downloading(percent)
+            }
+        )
+        const onnxfileresponse:Response|Error = await onnxfilepromise;
+        if(encoderfile instanceof Error || onnxfileresponse instanceof Error){
+            return false;
+        }
+        const response0:Response|Error = 
+            await base.util.upload_file_no_throw(encoderfile, `upload_model/sam/${HARDCODED_ENCODER_FILENAME}`)
+        const onnxfile = new File([await onnxfileresponse.blob()], HARDCODED_ONNX_FILENAME)
+        const response1:Response|Error = 
+            await base.util.upload_file_no_throw(onnxfile, `upload_model/sam/${HARDCODED_ONNX_FILENAME}`)
+        // TODO: check responses
+
+        return true
     }
 
     on_sam_new_box = async (box:Box) => {
@@ -1163,6 +1200,8 @@ class SAM_Modal extends preact.Component {
                         this.#downloading_description() :
                     (this.$state.value == 'initializing')?
                         this.#initializing_description() :
+                    (this.$state.value == 'error')?
+                        this.#error_description() :
                         null
                 }
             </div>
@@ -1212,8 +1251,8 @@ class SAM_Modal extends preact.Component {
             onDeny:    () => false,
             onApprove: () => false,
         }).modal('show')
-        if(this.progress_ref.current != null)
-            $(this.progress_ref.current).progress({percent});
+
+        $(this.progress_ref.current).progress({percent});
     }
 
     show_initializing() {
@@ -1230,8 +1269,34 @@ class SAM_Modal extends preact.Component {
         $(this.ref.current).modal('hide')
     }
 
-    show_error() {
-        base.errors.show_error_toast('ERROR HANDLING NOT IMPLEMENTED')
+
+    #error_message:string = 'Error'
+
+    show_error(message:string) {
+        this.$state.value = 'error';
+        $(this.ref.current).modal({
+            closable: true,
+        }).modal('show')
+        this.#error_message = message;
+    }
+
+    #error_description():JSX.Element {
+        self.setTimeout(
+            () => $(this.progress_ref.current).progress('set error'),
+            500,
+        )
+        return <div class="description" style="width:100%">
+            <p>{ this.#error_message }</p>
+            <div 
+                class = "ui progress error" 
+                style = {{marginTop:"30px"}}
+                ref = {this.progress_ref}
+            >
+                <div class="bar">
+                    <div class="progress"></div>
+                </div>
+            </div>
+        </div>
     }
 
     #download_required_description():JSX.Element {

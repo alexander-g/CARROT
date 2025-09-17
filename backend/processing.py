@@ -198,7 +198,7 @@ def accepts_argument(func:tp.Callable, arg_name:str) -> bool:
         return False
 
 
-HARDCODED_SAM_ENCODER_PATH = 'models/sam_DEBUG/sam_encoder_vit_b.torchscript'
+HARDCODED_SAM_ENCODER_PATH = 'models/sam/sam_encoder_vit_b.torchscript'
 
 def sam_encode(imagepath:str) -> np.ndarray:
     sam_encoder = torch.jit.load(HARDCODED_SAM_ENCODER_PATH)
