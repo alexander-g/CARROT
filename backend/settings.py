@@ -7,6 +7,9 @@ from base.backend.app import get_models_path, path_to_main_module
 from base.backend.settings import Settings as BaseSettings
 
 
+MODEL_FILE_ENDINGS = ['.pt.zip', '.pt', '.torchscript', '.onnx']
+
+
 class Settings(BaseSettings):
     def get_defaults(self):
         d = super().get_defaults()
@@ -21,7 +24,11 @@ class Settings(BaseSettings):
     #override
     @classmethod
     def get_available_models(cls, with_properties=False, **kw) -> tp.Dict[str, tp.List]:
-        downloaded_models = super().get_available_models(with_properties, **kw)
+        downloaded_models = super().get_available_models(
+            with_properties, 
+            endings=MODEL_FILE_ENDINGS, 
+            **kw
+        )
         downloaded_modelnames = [
             info_or_name if isinstance(info_or_name, str) else info_or_name['name'] 
                 for _, modelslist in downloaded_models.items() 
