@@ -34,10 +34,6 @@ export type CellsOnlyData = {
 
     /** RGB image with each cell in a random color */
     instancemap: File;
-
-    cells:   CellInfo[];
-    imagesize: base.util.ImageSize;
-    px_per_um: number;
 }
 
 /** Result loaded from a single tree ring mask, still needs to be processed */
@@ -134,7 +130,7 @@ export class CARROT_Result extends base.files.Result {
         
         if('colored_cellmap' in data)
             return export_full(data, this.inputname)
-        if('cells' in data)
+        if('instancemap' in data)
             return export_cellsonly(data, this.inputname)
         if('treerings' in data)
             return export_treeringsonly(data, this.inputname)
@@ -321,13 +317,22 @@ async function validate_zipped_result_full_or_partial<T extends BaseResult>(
     ){
         const ringmappath = 
             `${raw.input.name}/internal/${raw.input.name}.ring_map.png`
+        const cellspath = `${raw.input.name}/cells.json`
         const ringmap:File|undefined = zipcontents[ringmappath]
-        if(ringmap == undefined)
+        const cellsfile:File|undefined = zipcontents[cellspath]
+        if(ringmap == undefined
+        || cellsfile == undefined)
+            return null;
+
+        const cellsdata:CellsAssociationData|null = 
+            validate_cells_association_data(await cellsfile.text())
+        if(cellsdata == null)
             return null;
 
         const full_data:CellsAndTreeringsData = {
             ...cells_result.data,
             ...rings_result.data,
+            cells: cellsdata.cells,
             colored_cellmap: ringmap,
         }
         return new ctor(
@@ -340,162 +345,6 @@ async function validate_zipped_result_full_or_partial<T extends BaseResult>(
     else return null;
 }
 
-
-
-// // full result
-// async function validate_zipped_result<T extends BaseResult>(
-//     raw:unknown, 
-//     ctor:base.util.ClassWithValidate<
-//         T & CARROT_Result, 
-//         ConstructorParameters<typeof CARROT_Result>
-//     >
-// ): Promise<T|null> {
-//     const baseresult:BaseResult|null = await validate_legacy_zipped_result(raw, ctor)
-//     if( !(baseresult instanceof CARROT_Result)
-//     || baseresult.data == null
-//     || !('cellmap' in baseresult.data )
-//     || !baseresult.data.cellmap
-//     || !('treeringmap' in baseresult.data)
-//     || !baseresult.data.treeringmap
-//     )
-//         return null;
-    
-//     if(base.files.is_input_and_file_pair(raw)
-//     && base.files.match_resultfile_to_inputfile(
-//         raw.input, 
-//         raw.file, 
-//         ['.zip', '.results.zip']
-//     )){
-//         // TODO: unzipping a second time, inefficient
-//         const zipcontents:base.zip.Files|Error = await base.zip.unzip(raw.file)
-//         if(zipcontents instanceof Error)
-//             return null;
-        
-//         const ringmappath   = `${raw.input.name}/internal/${raw.input.name}.ring_map.png`
-//         const treeringspath = `${raw.input.name}/treerings.json`
-//         const cellspath     = `${raw.input.name}/cells.json`
-//         const instancemappath = `${raw.input.name}/internal/${raw.input.name}.instancemap.png`
-//         const ringmap:      File|undefined = zipcontents[ringmappath]
-//         const treeringsfile:File|undefined = zipcontents[treeringspath]
-//         const cellsfile:    File|undefined = zipcontents[cellspath]
-//         const instancemapfile:    File|undefined = zipcontents[instancemappath]
-//         if(treeringsfile == undefined
-//         || cellsfile == undefined
-//         || ringmap == undefined
-//         || instancemapfile == undefined)
-//             return null;
-        
-//         const cellsdata:CellsAssociationData|null = 
-//             validate_cells_association_data(await cellsfile.text())
-//         if(cellsdata == null)
-//             return null;
-        
-//         const ringsdata:RingsAssociationData|null = 
-//             validate_ringsonly_association_data(await treeringsfile.text())
-//         if(ringsdata == null)
-//             return null
-        
-//         const ring_points:PointPair[][] = 
-//             convert_2x2_number_tuple_dual_array_to_points(ringsdata.ring_points)
-//         const rings:TreeringInfo[] = 
-//             _zip_into_treerings(ring_points, ringsdata.ring_years)
-//         const imagesize:base.util.ImageSize = {
-//             width:  cellsdata.imagesize[0],
-//             height: cellsdata.imagesize[1],
-//         }
-
-//         // TODO: code re-use
-//         let   cellmap:File    = baseresult.data.cellmap;
-//         const cellmap_og:File = cellmap;
-//         const cellmappath_resized = 
-//             `${raw.input.name}/internal/${raw.input.name}.cells.png`
-//         const cellmap_resized:File|undefined = zipcontents[cellmappath_resized]
-//         if(cellmap_resized)
-//             cellmap = cellmap_resized
-        
-//         let   treeringmap:File    = baseresult.data.treeringmap;
-//         const treeringmap_og:File = treeringmap;
-//         const treeringmappath_resized = 
-//             `${raw.input.name}/internal/${raw.input.name}.treerings.png`
-//         const treeringmap_resized:File|undefined = zipcontents[treeringmappath_resized]
-//         if(treeringmap_resized)
-//             treeringmap = treeringmap_resized
-
-
-//         const data:CellsAndTreeringsData = {
-//             cellmap:         cellmap,
-//             cellmap_og:      cellmap_og,
-//             treeringmap:     treeringmap,
-//             treeringmap_og:  treeringmap_og,
-
-//             colored_cellmap: ringmap,
-//             instancemap:     instancemapfile,
-//             cells:     cellsdata.cells,
-//             treerings: rings,
-//             imagesize: imagesize,
-//             // NOTE: px_per_um updated in state.ts (for now)
-//             px_per_um: NaN,
-//             reversed_growth_direction: 
-//                 ringsdata.reversed_growth_direction ?? false,
-//         }
-//         return new ctor(
-//             'processed',
-//             raw,
-//             baseresult.inputname,
-//             data,
-//         )
-//     }
-//     else return null;
-// }
-
-
-// async function validate_legacy_zipped_result<T extends BaseResult>(
-//     raw:unknown, 
-//     ctor:base.util.ClassWithValidate<
-//         T & CARROT_Result, 
-//         ConstructorParameters<typeof CARROT_Result>
-//     >
-// ): Promise<T|null> {
-//     if(base.files.is_input_and_file_pair(raw)
-//     && base.files.match_resultfile_to_inputfile(
-//         raw.input, 
-//         raw.file, 
-//         ['.zip', '.results.zip']
-//     )){
-//         const zipcontents:base.zip.Files|Error = await base.zip.unzip(raw.file)
-//         if(zipcontents instanceof Error)
-//             return null;
-        
-//         const cellmappath = `${raw.input.name}/${raw.input.name}.cells.png`
-//         const ringmappath = `${raw.input.name}/${raw.input.name}.treerings.png`
-
-//         const cellmapfile:File|undefined = zipcontents[cellmappath];
-//         const ringmapfile:File|undefined = zipcontents[ringmappath];
-
-//         let data:LegacySavedMapOnlyUnfinishedData|null;
-//         if(cellmapfile && ringmapfile)
-//             data = {cellmap: cellmapfile, treeringmap: ringmapfile}
-//         else if(cellmapfile)
-//             data = {cellmap: cellmapfile}
-//         else if(ringmapfile)
-//             data = {treeringmap: ringmapfile}
-//         else
-//             data = null;
-
-//         if(data != null){
-//             // 'processing' because need to send to a backend to extract 
-//             // cells & ring coordinates
-//             return new ctor(
-//                 'processing', 
-//                 raw, 
-//                 raw.input.name,
-//                 data,
-//             )
-//         }
-//         else return null;
-//     }
-//     else return null;
-// }
 
 /** Response sent from legacy flask backend for finalize loading a result */
 async function validate_backend_response<T extends BaseResult>(
@@ -623,16 +472,10 @@ async function validate_cells_only_unzipped<T extends BaseResult>(
     if(!instancemap)
         return null;
 
-    console.error('TODO: cells infos')
     const data:CellsOnlyData = {
         cellmap, 
         cellmap_og,
         instancemap,
-        // TODO:
-        cells:     [],
-        imagesize: {width:-1, height:-1},
-        // NOTE: px_per_um is updated in state.ts (for now)
-        px_per_um: NaN,
     };
     return new ctor(
         'processed',
@@ -1041,25 +884,9 @@ function convert_treerings_to_points(treerings:TreeringInfo[]):TwoNumberTuple[][
 function export_cellsonly(
     data: CellsOnlyData, 
     inputname: string, 
-    years?:    number[],
+    //years?:    number[],
 ): Record<string, File> {
-    console.warn('TODO: get ignore_buffer_px from settings')
-    const ignore_buffer_px:number = 8;
-    years = years ?? [...new Set(data.cells.map( (c:CellInfo) => c.year_index ))].sort()
-    const celldata:CellsAssociationData = {
-        cells:     data.cells,
-        imagesize: [data.imagesize.width, data.imagesize.height],
-    }
     const output:Record<string, File> = {
-        [`${inputname}.cell_statistics.csv`] : format_cells_for_export(
-            data.cells, 
-            years, 
-            data.imagesize, 
-            data.px_per_um, 
-            ignore_buffer_px
-        ),
-        [`${inputname}/cells.json`]: 
-            new File([JSON.stringify(celldata)], 'cells.json'),
         [`${inputname}/${inputname}.cells.png`]: data.cellmap_og,
         [`${inputname}/internal/${inputname}.instancemap.png`]: data.instancemap,
     }
@@ -1097,9 +924,26 @@ function export_full(
     inputname:string
 ): Record<string, File> {
     const years:number[] = data.treerings.map( (r:TreeringInfo) => r.year )
+    const celldata:CellsAssociationData = {
+        cells:     data.cells,
+        imagesize: [data.imagesize.width, data.imagesize.height],
+    }
+    // TODO: HARDCODED
+    const ignore_buffer_px:number = 8;
+    const cellstats_csv:File = format_cells_for_export(
+        data.cells, 
+        years, 
+        data.imagesize, 
+        data.px_per_um, 
+        ignore_buffer_px
+    );
+
     return {
-        ...export_cellsonly(data, inputname, years),
+        ...export_cellsonly(data, inputname, ),
         ...export_treeringsonly(data, inputname),
+        [`${inputname}.cell_statistics.csv`] : cellstats_csv,
+        [`${inputname}/cells.json`]: 
+            new File([JSON.stringify(celldata)], 'cells.json'),
         [`${inputname}/internal/${inputname}.ring_map.png`]: data.colored_cellmap,
     }
 }

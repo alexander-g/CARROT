@@ -127,9 +127,7 @@ def postprocess_cells(
     write_image(cellmap_og_path, output.classmap_og)
 
 
-    print('TODO TODO TODO: CELLS')
     return {
-        'cells': [], # TODO
         'cell_points':     output.cell_points,
         'instancemap_rgb': instancemap_path,
         'instancemap':     output.instancemap,
@@ -176,6 +174,7 @@ def postprocess_combined(
     ringmap_path = image_path+'.ring_map.png'
     write_image(ringmap_path, output.ringmap_rgb)
     return {
+        'cells': output.cell_info,
         'ringmap_rgb': ringmap_path
     }
 

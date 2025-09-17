@@ -100,12 +100,6 @@ class App(BaseApp):
 
         if postprocess_cells:
             output = postprocess_cells_fn(full_path, displayshape, og_shape)
-            celldata = {
-                'cells': output['cells'],
-                'imagesize': [og_width, og_height],
-            }
-            results[f'{imagename}/cells.json'] = \
-                json.dumps(celldata).encode('utf8')
             results[f'{imagename}/internal/{imagename}.instancemap.png'] = \
                 open(output['instancemap_rgb'], 'rb').read()
             instancemap = output['instancemap']
@@ -129,6 +123,12 @@ class App(BaseApp):
                 ring_points, 
                 instancemap
             )
+            celldata = {
+                'cells': output['cells'],
+                'imagesize': [og_width, og_height],
+            }
+            results[f'{imagename}/cells.json'] = \
+                json.dumps(celldata).encode('utf8')
             results[f'{imagename}/internal/{imagename}.ring_map.png'] = \
                 open(output['ringmap_rgb'], 'rb').read()
 

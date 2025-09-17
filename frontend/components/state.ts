@@ -79,11 +79,25 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
         }
         return changed;
     }
+
+    // a terrible way to update micrometer values
+    #_ = this.$settings.subscribe(
+        () => {
+            for(const pair of this.$files.value){
+                const result = pair.$result.value as CARROT_Result;
+                if(result.data && 'px_per_um' in result.data)
+                    result.data.px_per_um = 
+                        this.$settings.value?.micrometer_factor ?? 1;
+                pair.$result.value = new CARROT_Result('processing');
+                pair.$result.value = result;
+            }
+        }
+    )
 }
 
 
 export function is_unfinished(x:CARROT_Data): x is LegacySavedMapOnlyUnfinishedData {
-    if('cellmap' in x && !('cells' in x))
+    if('cellmap' in x && !('instancemap' in x))
         return true;
     else if('treeringmap' in x && !('treerings' in x))
         return true;
