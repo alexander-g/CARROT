@@ -862,13 +862,16 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         const sy:number = Math.max(0, y0);
         const sw:number = Math.max(0, Math.min(canvaswidth, x1) - sx);
         const sh:number = Math.max(0, Math.min(canvasheight, y1) - sy);
-        if (sw === 0 || sh === 0) return;
+        if (sw === 0 || sh === 0) 
+            return;
 
         const canvasdata:ImageData = 
             ctx.getImageData(sx, sy, sw, sh);
         const rgba:Uint8ClampedArray = canvasdata.data;
 
-        let iter:number = 0
+        const cursormaskwidth:number = x1 - x0;
+        // do not start at zero if close to border
+        let iter:number = (sy - y0) * cursormaskwidth + (sx - x0)
         for (let row:number = 0; row < sh; row++) {
             for (let col:number = 0; col < sw; col++) {
                 //const p:number = (col + row * canvaswidth) * 4;
@@ -882,6 +885,11 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
                 }
                 iter++;
             }
+            // if close to left border
+            iter += (sx - x0);
+            // if close to right border
+            if(x0 >= 0)
+                iter += (cursormaskwidth - sw)
         }
         ctx.putImageData(canvasdata, sx, sy)
     }
