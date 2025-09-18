@@ -30,7 +30,7 @@ class CARROT_App extends base.create_App({
     },
 }){
     // overriding to pass processingmodule to appstate.set_files + more
-    override async on_new_files(files: FileList | File[]): Promise<void> {
+    override async on_new_files(files: FileList | File[]): Promise<boolean> {
         const backend = 
             new this.backend(CARROT_Result, this.appstate.$settings.value!)
 
@@ -44,6 +44,8 @@ class CARROT_App extends base.create_App({
 
         if(changed && this.appstate.$files.value.length > 0)
             this.settings_modal.current!.show_modal(/*cancel_ok=*/false)
+        
+        return changed;
     }
 }
 

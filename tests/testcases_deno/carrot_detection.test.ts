@@ -28,6 +28,9 @@ Deno.test('CARROT_Result.export-import', async () => {
         imagesize: {width:200, height:300},
         px_per_um: 1.5,
         reversed_growth_direction: true,
+        cellmap_og : new File(['...'], 'cellmap.png'),
+        instancemap : new File(['...'], 'instancemap.png'),
+        treeringmap_og : new File(['...'], 'treeringmap.png'),
     }
     const r0 = new CARROT_Result(
         'processed',
@@ -137,24 +140,25 @@ Deno.test('response.rings-only-from-flask', async () => {
 })
 
 
-Deno.test('import.legacy_v0', async () => {
-    const inputname:string = 'legacy_v0.jpg';
-    const resultfile:string = 
-        import.meta.resolve(`./assets/${inputname}.results.zip`).replace('file://', '')
-    const zippedresult:File = 
-        new File([Deno.readFileSync(resultfile)], `${inputname}.results.zip`)
+// legacy results are not supported anymore
+// Deno.test('import.legacy_v0', async () => {
+//     const inputname:string = 'legacy_v0.jpg';
+//     const resultfile:string = 
+//         import.meta.resolve(`./assets/${inputname}.results.zip`).replace('file://', '')
+//     const zippedresult:File = 
+//         new File([Deno.readFileSync(resultfile)], `${inputname}.results.zip`)
     
-    const input_file_pair = {input:{name:inputname}, file:zippedresult}
-    const imported:CARROT_Result|null 
-        = await CARROT_Result.validate<CARROT_Result>(input_file_pair)
+//     const input_file_pair = {input:{name:inputname}, file:zippedresult}
+//     const imported:CARROT_Result|null 
+//         = await CARROT_Result.validate<CARROT_Result>(input_file_pair)
 
-    asserts.assertExists(imported)
-    asserts.assertEquals(imported.status, 'processing')
-    asserts.assert('cellmap' in imported.data)
-    asserts.assert('treeringmap' in imported.data)
-    asserts.assertInstanceOf(imported.data.cellmap, File)
-    asserts.assertInstanceOf(imported.data.treeringmap, File)
-})
+//     asserts.assertExists(imported)
+//     asserts.assertEquals(imported.status, 'processing')
+//     asserts.assert('cellmap' in imported.data)
+//     asserts.assert('treeringmap' in imported.data)
+//     asserts.assertInstanceOf(imported.data.cellmap, File)
+//     asserts.assertInstanceOf(imported.data.treeringmap, File)
+// })
 
 
 Deno.test('import.treeringsrings-png', async () => {
