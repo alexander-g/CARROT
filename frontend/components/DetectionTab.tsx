@@ -62,6 +62,8 @@ const HARDCODED_ENCODER_URL = `https://github.com/alexander-g/segment-anything/r
 const HARDCODED_ONNX_FILENAME = 'sam_decoder_vit_b.onnx'
 const HARDCODED_ONNX_URL = `https://github.com/alexander-g/segment-anything/releases/download/v2025-09-17/${HARDCODED_ONNX_FILENAME}`
 
+const HARDCODED_SAM_MAX_SIZE_PX = 4096;
+
 
 
 export 
@@ -110,6 +112,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
     /** Indicates if sam is alread downloaded. NOTE: set from outside.*/
     static sam_downloaded: boolean = false;
+
+    $image_too_large_for_sam:Signal<boolean> = new Signal(false)
 
 
     override result_overlays(): JSX.Element {
@@ -172,6 +176,19 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         </>
     }
 
+    override async componentDidMount(): Promise<void> {
+        const imsize:base.util.ImageSize|Error = 
+            await base.imagetools.read_image_size(this.props.input)
+        if(imsize instanceof Error)
+            return
+        
+        this.$image_too_large_for_sam.value = (
+            imsize.width > HARDCODED_SAM_MAX_SIZE_PX
+            || imsize.height > HARDCODED_SAM_MAX_SIZE_PX
+        )
+    }
+
+
     // TODO: show cells / show treerings
     override view_menu_items(): JSX.Element[] {
         const base_items:JSX.Element[] = super.view_menu_items()
@@ -200,6 +217,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 $active_modality = { this.$active_editing_mode }
                 $drawing_mode = { this.$drawing_mode }
                 $brush_size  = { this.$editing_brush_size }
+                $too_large_for_sam = { this.$image_too_large_for_sam }
                 key = { 0 } // to make typescript happy
             />
         ]
@@ -488,6 +506,8 @@ type EditMenuProps = {
 
     /** Callback, user wants to reverse the direction of tree rings */
     on_reverse_growth_direction: () => void;
+
+    $too_large_for_sam: Readonly<Signal<boolean>>;
 }
 
 class EditMenu extends preact.Component<EditMenuProps> {
@@ -508,6 +528,9 @@ class EditMenu extends preact.Component<EditMenuProps> {
 
 
     render(_props:EditMenuProps): JSX.Element {
+        const sam_button_tooltip:string|undefined = 
+            _props.$too_large_for_sam.value? "Image too large" : undefined;
+        
         return (
         <div class={
             `ui simple dropdown icon item edit-menu-button ${this.$menu_active}`} 
@@ -579,6 +602,8 @@ class EditMenu extends preact.Component<EditMenuProps> {
                         () => this.props.$drawing_mode.value == 'sam'
                     ) }
                     on_click = {() => this.props.$drawing_mode.value = 'sam'}
+                    tooltip  = { sam_button_tooltip }
+                    $disabled = { _props.$too_large_for_sam }
                 />
         
                 <MenuDivider $visible={this.$editing_active} />
@@ -676,6 +701,7 @@ function MenuButton(props:{
     $visible?:     Readonly<Signal<boolean>>,
     $highlighted?: Readonly<Signal<boolean>>,
     $disabled?:    Readonly<Signal<boolean>>,
+    tooltip?:      string,
     children?:     preact.ComponentChildren,
     on_click?:     () => void,
 }): JSX.Element {
@@ -688,6 +714,8 @@ function MenuButton(props:{
                 base.ui_util.boolean_to_display_css(props.$visible?.value ?? false)
         } }
         onClick = {props.on_click}
+        data-tooltip  = { props.tooltip }
+        data-position = "right center"
     >
         <i class={`${props.icon} icon`}></i>
         { props.label }
