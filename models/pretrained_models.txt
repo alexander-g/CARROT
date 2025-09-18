@@ -1,2 +1,2 @@
 cells/2025-09-18_vessels-deciduous.pt.zip : https://github.com/alexander-g/assets/releases/download/2025-09-18/2025-09-18_vessels-deciduous.pt.zip
-treerings/2025-09-11_treerings.pt.zip : https://github.com/alexander-g/assets/releases/download/2025-09-18/2025-09-11_treerings.pt.zip
+treerings/2025-09-18_treerings.pt.zip : https://github.com/alexander-g/assets/releases/download/2025-09-18/2025-09-18__treerings.pt.zip

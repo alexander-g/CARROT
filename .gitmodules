@@ -4,3 +4,9 @@
 [submodule "carrot_ml"]
 	path = carrot_ml
 	url = https://github.com/alexander-g/carrot-ml.git
+[submodule "traininglib"]
+	path = traininglib_
+	url = https://github.com/alexander-g/traininglib
+[submodule "traininglib_"]
+	path = traininglib_
+	url = https://github.com/alexander-g/traininglib

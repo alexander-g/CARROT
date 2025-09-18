@@ -11,6 +11,8 @@ import zipfile
 import flask
 from werkzeug.security import safe_join
 
+import traininglib.datalib
+
 import backend.processing
 import backend.training
 import backend.settings  #important for some reason
@@ -28,6 +30,7 @@ from backend.processing import (
     get_treeringsmap_og_name,
     sam_encode,
 )
+
 
 
 class App(BaseApp):
