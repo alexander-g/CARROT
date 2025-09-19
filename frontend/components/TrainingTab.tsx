@@ -47,7 +47,7 @@ export class TrainingTab extends base.TrainingTab<state.CARROT_State> {
             return;
         }
         const options:Record<string,number|string> = {
-            ...this.lr_epochs_ref.current!.get_options(),
+            //...this.lr_epochs_ref.current!.get_options(),
             training_type: training_type,
         }
 
