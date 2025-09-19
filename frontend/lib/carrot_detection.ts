@@ -146,10 +146,10 @@ export class CARROT_Result extends base.files.Result {
         >,
         raw:  unknown
     ): Promise<T|null> {
-        const baseresult:BaseResult|null = 
-            await base.files.Result.validate(raw)
-        if(baseresult == null)
-            return null;
+        // const baseresult:BaseResult|null = 
+        //     await base.files.Result.validate(raw)
+        // if(baseresult == null)
+        //     return null;
 
         let result:T|null = null;
 
@@ -157,23 +157,18 @@ export class CARROT_Result extends base.files.Result {
         result = await validate_zipped_result_full_or_partial(raw, this)
         if(result != null)
             return result as T;
-
-        // // zip file containing png mask files and association data
-        // result = await validate_zipped_result(raw, this)
-        // if(result != null)
-        //     return result as T;
-
-        // // zip file containing png mask files
-        // result = await validate_legacy_zipped_result(raw, this)
-        // if(result != null)
-        //     return result as T;
         
         // response object, containing zip file
         result = await validate_backend_response(raw, this)
         if(result != null)
             return result as T;
         
-        // TODO: multiple .png files!
+        // multiple .png mask files (.cells.png + .treerings.png)
+        result = await validate_multiple_mask_files(raw, this)
+        if(result != null)
+            return result as T;
+
+        // single .png mask file
         result = await validate_mask_file(raw, this)
         if(result != null)
             return result as T;
@@ -366,30 +361,6 @@ async function validate_backend_response<T extends BaseResult>(
             file:  as_file,
         }, ctor)
         return result;
-
-        // let result:T|null = await validate_zipped_result({
-        //     input: {name:inputname},
-        //     file:  as_file,
-        // }, ctor)
-        // if(result != null)
-        //     // full result
-        //     return result;
-        // // else partial result, only cells / only treerings
-
-        // // TODO: unzipping a second or third time
-        // const zipdata:base.zip.Files|Error = await base.zip.unzip( as_file )
-        // if(zipdata instanceof Error)
-        //     return null;
-        
-        // result = await validate_cells_only_unzipped(zipdata, inputname, ctor)
-        // if(result != null)
-        //     return result;
-
-        // result = await validate_rings_only_unzipped(zipdata, inputname, ctor)
-        // if(result != null)
-        //     return result;
-
-        // return null;
     }
     else return null;
 }
@@ -402,47 +373,90 @@ async function validate_mask_file<T extends BaseResult>(
         ConstructorParameters<typeof CARROT_Result>
     >
 ): Promise<T|null> {
-    if(base.files.is_input_and_file_pair(raw)){
-        if(base.files.match_resultfile_to_inputfile(
-            raw.input, 
-            raw.file, 
-            ['.treerings.png']
-        ) && await base.imagetools.is_png(raw.file)){
-            const data:TreeringMapOnlyUnfinishedData = {
-                treeringmap: raw.file,
-            }
-
-            // 'processing' because need to send to a backend to extract 
-            // ring coordinates
-            return new ctor(
-                'processing', 
-                raw, 
-                raw.input.name,
-                data,
-            )
-        } else if(base.files.match_resultfile_to_inputfile(
-            raw.input, 
-            raw.file, 
-            ['.cells.png']
-        ) && await base.imagetools.is_png(raw.file)){
-            // TODO: should compare the image size to input
-            const data:CellMapOnlyUnfinishedData = {
-                cellmap: raw.file,
-            }
-
-            // 'processing' because need to send to a backend to extract 
-            // cell coordinates
-            return new ctor(
-                'processing', 
-                raw, 
-                raw.input.name,
-                data,
-            )
+    if(!base.files.is_input_and_file_pair(raw))
+        return null;
+    
+    if(base.files.match_resultfile_to_inputfile(
+        raw.input, 
+        raw.file, 
+        ['.treerings.png']
+    ) && await base.imagetools.is_png(raw.file)){
+        const data:TreeringMapOnlyUnfinishedData = {
+            treeringmap: raw.file,
         }
-        else return null;
+
+        // 'processing' because need to send to a backend to extract 
+        // ring coordinates
+        return new ctor(
+            'processing', 
+            raw, 
+            raw.input.name,
+            data,
+        )
+    } else if(base.files.match_resultfile_to_inputfile(
+        raw.input, 
+        raw.file, 
+        ['.cells.png']
+    ) && await base.imagetools.is_png(raw.file)){
+        // TODO: should compare the image size to input
+        const data:CellMapOnlyUnfinishedData = {
+            cellmap: raw.file,
+        }
+
+        // 'processing' because need to send to a backend to extract 
+        // cell coordinates
+        return new ctor(
+            'processing', 
+            raw, 
+            raw.input.name,
+            data,
+        )
     }
     else return null;
 }
+
+
+async function validate_multiple_mask_files<T extends BaseResult>(
+    raw:unknown, 
+    ctor:base.util.ClassWithValidate<
+        T & CARROT_Result, 
+        ConstructorParameters<typeof CARROT_Result>
+    >
+): Promise<T|null> {
+    if(!base.files.is_input_and_file_list_pair(raw))
+        return null;
+    
+    let treringdata:TreeringMapOnlyUnfinishedData|undefined;
+    let celldata:   CellMapOnlyUnfinishedData|undefined;
+
+    for(const file of raw.files){
+        if(base.files.match_resultfile_to_inputfile(
+            raw.input, 
+            file, 
+            ['.treerings.png']
+        ) && await base.imagetools.is_png(file)){
+            treringdata = {treeringmap:file};
+        }
+        if(base.files.match_resultfile_to_inputfile(
+            raw.input, 
+            file, 
+            ['.cells.png']
+        ) && await base.imagetools.is_png(file)){
+            celldata = {cellmap:file};
+        }
+    }
+    if(!treringdata || !celldata)
+        return null;
+    
+    // 'processing' because need to send to backend
+    return new ctor(
+        'processing', 
+        raw, 
+        raw.input.name,
+        {...treringdata, ...celldata},
+    )
+}
+
 
 /** Validate zipfile contents, for a cells only result */
 async function validate_cells_only_unzipped<T extends BaseResult>(
