@@ -27,25 +27,28 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
     ref: preact.RefObject<SVGSVGElement> = preact.createRef()
 
     render(props:TreeringsSVGOverlayProps): JSX.Element {
-        const viewbox = `0 0 ${props.size.width} ${props.size.height}`
         const resultdata:CARROT_Data = props.$result.value.data;
         const treerings:TreeringInfo[] = 
             ('treerings' in resultdata)? resultdata.treerings : [];
         const px_per_um:number = 
             ('px_per_um' in resultdata)? resultdata.px_per_um : 1.0;
-
+        const og_size:base.util.ImageSize = 
+            ('imagesize' in resultdata)? resultdata.imagesize: props.size;
+        
+        const viewbox = `0 0 ${og_size.width} ${og_size.height}`
         const treerings_svg: JSX.Element[]|undefined = 
             treerings.map( 
                 (ring:TreeringInfo, i:number) => 
                     <TreeringComponent 
                         index           = { i }
                         treering_points = { ring.coordinates } 
-                        imagesize       = { props.size } 
+                        imagesize       = { og_size } 
                         parentsvg       = { this.ref.current }
                         year            = { ring.year }
                         on_new_year     = { this.on_new_year }
                         $scale          = { props.$scale }
                         px_per_um       = { px_per_um }
+                        key = {null}
                     /> 
             )
 

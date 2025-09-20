@@ -3,6 +3,7 @@ import { base }    from "../../frontend/dep.ts"
 import { 
     CARROT_Result,
     CellsAndTreeringsData,
+    parse_inputfile_from_process_response,
 } from "../../frontend/lib/carrot_detection.ts"
 
 
@@ -27,6 +28,9 @@ Deno.test('CARROT_Result.export-import', async () => {
         imagesize: {width:200, height:300},
         px_per_um: 1.5,
         reversed_growth_direction: true,
+        cellmap_og : new File(['...'], 'cellmap.png'),
+        instancemap : new File(['...'], 'instancemap.png'),
+        treeringmap_og : new File(['...'], 'treeringmap.png'),
     }
     const r0 = new CARROT_Result(
         'processed',
@@ -136,24 +140,25 @@ Deno.test('response.rings-only-from-flask', async () => {
 })
 
 
-Deno.test('import.legacy_v0', async () => {
-    const inputname:string = 'legacy_v0.jpg';
-    const resultfile:string = 
-        import.meta.resolve(`./assets/${inputname}.results.zip`).replace('file://', '')
-    const zippedresult:File = 
-        new File([Deno.readFileSync(resultfile)], `${inputname}.results.zip`)
+// legacy results are not supported anymore
+// Deno.test('import.legacy_v0', async () => {
+//     const inputname:string = 'legacy_v0.jpg';
+//     const resultfile:string = 
+//         import.meta.resolve(`./assets/${inputname}.results.zip`).replace('file://', '')
+//     const zippedresult:File = 
+//         new File([Deno.readFileSync(resultfile)], `${inputname}.results.zip`)
     
-    const input_file_pair = {input:{name:inputname}, file:zippedresult}
-    const imported:CARROT_Result|null 
-        = await CARROT_Result.validate<CARROT_Result>(input_file_pair)
+//     const input_file_pair = {input:{name:inputname}, file:zippedresult}
+//     const imported:CARROT_Result|null 
+//         = await CARROT_Result.validate<CARROT_Result>(input_file_pair)
 
-    asserts.assertExists(imported)
-    asserts.assertEquals(imported.status, 'processing')
-    asserts.assert('cellmap' in imported.data)
-    asserts.assert('treeringmap' in imported.data)
-    asserts.assertInstanceOf(imported.data.cellmap, File)
-    asserts.assertInstanceOf(imported.data.treeringmap, File)
-})
+//     asserts.assertExists(imported)
+//     asserts.assertEquals(imported.status, 'processing')
+//     asserts.assert('cellmap' in imported.data)
+//     asserts.assert('treeringmap' in imported.data)
+//     asserts.assertInstanceOf(imported.data.cellmap, File)
+//     asserts.assertInstanceOf(imported.data.treeringmap, File)
+// })
 
 
 Deno.test('import.treeringsrings-png', async () => {
@@ -179,3 +184,41 @@ Deno.test('import.treeringsrings-png', async () => {
 
 
 
+
+Deno.test('parse_inputfile_from_process_response', () => {
+    const url0 = "http://localhost:5000/process/inputfile3231.jpg?cells=true"
+    const out0 = parse_inputfile_from_process_response(url0)
+    asserts.assertEquals(out0, 'inputfile3231.jpg')
+
+    // actual bug
+    const url1 = "http://localhost:5082/proxy/5000/process/WOODB_8_3.500pxmm%20-%20Copy.tif?cells=true&treerings=false&recluster=false&px_per_um=0.50000"
+    const out1 = parse_inputfile_from_process_response(url1)
+    asserts.assertEquals(out1, 'WOODB_8_3.500pxmm - Copy.tif')
+
+    //chatgpt suggestions
+    const url2 = "https://example.com/uploads/space%20at%20end%20%20%20.png"
+    const out2 = parse_inputfile_from_process_response(url2)
+    asserts.assertEquals(out2, "space at end   .png")
+    
+
+    const url3 = "https://a/b/c/Name%20With%u00A0NonBreakingSpace.txt"
+    const out3 = parse_inputfile_from_process_response(url3)
+    asserts.assertEquals(out3, "Name With NonBreakingSpace.txt")
+
+    const url4 = "https://encoded/complex%2Fname%20with%20%2520doubleencoded.txt"
+    const out4 = parse_inputfile_from_process_response(url4)
+    asserts.assertEquals(out4, "complex/name with %20doubleencoded.txt")
+    
+
+    const url5 = "not a url"
+    const out5 = parse_inputfile_from_process_response(url5)
+    asserts.assertEquals(out5, null)
+    
+    const url6 = "https://weird/%u00A0%20%20file%20name.pdf"
+    const out6 = parse_inputfile_from_process_response(url6)
+    asserts.assertEquals(out6, "   file name.pdf")
+
+    const url7 = "http://localhost:5082/process/Acer%20%20amoenum_24702b.jpg"
+    const out7 = parse_inputfile_from_process_response(url7)
+    asserts.assertEquals(out7, "Acer  amoenum_24702b.jpg")
+})

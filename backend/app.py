@@ -4,13 +4,33 @@ from base.backend.paths import get_static_path, path_to_main_module
 
 import os
 import json
+import shutil
 import typing as tp
 import zipfile
 
 import flask
+from werkzeug.security import safe_join
+
+import traininglib.datalib
+
 import backend.processing
 import backend.training
 import backend.settings  #important for some reason
+
+# NOTE: mypy complains that it cannot find backend.processing.process_cells etc
+from backend.processing import (
+    process_cells as process_cells_fn,
+    process_treerings as process_treerings_fn,
+    postprocess_cells as postprocess_cells_fn,
+    postprocess_treerings as postprocess_treerings_fn,
+    postprocess_combined  as postprocess_combined_fn,
+    get_cellsmap_name,
+    get_cellsmap_og_name,
+    get_treeringsmap_name,
+    get_treeringsmap_og_name,
+    sam_encode,
+)
+
 
 
 class App(BaseApp):
@@ -19,9 +39,9 @@ class App(BaseApp):
             deno = DenoConfig(
                 root      = path_to_main_module(),
                 static    = get_static_path(),
-                index_tsx = 'index.tsx',
-                dep_ts    = 'dep.ts',
-                copy_globs= 'css/treerings.css,favicon.ico',
+                index_tsx = 'frontend/index.tsx',
+                srcdirs   = 'frontend/,base/frontend/',
+                copy_globs= 'frontend/css/treerings.css,frontend/favicon.ico',
             )
             kw['deno_cfg'] = deno
         
@@ -29,84 +49,116 @@ class App(BaseApp):
         if self.is_reloader:
             return
         
+        self.route('/sam_encode/<imagename>')(self.sam_encode)
+        self.route('/upload_model/<path:path>', methods=['POST'])(self.upload_model)
+        self.route('/process/<imagename>')(self.process)
 
-        @self.route('/process/<imagename>')
-        def process(imagename):
-            cells = flask.request.args.get('cells', "false")
-            cells = json.loads(cells)
-            treerings = flask.request.args.get('treerings', "false")
-            treerings = json.loads(treerings)
-            recluster = flask.request.args.get('recluster', "false")
-            recluster = json.loads(recluster)
+    def process(self, imagename:str):
+        args = flask.request.args
 
-            #if not cells and not treerings and not recluster:
-            #    flask.abort(400)  #bad request
+        process_cells     = args.get('cells', type=json.loads, default=False)
+        process_treerings = args.get('treerings', type=json.loads, default=False)
+        displaywidth  = args.get('displaywidth',  type=int, default=None)
+        displayheight = args.get('displayheight', type=int, default=None)
+        og_width      = args.get('og_width',  type=int, default=None)
+        og_height     = args.get('og_height', type=int, default=None)
+        px_per_um     = args.get('px_per_um', type=float)
+        postprocess_cells = process_cells or args.get(
+            'postprocess_cells', 
+            type    = json.loads, 
+            default = False,
+        )
+        postprocess_rings = process_treerings or args.get(
+            'postprocess_treerings', 
+            type    = json.loads, 
+            default = False,
+        )
+        # combine both results
+        postprocess_combined = postprocess_cells and postprocess_rings
+        
+        if og_height is None or og_width is None:
+            # TODO: instead, read the size from input image file if available
+            flask.abort(400)
+        og_shape = (og_height, og_width)
 
-            results:tp.Dict[str, bytes] = {}
-            full_path = self.path_in_cache(imagename, abort_404=False)
-            if cells:
-                _ignored = backend.processing.process_cells(full_path, self.settings)
-            if treerings:
-                result = backend.processing.process_treerings(full_path, self.settings)
-                results[f'{imagename}/treerings.json'] = json.dumps({
-                    'ring_points': result['ring_points'],
-                }).encode('utf8')
+        if displayheight is None or displaywidth is None:
+            flask.abort(400)
+        displayshape = (displayheight, displaywidth)
+
+        results:tp.Dict[str, bytes] = {}
+        full_path = self.path_in_cache(imagename, abort_404=False)
+        if process_cells:
             
-
-            cellsmap = backend.processing.get_cellsmap_name(full_path)
-            if os.path.exists(cellsmap):
-                results[f'{imagename}/{imagename}.cells.png'] = \
-                    open(cellsmap, 'rb').read()
-            treeringsmap = backend.processing.get_treeringsmap_name(full_path)
-            if os.path.exists(treeringsmap):
-                results[f'{imagename}/{imagename}.treerings.png'] = \
-                    open(treeringsmap, 'rb').read()
-
-            
-            result = backend.processing.associate_cells(
+            _ignored = process_cells_fn(
                 full_path, 
                 self.settings, 
-                recluster
+                px_per_um, 
+                displayshape
             )
-            if result is not None:
-                # TODO: split into cells.json and treerings.json
-                ringdata = {
-                    'ring_points': result['ring_points'],
-                }
-                results[f'{imagename}/treerings.json'] = \
-                    json.dumps(ringdata).encode('utf8')
-                if result['ring_map'] is not None:
-                    results[f'{imagename}.ring_map.png'] = \
-                        open(result['ring_map'], 'rb').read()
-                    celldata = {
-                        'cells' : result['cells'],
-                        'imagesize' : result['imagesize'],
-                    }
-                    results[f'{imagename}/cells.json'] = \
-                        json.dumps(celldata).encode('utf8')
-
-
-            path = zip_results(results, full_path)
-            return flask.send_file(path)
+        if process_treerings:
+            output = process_treerings_fn(
+                full_path, 
+                self.settings, 
+                px_per_um, 
+                displayshape
+            )
         
-        @self.route('/bigtiff', methods=['POST'])
-        def bigtiff():
-            '''Convert bigtiff to jpeg'''
-            files = flask.request.files.getlist("files")
-            if len(files) != 1:
-                flask.abort(400)
 
-            f = files[0]            
-            fullpath = self.path_in_cache(os.path.basename(f.filename), abort_404=False )
-            f.save(fullpath)
-            
-            jpeg_path, [og_height, og_width] = \
-                backend.processing.convert_tiff_to_jpeg(fullpath, 4096)
-            
-            response = flask.send_file(jpeg_path)
-            response.headers['X-Original-Image-Width']  = og_width
-            response.headers['X-Original-Image-Height'] = og_height
-            return response
+        if postprocess_cells:
+            output = postprocess_cells_fn(full_path, displayshape, og_shape)
+            results[f'{imagename}/internal/{imagename}.instancemap.png'] = \
+                open(output['instancemap_rgb'], 'rb').read()
+            instancemap = output['instancemap']
+            cell_points = output['cell_points']
+
+
+        if postprocess_rings:
+            output = postprocess_treerings_fn(full_path, displayshape, og_shape)
+            ringdata = {
+                'ring_points': output['ring_points_json'],
+                'imagesize':   [og_width, og_height],
+            }
+            results[f'{imagename}/treerings.json'] = \
+                json.dumps(ringdata).encode('utf8')
+            ring_points = output['ring_points']
+
+        if postprocess_combined:
+            output = postprocess_combined_fn(
+                full_path, 
+                cell_points, 
+                ring_points, 
+                instancemap
+            )
+            celldata = {
+                'cells': output['cells'],
+                'imagesize': [og_width, og_height],
+            }
+            results[f'{imagename}/cells.json'] = \
+                json.dumps(celldata).encode('utf8')
+            results[f'{imagename}/internal/{imagename}.ring_map.png'] = \
+                open(output['ringmap_rgb'], 'rb').read()
+
+        
+        cellsmap = get_cellsmap_og_name(full_path)
+        if os.path.exists(cellsmap):
+            results[f'{imagename}/{imagename}.cells.png'] = \
+                open(cellsmap, 'rb').read()
+        cellsmap_resized = get_cellsmap_name(full_path)
+        if os.path.exists(cellsmap_resized):
+            results[f'{imagename}/internal/{imagename}.cells.png'] = \
+                open(cellsmap_resized, 'rb').read()
+        
+        treeringsmap = get_treeringsmap_og_name(full_path)
+        if os.path.exists(treeringsmap):
+            results[f'{imagename}/{imagename}.treerings.png'] = \
+                open(treeringsmap, 'rb').read()
+        treeringsmap_resized = get_treeringsmap_name(full_path)
+        if os.path.exists(treeringsmap_resized):
+            results[f'{imagename}/internal/{imagename}.treerings.png'] = \
+                open(treeringsmap_resized, 'rb').read()
+
+        path = zip_results(results, full_path)
+        return flask.send_file(path)
 
 
     def path_in_cache(self, filename, abort_404=True):
@@ -129,8 +181,15 @@ class App(BaseApp):
         if not all(targetfiles):
             flask.abort(404)
         
+        cachedir = os.path.join(self.cache_path, 'training')
         # learning rate & epochs, ne?
-        ok = backend.training.start_training(imagefiles, targetfiles, trainingtype, self.settings)
+        ok = backend.training.start_training(
+            imagefiles, 
+            targetfiles, 
+            trainingtype,
+            cachedir,
+            self.settings
+        )
         return ok
 
     #override
@@ -145,6 +204,32 @@ class App(BaseApp):
         self.settings.models[trainingtype].save(path)
         self.settings.active_models[trainingtype] = newname
         return 'OK'
+    
+    def sam_encode(self, imagename:str):
+        full_path = self.path_in_cache(imagename, abort_404=False)
+        encoding = sam_encode(full_path)
+
+        return flask.Response(
+            encoding.tobytes(), 
+            mimetype = 'application/octet-stream',
+            headers  = {
+                'X-DTYPE': 'float32', 
+                'X-SHAPE': ','.join(map(str, encoding.shape))
+            }
+        )
+    
+    def upload_model(self, path:str):
+        files = flask.request.files.getlist("files")
+        for f in files:
+            print('Upload model: %s'%f.filename)
+            fullpath = safe_join(get_models_path(), path)
+            if fullpath is None:
+                flask.abort(403)
+            os.makedirs(os.path.dirname(fullpath), exist_ok=True)
+            f.save(fullpath)
+        return 'OK'
+
+
 
 def zip_results(result:tp.Dict[str, bytes], inputfile:str) -> str:
     zipfilepath = inputfile + '.results.zip'

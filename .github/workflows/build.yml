@@ -16,11 +16,24 @@ jobs:
         with:
           python-version: '3.11'
           #cache: 'pip' # caching pip dependencies
+
+      - name: WORKAROUND UNTIL I HAVE A BETTER SOLUTION
+        run: |
+          pwd
+          ls
+          cp -r traininglib_/traininglib ./traininglib
+          ls traininglib/datalib.py
       
       - name: Install requirements
         run: |
           ./deno.bat task cache
           pip install -r requirements.frozen.txt
+      
+
+      - name: DEBUG
+        run: |
+          python -c "import pkgutil, importlib; p=importlib.import_module('traininglib.datalib'); print(p.__file__)" 
+          python -c "import pkgutil, importlib; p=importlib.import_module('traininglib'); print(p.__file__)" 
         
       - name: Build
         run: python build.py --zip

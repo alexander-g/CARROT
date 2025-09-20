@@ -6,6 +6,17 @@ import { CARROT_ModelTypes, CARROT_SettingsHandler } from "../lib/carrot_setting
 
 
 
+// TODO: some kind of instructions
+// - load training images and annotations or annotate via the edit tool
+// - make sure the files are fully annotated. If a cell/treering is not annotated the model will try to learn ...
+// - fine-tuning if the model already works somewhat but needs improvement, full training otherwise but might take several hours
+// - make sure the image resolution (px/um) is set correctly
+// - make sure treerings are grouped together correctly in the other tab
+// - make sure cells are not touching, verify in the instance map
+
+
+
+
 type ModelType = CARROT_ModelTypes
 type CARROT_InputResultPair = 
     base.state.InputResultPairOfAppState<state.CARROT_State>;
@@ -36,7 +47,7 @@ export class TrainingTab extends base.TrainingTab<state.CARROT_State> {
             return;
         }
         const options:Record<string,number|string> = {
-            ...this.lr_epochs_ref.current!.get_options(),
+            //...this.lr_epochs_ref.current!.get_options(),
             training_type: training_type,
         }
 
@@ -172,6 +183,22 @@ export class TrainingTab extends base.TrainingTab<state.CARROT_State> {
             this.trainingmodal.current?.success()
             //this.update_model_info()
         }
+    }
+
+    override instructions(): JSX.Element {
+        return <base.TrainingInstructions>
+            <li>Load at least 3 training images and annotations or annotate via the edit tool.</li>
+            <li>Make sure the images are fully annotated. 
+                Partial annotation will result in suboptimal training.</li>
+            <li>Make sure the image resolution (px/μm) is set correctly.</li>
+            <li>Make sure treerings are grouped together correctly in the Detection tab.</li>
+            <li>Make sure annotated cells do not touch.</li>
+        </base.TrainingInstructions>
+    }
+
+    override hyperparameters(): JSX.Element {
+        // deno-lint-ignore jsx-no-useless-fragment
+        return <></>
     }
 }
 
