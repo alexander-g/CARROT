@@ -60,7 +60,13 @@ def start_training(
         else:
             raise NotImplementedError(trainingtype)
         
-        newmodel.save(outputfile)
+        # NOTE: not saving newmodel because of errors
+        # instead saving previous with new state dict
+        # newmodel.save(outputfile)
+        sd = newmodel.state_dict()
+        newmodel = settings.models[trainingtype]
+        print(newmodel.load_state_dict(sd))
+
         #indicate that the current model is unsaved
         settings.active_models[trainingtype] = ''
         settings.models[trainingtype] = newmodel
