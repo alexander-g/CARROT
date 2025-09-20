@@ -4,11 +4,12 @@ import { CARROT_State } from "./components/state.ts";
 import { CARROT_DetectionTab } from "./components/DetectionTab.tsx";
 import { CARROT_SettingsHandler } from "./lib/carrot_settings.ts";
 import { 
+    CARROT_Backend,
     CARROT_RemoteBackend, 
     CARROT_Result, 
     is_CARROT_Backend,
 } from "./lib/carrot_detection.ts";
-import { CARROT_TopMenu } from "./components/CARROT_Settings.tsx";
+import { CARROT_SettingsModal } from "./components/CARROT_Settings.tsx";
 import { TrainingTab }    from "./components/TrainingTab.tsx"
 
 
@@ -22,22 +23,29 @@ class CARROT_App extends base.create_App({
     // @ts-ignore type hell
     backend:         CARROT_RemoteBackend,
     settingshandler: new CARROT_SettingsHandler,
-    TopMenu:         CARROT_TopMenu,
+    SettingsModal:   CARROT_SettingsModal,
     tabs:{
         'Detection': CARROT_DetectionTab,
         'Training':  TrainingTab,
     },
 }){
-    // overriding to pass processingmodule to appstate.set_files
-    override async on_new_files(files: FileList | File[]): Promise<void> {
+    // overriding to pass processingmodule to appstate.set_files + more
+    override async on_new_files(files: FileList | File[]): Promise<boolean> {
         const backend = 
             new this.backend(CARROT_Result, this.appstate.$settings.value!)
+
+
+
+
+        // should be always the case, just to make typescript happy
+        const carrotbackend:CARROT_Backend|undefined = 
+            is_CARROT_Backend(backend)? backend : undefined;
+        const changed:boolean = await this.appstate.set_files(files, carrotbackend)
+
+        if(changed && this.appstate.$files.value.length > 0)
+            this.settings_modal.current!.show_modal(/*cancel_ok=*/false)
         
-        if(is_CARROT_Backend(backend)){
-            return await this.appstate.set_files(files, backend)
-        }
-        // else
-        return await this.appstate.set_files(files)
+        return changed;
     }
 }
 
