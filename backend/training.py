@@ -1,4 +1,5 @@
 import os
+import shutil
 import typing as tp
 import zipfile
 
@@ -35,7 +36,7 @@ def start_training(
         # return 'OK' if ok in [True, None] else 'INTERRUPTED'
 
         px_per_mm = settings.micrometer_factor * 1000
-        outputfile = os.path.join(cachedir, f'unsaved-model-{trainingtype}.pt.zip')
+        outputfile = _get_temporary_modelname(cachedir, trainingtype)
 
         if trainingtype == 'treerings':
             steps = 500
@@ -72,6 +73,9 @@ def start_training(
         settings.models[trainingtype] = newmodel
     return 'OK'
 
+def _get_temporary_modelname(cachedir:str, trainingtype:str) -> str:
+    return os.path.join(cachedir, f'unsaved-model-{trainingtype}.pt.zip')
+
 
 def _save_new_model_TEMPORARY_WORKAROUND(
     newmodel, 
@@ -92,6 +96,12 @@ def _save_new_model_TEMPORARY_WORKAROUND(
         return
     
     merge_zipfiles(outputpath, tmp_outputpath, path_to_current_model)
+
+def _rename_temporary_model(outputpath:str, cachedir:str, trainingtype:str) -> None:
+    if not outputpath.endswith('.pt.zip'):
+        outputpath = outputpath + '.pt.zip'
+    path = _get_temporary_modelname(cachedir, trainingtype)
+    shutil.copy(path, outputpath)
     
 
 def merge_zipfiles(
