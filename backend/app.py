@@ -201,7 +201,9 @@ class App(BaseApp):
             flask.abort(400) #bad request
         
         path = f'{get_models_path()}/{trainingtype}/{newname}'
-        self.settings.models[trainingtype].save(path)
+        #self.settings.models[trainingtype].save(path)
+        cachedir = os.path.join(self.cache_path, 'training')
+        backend.training._rename_temporary_model(path, cachedir, trainingtype)
         self.settings.active_models[trainingtype] = newname
         return 'OK'
     

@@ -1,10 +1,13 @@
 import os
+import shutil
 import typing as tp
+import zipfile
 
 import PIL.Image
 
 from base.backend import GLOBALS, pubsub
 from base.backend.processing import resize_image
+from base.backend.app import get_models_path
 
 from carrot_ml.src import treeringmodel as treerings
 from carrot_ml.src import maskrcnn_celldetection as cells
@@ -33,7 +36,7 @@ def start_training(
         # return 'OK' if ok in [True, None] else 'INTERRUPTED'
 
         px_per_mm = settings.micrometer_factor * 1000
-        outputfile = os.path.join(cachedir, f'unsaved-model-{trainingtype}.pt.zip')
+        outputfile = _get_temporary_modelname(cachedir, trainingtype)
 
         if trainingtype == 'treerings':
             steps = 500
@@ -60,11 +63,87 @@ def start_training(
         else:
             raise NotImplementedError(trainingtype)
         
-        newmodel.save(outputfile)
+        # NOTE: not saving newmodel because of errors
+        # instead saving previous with new state dict
+        # newmodel.save(outputfile)
+        _save_new_model_TEMPORARY_WORKAROUND(newmodel, settings, trainingtype, outputfile)
+
         #indicate that the current model is unsaved
         settings.active_models[trainingtype] = ''
         settings.models[trainingtype] = newmodel
     return 'OK'
+
+def _get_temporary_modelname(cachedir:str, trainingtype:str) -> str:
+    return os.path.join(cachedir, f'unsaved-model-{trainingtype}.pt.zip')
+
+
+def _save_new_model_TEMPORARY_WORKAROUND(
+    newmodel, 
+    settings, 
+    trainingtype: str, 
+    outputpath:   str,
+) -> None:
+    sd = newmodel.state_dict()
+    newmodel = settings.models[trainingtype]
+    print(newmodel.load_state_dict(sd))
+    tmp_outputpath = outputpath + '.tmp.pt.zip'
+    newmodel.save(tmp_outputpath)
+
+    current_modelname = settings.active_models[trainingtype]
+    path_to_current_model = get_path_to_model(trainingtype, current_modelname)
+    if path_to_current_model is None:
+        print('[WARNING] could not find current model file')
+        return
+    
+    merge_zipfiles(outputpath, tmp_outputpath, path_to_current_model)
+
+def _rename_temporary_model(outputpath:str, cachedir:str, trainingtype:str) -> None:
+    if not outputpath.endswith('.pt.zip'):
+        outputpath = outputpath + '.pt.zip'
+    path = _get_temporary_modelname(cachedir, trainingtype)
+    shutil.copy(path, outputpath)
+    
+
+def merge_zipfiles(
+    dstfile:str, 
+    srcfile0:str, 
+    srcfile1:str,
+    do_overwrite: tp.List[str] = ['.data/extern_modules'],
+):
+    '''Copy files from zipfiles srcfile0 and srcfile1 into dstfile.
+       Files from srcfile1 will be ignored if already present.
+       Also path manipulation. Also do overwrite some files even if present.'''
+    dstbase = os.path.basename(dstfile).replace('.pt.zip', '.pt')
+    do_overwrite = ['/'.join([dstbase, overwrite]) for overwrite in do_overwrite]
+    print(do_overwrite)
+
+    already_written = []
+    with zipfile.ZipFile(dstfile, 'w') as zipf_dst:
+        with zipfile.ZipFile(srcfile0) as zipf_src0:
+            for name in zipf_src0.namelist():
+                name_dst = '/'.join([dstbase] + name.split('/')[1:])
+                if not name_dst in do_overwrite:
+                    zipf_dst.writestr(name_dst, zipf_src0.read(name))
+                    already_written.append(name_dst)
+        
+        with zipfile.ZipFile(srcfile1) as zipf_src1:
+            for name in zipf_src1.namelist():
+                name_dst = '/'.join([dstbase] + name.split('/')[1:])
+                if name_dst in already_written:
+                    continue
+                zipf_dst.writestr(name_dst, zipf_src1.read(name))
+                already_written.append(name_dst)
+
+
+
+
+def get_path_to_model(modeltype:str, modelname:str) -> tp.Optional[str]:
+    for ending in ['.pt', '.pt.zip']:
+        models_dir = get_models_path()
+        abspath = os.path.join(models_dir, modeltype, f'{modelname}{ending}')
+        if os.path.exists(abspath):
+            return abspath
+    return None
 
 
 def training_progress_callback(x:float):

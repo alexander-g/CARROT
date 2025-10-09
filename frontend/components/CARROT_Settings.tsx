@@ -89,11 +89,7 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
                         value = {micrometer_factor} 
                         id    = 'settings-micrometers-input' 
                         ref   = {this.micrometers_ref}
-                        //onInput = {this.check_resolution_input}
-                        onInput = { 
-                            () => this.$micrometers_val.value = 
-                                this.micrometers_ref.current!.value 
-                        }
+                        onInput = { this._update_micrometers_val }
                     />
                     <div class="ui basic label" style="width:15%;"> px/μm </div>
                     <label style="padding:10px; width:65%;">
@@ -174,6 +170,15 @@ extends base.SettingsModal<CARROT_Settings, CARROT_SettingsModalProps> {
             //ignore_buffer_px:  ignore_px,
             micrometer_factor: micrometers,
         }
+    }
+
+    override async show_modal(cancel_ok?: boolean): Promise<void> {
+        await super.show_modal(cancel_ok)
+        this._update_micrometers_val()
+    }
+
+    _update_micrometers_val = () => {
+        this.$micrometers_val.value = this.micrometers_ref.current!.value ;
     }
 }
 
