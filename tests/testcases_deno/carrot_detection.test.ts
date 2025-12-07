@@ -3,6 +3,8 @@ import { base }    from "../../frontend/dep.ts"
 import { 
     CARROT_Result,
     CellsAndTreeringsData,
+    CARROT_RemoteBackend,
+    UnfinishedCARROT_Result,
     parse_inputfile_from_process_response,
 } from "../../frontend/lib/carrot_detection.ts"
 
@@ -46,11 +48,12 @@ Deno.test('CARROT_Result.export-import', async () => {
         [
             `${inputname}.tree_ring_statistics.csv`,
             `${inputname}.cell_statistics.csv`,
-            `${inputname}.ring_map.png`,
+            //`${inputname}.ring_map.png`,
             `${inputname}/treerings.json`,
             `${inputname}/cells.json`,
             `${inputname}/${inputname}.cells.png`,
             `${inputname}/${inputname}.treerings.png`,
+            `${inputname}/internal/${inputname}.treerings.png`,
         ]
     )
 
@@ -76,7 +79,7 @@ Deno.test('CARROT_Result.export-import', async () => {
 
 
 Deno.test('response.full-from-flask', async () => {
-    const rawdata:Uint8Array = Deno.readFileSync(
+    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
         import.meta.resolve('./assets/ELD_QURO_637A_4.jpg.results.zip').replace('file://', '')
     )
     const imagefilename = 'ELD_QURO_637A_4.jpg'
@@ -97,7 +100,7 @@ Deno.test('response.full-from-flask', async () => {
 })
 
 Deno.test('response.cells-only-from-flask', async () => {
-    const rawdata:Uint8Array = Deno.readFileSync(
+    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
         import.meta.resolve('./assets/cellsonly/ELD_QURO_637A_4.jpg.results.zip')
         .replace('file://', '')
     )
@@ -118,7 +121,7 @@ Deno.test('response.cells-only-from-flask', async () => {
 })
 
 Deno.test('response.rings-only-from-flask', async () => {
-    const rawdata:Uint8Array = Deno.readFileSync(
+    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
         import.meta.resolve('./assets/ringsonly/ELD_QURO_637A_4.jpg.results.zip')
         .replace('file://', '')
     )
@@ -140,29 +143,8 @@ Deno.test('response.rings-only-from-flask', async () => {
 })
 
 
-// legacy results are not supported anymore
-// Deno.test('import.legacy_v0', async () => {
-//     const inputname:string = 'legacy_v0.jpg';
-//     const resultfile:string = 
-//         import.meta.resolve(`./assets/${inputname}.results.zip`).replace('file://', '')
-//     const zippedresult:File = 
-//         new File([Deno.readFileSync(resultfile)], `${inputname}.results.zip`)
-    
-//     const input_file_pair = {input:{name:inputname}, file:zippedresult}
-//     const imported:CARROT_Result|null 
-//         = await CARROT_Result.validate<CARROT_Result>(input_file_pair)
-
-//     asserts.assertExists(imported)
-//     asserts.assertEquals(imported.status, 'processing')
-//     asserts.assert('cellmap' in imported.data)
-//     asserts.assert('treeringmap' in imported.data)
-//     asserts.assertInstanceOf(imported.data.cellmap, File)
-//     asserts.assertInstanceOf(imported.data.treeringmap, File)
-// })
-
-
-Deno.test('import.treeringsrings-png', async () => {
-    const rawdata:Uint8Array = Deno.readFileSync(
+Deno.test('import.treeringsrings-png', async (t:Deno.TestContext) => {
+    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
         import.meta.resolve('./assets/ringsonly/ELD_QURO_637A_4.jpg.treerings.png')
         .replace('file://', '')
     )
@@ -180,7 +162,108 @@ Deno.test('import.treeringsrings-png', async () => {
     asserts.assert( !('cellmap' in imported.data) )
     asserts.assert('treeringmap' in imported.data)
     asserts.assertInstanceOf(imported.data.treeringmap, File)
+
+    await t.step("postprocess-via-wasm", async () => {
+        const settings = {
+            micrometer_factor: 1.0
+        }
+        const backend = new CARROT_RemoteBackend(CARROT_Result, settings as any)
+
+        const postprocessed_result = await backend.postprocess_result(
+            imported as UnfinishedCARROT_Result, 
+            maskfile // using png as input file for image size
+        )
+        asserts.assertEquals(postprocessed_result.status, 'processed')
+        asserts.assert('treerings' in postprocessed_result.data)
+        asserts.assertEquals(postprocessed_result.data.treerings.length, 4)
+    })
 })
+
+Deno.test('import.cells-png', async (t:Deno.TestContext) => {
+    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
+        import.meta.resolve('./assets/cellsonly/ELD_QURO_637A_4.jpg.cells.png')
+        .replace('file://', '')
+    )
+    const inputname = 'ELD_QURO_637A_4.jpg'
+
+    const maskfile:File = 
+        new File([rawdata], `${inputname}.cells.png`)
+    const input_file_pair = {input:{name:inputname}, file:maskfile}
+    const imported:CARROT_Result|null 
+        = await CARROT_Result.validate<CARROT_Result>(input_file_pair)
+    
+    asserts.assertExists(imported)
+    asserts.assertEquals(imported.status, 'processing')
+    asserts.assert( 'cellmap' in imported.data )
+    asserts.assert( !('treeringmap' in imported.data) )
+    asserts.assertInstanceOf(imported.data.cellmap, File)
+
+    await t.step("postprocess-via-wasm", async () => {
+        const settings = {
+            micrometer_factor: 1.0
+        }
+        const backend = new CARROT_RemoteBackend(CARROT_Result, settings as any)
+
+        const postprocessed_result = await backend.postprocess_result(
+            imported as UnfinishedCARROT_Result, 
+            maskfile // using png as input file for image size
+        )
+        asserts.assertEquals(postprocessed_result.status, 'processed')
+        asserts.assert('cellmap' in postprocessed_result.data)
+        asserts.assert('instancemap' in postprocessed_result.data)
+    })
+})
+
+
+
+Deno.test('import.cells-and-treerings-png', async (t:Deno.TestContext) => {
+    const inputname = 'ELD_QURO_637A_4.jpg'
+    const rawdata_cells:Uint8Array<ArrayBuffer> = Deno.readFileSync(
+        import.meta.resolve('./assets/cellsonly/ELD_QURO_637A_4.jpg.cells.png')
+        .replace('file://', '')
+    )
+    const rawdata_rings:Uint8Array<ArrayBuffer> = Deno.readFileSync(
+        import.meta.resolve('./assets/ringsonly/ELD_QURO_637A_4.jpg.treerings.png')
+        .replace('file://', '')
+    )
+    const maskfile_cells:File = 
+        new File([rawdata_cells], `${inputname}.cells.png`)
+    const maskfile_rings:File = 
+        new File([rawdata_rings], `${inputname}.treerings.png`)
+    const input_file_pair = {
+        input:{name:inputname}, 
+        files:[maskfile_cells, maskfile_rings]
+    }
+    const imported:CARROT_Result|null 
+        = await CARROT_Result.validate<CARROT_Result>(input_file_pair)
+    
+    asserts.assertExists(imported)
+    asserts.assertEquals(imported.status, 'processing')
+    asserts.assert( 'cellmap' in imported.data )
+    asserts.assert( 'treeringmap' in imported.data )
+    asserts.assertInstanceOf(imported.data.cellmap, File)
+
+    await t.step("postprocess-via-wasm", async () => {
+        const settings = {
+            micrometer_factor: 1.0
+        }
+        const backend = new CARROT_RemoteBackend(CARROT_Result, settings as any)
+
+        const postprocessed_result = await backend.postprocess_result(
+            imported as UnfinishedCARROT_Result, 
+            maskfile_rings // using png as input file for image size
+        )
+        asserts.assertEquals(postprocessed_result.status, 'processed')
+        asserts.assert('cellmap' in postprocessed_result.data)
+        asserts.assert('instancemap' in postprocessed_result.data)
+        asserts.assert('treerings' in postprocessed_result.data)
+        asserts.assertEquals(postprocessed_result.data.treerings.length, 4)
+        
+        asserts.assertGreater(postprocessed_result.data.cells.length, 1)
+    })
+})
+
+
 
 
 
