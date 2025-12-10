@@ -43,3 +43,4 @@ jobs:
         with:
           name: binaries
           path: builds/*.zip
+        if-no-files-found: error
