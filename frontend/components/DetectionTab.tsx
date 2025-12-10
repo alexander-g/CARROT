@@ -463,12 +463,12 @@ async function fetch_with_progress(
         return new Error('Internal Error')
     
     let received:number = 0
-    const chunks:Uint8Array[] = []
+    const chunks:Uint8Array<ArrayBuffer>[] = []
     while(true) {
         try {
             const {done, value} = await reader.read();
             if(value != undefined){
-                chunks.push(value)
+                chunks.push(value as Uint8Array<ArrayBuffer>)
                 received += value.length
                 on_progess({total, received})
             }
