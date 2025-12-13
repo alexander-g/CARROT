@@ -179,6 +179,34 @@ Deno.test('import.treeringsrings-png', async (t:Deno.TestContext) => {
     })
 })
 
+Deno.test('postprocess-huge-treeringmap-in-wasm', async (t:Deno.TestContext) => {
+    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
+        import.meta.resolve('./assets/treeringsmap2.png')
+        .replace('file://', '')
+    )
+    const maskfile:File = new File([rawdata], `inputname.treerings.png`)
+
+    const settings = {
+        micrometer_factor: 1.0
+    }
+    const backend = new CARROT_RemoteBackend(CARROT_Result, settings as any)
+
+    const postprocessed_result = await backend.postprocess_result(
+        //imported as UnfinishedCARROT_Result, 
+        new CARROT_Result('processing', null, 'ignored', {treeringmap:maskfile}) as UnfinishedCARROT_Result,
+        maskfile // using png as input file for image size
+    )
+    asserts.assertEquals(postprocessed_result.status, 'processed')
+    asserts.assert('treerings' in postprocessed_result.data)
+    asserts.assertGreater(postprocessed_result.data.treerings.length, 7)
+    asserts.assertEquals(
+        await base.imagetools.get_png_size(postprocessed_result.data.treeringmap_og),
+        {width: 72228, height:13542}
+    )
+})
+
+
+
 Deno.test('import.cells-png', async (t:Deno.TestContext) => {
     const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
         import.meta.resolve('./assets/cellsonly/ELD_QURO_637A_4.jpg.cells.png')
@@ -260,6 +288,15 @@ Deno.test('import.cells-and-treerings-png', async (t:Deno.TestContext) => {
         asserts.assertEquals(postprocessed_result.data.treerings.length, 4)
         
         asserts.assertGreater(postprocessed_result.data.cells.length, 1)
+        const years:Set<number> = new Set()
+        for(const cell of postprocessed_result.data.cells){
+            years.add(cell.year_index)
+            if(cell.year_index >= 0){
+                asserts.assertGreaterOrEqual(cell.position_within, 0)
+                asserts.assertLessOrEqual(cell.position_within, 1)
+            }
+        }
+        asserts.assertEquals([-1,0,1,2,3], [...years].sort())
     })
 })
 

@@ -1052,7 +1052,6 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                 (ring:TreeringInfo) => ring.year
             )
 
-            console.log('TODO: cell infos')
             console.log('TODO: og sized maps')
 
             if('ringmap_workshape_png' in output){
@@ -1066,9 +1065,12 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                     px_per_um:       this.settings.micrometer_factor,                                   // TODO: is this correct??
                     imagesize:       sizes.og_size,
                     reversed_growth_direction: false,                                                   // TODO: ??
-                    treerings:  convert_pairedpaths_to_treeringinfos(output.ring_points_xy, current_years),
+                    treerings:  convert_pairedpaths_to_treeringinfos(
+                        output.ring_points_xy, 
+                        current_years
+                    ),
     
-                    cells: output.cell_info,                                                                           // TODO
+                    cells: output.cell_info,
                     colored_cellmap: output.ringmap_workshape_png,
                 }
                 return new CARROT_Result('processed', output, input.name, combineddata)
@@ -1084,11 +1086,14 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             else if('treeringmap_workshape_png' in output){
                 const treeringdata:TreeringsOnlyData = {
                     treeringmap:     output.treeringmap_workshape_png,
-                    treeringmap_og:  output.treeringmap_workshape_png,                                  // TODO: wrong
+                    treeringmap_og:  output.treeringmap_og_shape_png,
                     px_per_um:       this.settings.micrometer_factor,                                   // TODO: is this correct??
                     imagesize:       sizes.og_size,
                     reversed_growth_direction: false,                                                   // TODO: ??
-                    treerings:  convert_pairedpaths_to_treeringinfos(output.ring_points_xy, current_years),
+                    treerings:  convert_pairedpaths_to_treeringinfos(
+                        output.ring_points_xy, 
+                        current_years
+                    ),
                 }
                 return new CARROT_Result('processed', output, input.name, treeringdata)
             }
