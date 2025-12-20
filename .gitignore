@@ -9,3 +9,4 @@ cache
 settings.json
 venv
 tests/coverage
+import_map*.json
