@@ -6,7 +6,11 @@ import {
     CARROT_RemoteBackend,
     UnfinishedCARROT_Result,
     parse_inputfile_from_process_response,
+    resize_mask_in_worker,
+    resolve_unfinished_wasm_file,
+    abort_resize_mask,
 } from "../../frontend/lib/carrot_detection.ts"
+import { imagetools } from "../../base/frontend/mod.ts";
 
 
 
@@ -163,12 +167,13 @@ Deno.test('import.treeringsrings-png', async (t:Deno.TestContext) => {
     asserts.assert('treeringmap' in imported.data)
     asserts.assertInstanceOf(imported.data.treeringmap, File)
 
-    await t.step("postprocess-via-wasm", async () => {
-        const settings = {
-            micrometer_factor: 1.0
-        }
-        const backend = new CARROT_RemoteBackend(CARROT_Result, settings as any)
 
+    const settings = {
+        micrometer_factor: 1.0
+    }
+    const backend = new CARROT_RemoteBackend(CARROT_Result, settings as any)
+
+    await t.step("postprocess-via-wasm", async () => {
         const postprocessed_result = await backend.postprocess_result(
             imported as UnfinishedCARROT_Result, 
             maskfile // using png as input file for image size
@@ -179,7 +184,8 @@ Deno.test('import.treeringsrings-png', async (t:Deno.TestContext) => {
     })
 })
 
-Deno.test('postprocess-huge-treeringmap-in-wasm', async (t:Deno.TestContext) => {
+
+Deno.test('postprocess-huge-treeringmap-in-wasm', async (_t:Deno.TestContext) => {
     const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
         import.meta.resolve('./assets/treeringsmap2.png')
         .replace('file://', '')
@@ -191,16 +197,41 @@ Deno.test('postprocess-huge-treeringmap-in-wasm', async (t:Deno.TestContext) => 
     }
     const backend = new CARROT_RemoteBackend(CARROT_Result, settings as any)
 
+    // start postprocessing twice, the first one should get aborted
+    const postprocessed_result0 = await backend.postprocess_result(
+        //imported as UnfinishedCARROT_Result, 
+        new CARROT_Result('processing', null, 'ignored', {treeringmap:maskfile}) as UnfinishedCARROT_Result,
+        maskfile // using png as input file for image size
+    )
+    asserts.assertEquals(postprocessed_result0.status, 'processed')
+    await base.util.wait(50);
+
+
+    // second time
     const postprocessed_result = await backend.postprocess_result(
         //imported as UnfinishedCARROT_Result, 
         new CARROT_Result('processing', null, 'ignored', {treeringmap:maskfile}) as UnfinishedCARROT_Result,
         maskfile // using png as input file for image size
     )
+
+    // make sure the first one got aborted
+    asserts.assert('treeringmap_og' in postprocessed_result0.data)
+    asserts.assert('file' in postprocessed_result0.data.treeringmap_og)
+    const treeringmap_og0:File|Error = await postprocessed_result0.data.treeringmap_og.file
+    asserts.assertInstanceOf(treeringmap_og0, Error)
+    asserts.assertStringIncludes(treeringmap_og0.message.toLowerCase(), 'abort')
+    
+
     asserts.assertEquals(postprocessed_result.status, 'processed')
     asserts.assert('treerings' in postprocessed_result.data)
     asserts.assertGreater(postprocessed_result.data.treerings.length, 7)
     asserts.assertEquals(
-        await base.imagetools.get_png_size(postprocessed_result.data.treeringmap_og),
+        await base.imagetools.get_png_size(
+            await resolve_unfinished_wasm_file(
+                postprocessed_result.data.treeringmap_og, 
+                new File([], '')
+            )
+        ),
         {width: 72228, height:13542}
     )
 })
@@ -342,3 +373,60 @@ Deno.test('parse_inputfile_from_process_response', () => {
     const out7 = parse_inputfile_from_process_response(url7)
     asserts.assertEquals(out7, "Acer  amoenum_24702b.jpg")
 })
+
+
+
+
+Deno.test('resize-mask-in-worker', async () => {
+    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
+        import.meta.resolve('./assets/ringsonly/ELD_QURO_637A_4.jpg.treerings.png')
+        .replace('file://', '')
+    )
+    const file = new File([rawdata], 'treerings.png')
+
+    const worksize = {width:500, height:600}
+    const og_size  = {width:5000, height:6000}
+    const resize_in_progress = await resize_mask_in_worker(file, worksize, og_size)
+    asserts.assertNotInstanceOf(resize_in_progress, Error)
+    asserts.assertNotInstanceOf(resize_in_progress, File)
+
+    const finished_file:File|Error = await resize_in_progress.file
+    asserts.assertNotInstanceOf(finished_file, Error)
+    const output_size = await imagetools.read_image_size(finished_file)
+    asserts.assertNotInstanceOf(output_size, Error)
+    asserts.assertEquals(output_size, og_size)
+
+
+    // with abort
+    const resize_in_progress2 = await resize_mask_in_worker(file, worksize, og_size)
+    asserts.assertNotInstanceOf(resize_in_progress2, Error)
+    asserts.assertNotInstanceOf(resize_in_progress2, File)
+    abort_resize_mask(resize_in_progress2)
+    const finished_file2:File|Error = await resize_in_progress2.file
+    asserts.assertInstanceOf(finished_file2, Error)
+
+    // invalid file
+    const invalid = new File([], 'invalid.png')
+    const resize_in_progress3 = await resize_mask_in_worker(invalid, worksize, og_size)
+    asserts.assertNotInstanceOf(resize_in_progress3, Error)
+    asserts.assertNotInstanceOf(resize_in_progress3, File)
+    const finished_file3:File|Error = await resize_in_progress3.file
+    asserts.assertInstanceOf(finished_file3, Error)
+
+     // simulate error in worker
+     const resize_in_progress4 = await resize_mask_in_worker(file, worksize, og_size)
+     asserts.assertNotInstanceOf(resize_in_progress4, Error)
+     asserts.assertNotInstanceOf(resize_in_progress4, File)
+     resize_in_progress4.worker.postMessage({command:'__simulate-error'})
+     const finished_file4:File|Error = await resize_in_progress4.file
+     asserts.assertInstanceOf(finished_file4, Error)
+
+     // invalid command
+     const resize_in_progress5 = await resize_mask_in_worker(file, worksize, og_size)
+     asserts.assertNotInstanceOf(resize_in_progress5, Error)
+     asserts.assertNotInstanceOf(resize_in_progress5, File)
+     resize_in_progress5.worker.postMessage({command:'#$E#@JD@NFKD'})
+     const finished_file5:File|Error = await resize_in_progress5.file
+     asserts.assertInstanceOf(finished_file5, Error)
+})
+

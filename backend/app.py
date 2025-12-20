@@ -42,6 +42,7 @@ class App(BaseApp):
                 index_tsx = 'frontend/index.tsx',
                 srcdirs   = 'frontend/,base/frontend/',
                 copy_globs= 'frontend/css/treerings.css,frontend/favicon.ico',
+                extra_bundle = 'frontend/lib/carrot_worker.ts',
             )
             kw['deno_cfg'] = deno
         
