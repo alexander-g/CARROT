@@ -93,12 +93,10 @@ async function abort_resize_mask(): Promise<Error> {
 }
 
 
-if(import.meta.main)
-    console.log(`Worker ${self.name} start`)
-
 // main entry point
 self.onmessage = async (e:MessageEvent) => {
     const data:WorkerCommand = e.data;
+    console.log(`Worker ${self.name} onmessage: ${data.command}`)
 
     let result:WorkerResult;
     if(data.command == 'resize_mask')

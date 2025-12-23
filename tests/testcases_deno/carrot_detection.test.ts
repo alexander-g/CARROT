@@ -14,6 +14,17 @@ import { imagetools } from "../../base/frontend/mod.ts";
 
 
 
+// 936 x 2476 px
+const TREERINGFILE0:string = 
+    import.meta.resolve('./assets/ringsonly/ELD_QURO_637A_4.jpg.treerings.png')
+        .replace('file://', '')
+
+// 5001 x 12146 px
+const CELLSFILE0:string = 
+    import.meta.resolve('./assets/cellsonly/ELD_QURO_637A_4.jpg.cells.png')
+    .replace('file://', '')
+
+
 
 Deno.test('CARROT_Result.export-import', async () => {
     const inputname = 'file0.jpg'
@@ -148,10 +159,7 @@ Deno.test('response.rings-only-from-flask', async () => {
 
 
 Deno.test('import.treeringsrings-png', async (t:Deno.TestContext) => {
-    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
-        import.meta.resolve('./assets/ringsonly/ELD_QURO_637A_4.jpg.treerings.png')
-        .replace('file://', '')
-    )
+    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(TREERINGFILE0)
     const inputname = 'ELD_QURO_637A_4.jpg'
 
     const maskfile:File = 
@@ -239,10 +247,7 @@ Deno.test('postprocess-huge-treeringmap-in-wasm', async (_t:Deno.TestContext) =>
 
 
 Deno.test('import.cells-png', async (t:Deno.TestContext) => {
-    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
-        import.meta.resolve('./assets/cellsonly/ELD_QURO_637A_4.jpg.cells.png')
-        .replace('file://', '')
-    )
+    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(CELLSFILE0)
     const inputname = 'ELD_QURO_637A_4.jpg'
 
     const maskfile:File = 
@@ -277,14 +282,8 @@ Deno.test('import.cells-png', async (t:Deno.TestContext) => {
 
 Deno.test('import.cells-and-treerings-png', async (t:Deno.TestContext) => {
     const inputname = 'ELD_QURO_637A_4.jpg'
-    const rawdata_cells:Uint8Array<ArrayBuffer> = Deno.readFileSync(
-        import.meta.resolve('./assets/cellsonly/ELD_QURO_637A_4.jpg.cells.png')
-        .replace('file://', '')
-    )
-    const rawdata_rings:Uint8Array<ArrayBuffer> = Deno.readFileSync(
-        import.meta.resolve('./assets/ringsonly/ELD_QURO_637A_4.jpg.treerings.png')
-        .replace('file://', '')
-    )
+    const rawdata_cells:Uint8Array<ArrayBuffer> = Deno.readFileSync(CELLSFILE0)
+    const rawdata_rings:Uint8Array<ArrayBuffer> = Deno.readFileSync(TREERINGFILE0)
     const maskfile_cells:File = 
         new File([rawdata_cells], `${inputname}.cells.png`)
     const maskfile_rings:File = 
@@ -310,13 +309,42 @@ Deno.test('import.cells-and-treerings-png', async (t:Deno.TestContext) => {
 
         const postprocessed_result = await backend.postprocess_result(
             imported as UnfinishedCARROT_Result, 
-            maskfile_rings // using png as input file for image size
+            maskfile_cells // using png as input file for image size
         )
         asserts.assertEquals(postprocessed_result.status, 'processed')
         asserts.assert('cellmap' in postprocessed_result.data)
         asserts.assert('instancemap' in postprocessed_result.data)
         asserts.assert('treerings' in postprocessed_result.data)
         asserts.assertEquals(postprocessed_result.data.treerings.length, 4)
+
+        
+        const size_treeringmap_workshape:Error|base.util.Size = 
+            await imagetools.get_png_size(postprocessed_result.data.treeringmap)
+        const size_treeringmap_ogshape:Error|base.util.Size = 
+            await base.imagetools.get_png_size(
+                await resolve_unfinished_wasm_file(
+                    postprocessed_result.data.treeringmap_og, 
+                    new File([], '')
+                )
+            )
+        asserts.assertNotInstanceOf(size_treeringmap_workshape, Error)
+        asserts.assertNotInstanceOf(size_treeringmap_ogshape, Error)
+        asserts.assertGreater(size_treeringmap_ogshape.height, size_treeringmap_workshape.height)
+        asserts.assertGreater(size_treeringmap_ogshape.width, size_treeringmap_workshape.width)
+
+        const size_cellmap_workshape:Error|base.util.Size = 
+            await imagetools.get_png_size(postprocessed_result.data.cellmap)
+        const size_cellmap_ogshape:Error|base.util.Size = 
+            await base.imagetools.get_png_size(
+                await resolve_unfinished_wasm_file(
+                    postprocessed_result.data.cellmap_og, 
+                    new File([], '')
+                )
+            )
+        asserts.assertNotInstanceOf(size_cellmap_workshape, Error)
+        asserts.assertNotInstanceOf(size_cellmap_ogshape, Error)
+        asserts.assertGreater(size_cellmap_ogshape.height, size_cellmap_workshape.height)
+        asserts.assertGreater(size_cellmap_ogshape.width, size_cellmap_workshape.width)
         
         asserts.assertGreater(postprocessed_result.data.cells.length, 1)
         const years:Set<number> = new Set()
@@ -378,10 +406,7 @@ Deno.test('parse_inputfile_from_process_response', () => {
 
 
 Deno.test('resize-mask-in-worker', async () => {
-    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(
-        import.meta.resolve('./assets/ringsonly/ELD_QURO_637A_4.jpg.treerings.png')
-        .replace('file://', '')
-    )
+    const rawdata:Uint8Array<ArrayBuffer> = Deno.readFileSync(TREERINGFILE0)
     const file = new File([rawdata], 'treerings.png')
 
     const worksize = {width:500, height:600}
