@@ -6,6 +6,6 @@ models/*
 !models/pretrained_models.txt
 static
 cache
-settings.json
+./settings.json
 venv
 tests/coverage
