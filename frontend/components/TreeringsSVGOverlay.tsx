@@ -1,4 +1,4 @@
-import { base, preact, Signal, JSX } from "../dep.ts"
+import { base, preact, Signal, signals, JSX } from "../dep.ts"
 import { 
     CARROT_Result,
     CARROT_Data,
@@ -19,12 +19,22 @@ type TreeringsSVGOverlayProps = {
 
     /** The current zoom level of the image */
     $scale?: Readonly<Signal<number>>;
+
+    // TODO
+    $aoi_edit_active: Readonly<Signal<boolean>>;
 } & base.ui_util.MaybeHiddenProps;
 
 
 export
 class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayProps>{
     ref: preact.RefObject<SVGSVGElement> = preact.createRef()
+
+    
+    /** Ref to the instance of {@link $drawing_aoi} */
+    drawing_aoi_ref: preact.RefObject<IntermediateAoIOverlay> = preact.createRef()
+
+    $aoi_points: Signal<Point[]> = new Signal([]);
+
 
     render(props:TreeringsSVGOverlayProps): JSX.Element {
         const resultdata:CARROT_Data = props.$result.value.data;
@@ -58,12 +68,26 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             viewBox = {viewbox} 
             ref     = {this.ref}
             style   = { {
-                pointerEvents:'none',
+                pointerEvents: props.$aoi_edit_active?.value ? 'all' : 'none',
+                // NOTE: cursor only active with pointer events
+                cursor: 'crosshair',
                 ...base.styles.overlay_css,
                 ...super.get_display_css(),
             } }
+            onMouseDown = {this.on_mouse_down}
+            //onKeyDown={console.log}  // TODO: 'escape' to cancel
         >
             { treerings_svg }
+            
+            <IntermediateAoIOverlay 
+                ref       = {this.drawing_aoi_ref} 
+                imagesize = {this.props.size}
+                $active   = {this.props.$aoi_edit_active}
+                on_finalize = { this.on_new_aoi_points }
+            />
+            {/* <AoIOverlay 
+                $coordinates = {this.$aoi_points}
+            /> */}
         </svg>
         </>
     }
@@ -81,6 +105,21 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             CARROT_Result.modify_year(old_result, index, new_year)
         if(new_result != null)
             this.props.$result.value = new_result;
+    }
+
+    /** Called when user wants to set a new area-of-interest */
+    on_new_aoi_points = (points:Point[]) => {
+        this.$aoi_points.value = points;
+    }
+
+    /** Hande aoi editing. */
+    on_mouse_down = (mousedown_event:MouseEvent) => {
+        if(this.ref.current == null
+        || this.drawing_aoi_ref.current == null
+        || !this.props.$aoi_edit_active?.value)
+            return;
+
+        this.drawing_aoi_ref.current.on_mouse_down(mousedown_event, this.ref.current);
     }
 }
 
@@ -327,5 +366,234 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
         
         return imagewidth / parentwidth * 1.5 / scale;
     }
+}
+
+
+
+
+
+type AoIOverlayProps = {
+    $coordinates: Signal<Point[]>;
+}
+
+class AoIOverlay extends preact.Component<AoIOverlayProps> {
+    render(): JSX.Element {
+        let points:Point[] = this.props.$coordinates.value
+        if(points.length > 0)
+            points = points.concat(points[0]!)
+        
+        const points_svg_str:string = points.map(
+            (p:Point) => `${p.x}, ${p.y} `
+        ).join(' ')
+
+        const css_border_inner: JSX.CSSProperties = {
+            stroke:          "white",
+            strokeWidth:     30,
+            //strokeDasharray: "50%, 50%",
+            strokeLinecap:   'square',
+            fill:            "none",
+        }
+        const css_border_outer = {
+            stroke:         "#cccccc",
+            strokeWidth:    40,
+            strokeLinecap:  'square',
+            fill:           "none",
+        }
+
+        return <>
+            <polyline 
+                class  = "area-of-interest-line-outer" 
+                points = {points_svg_str}
+                style  = {css_border_outer}
+            />
+            <polyline 
+                class  = "area-of-interest-line" 
+                points = {points_svg_str}
+                style  = {css_border_inner}
+            />
+        </>
+    }
+}
+
+
+
+type IntermediateAoIOverlayProps = {
+    imagesize: base.util.ImageSize;
+
+    $active: Readonly<Signal<boolean>>;
+
+    on_finalize: ( points:Point[] ) => void;
+}
+
+class IntermediateAoIOverlay extends preact.Component<IntermediateAoIOverlayProps> {
+
+    $coordinates:Signal<Point[]> = new Signal([])
+
+    /** Reset coordinates when not active */
+    #_ = this.props.$active.subscribe( (active:boolean) => {
+        if(!active)
+            this.$coordinates.value = [];
+    } )
+
+    aoi_state:'1st-point'|'2nd-point'|'3rd-point'|'finished'|null = null;
+
+
+
+    render(): JSX.Element {
+        return <>
+            <AoIOverlay $coordinates={this.$coordinates}/>
+        </>
+    }
+
+    on_mouse_down(mousedown_event:MouseEvent, parent:Element) {
+        // ignore if shift key is pressed; user wants to move the image
+        if(mousedown_event.shiftKey)
+            return false;
+
+        const n_coordinates:number = this.$coordinates.value.length;
+        this.aoi_state = 
+            (this.aoi_state == null)?        '1st-point' :
+            (this.aoi_state == '1st-point')? '3rd-point' : 
+            (this.aoi_state == '3rd-point')? 'finished'  : null;
+        if(this.aoi_state == null){
+            console.trace(`Should not have happened: ` 
+                + `${n_coordinates} coordinates on mousedown`)
+            // TODO: cancel somehow
+            return;
+        }
+
+        if(this.aoi_state == '1st-point') {
+            this.$coordinates.value = [];
+
+            base.ui_util.start_drag(
+                mousedown_event,
+                parent,
+                this.props.imagesize,
+                (start:Point, current:Point) => {         //on_mousemove
+                    //console.log(`AOI: mousemove`, start, end, this.props.imagesize)
+
+                    if(this.aoi_state == '1st-point' || this.aoi_state == '2nd-point') {
+                        // simply update the first two points
+                        // `start` should not change between calls
+                        this.$coordinates.value = [start, current]
+                    }
+                    else if(this.aoi_state == '3rd-point') {
+                        // modify current point to be perpendicular 
+                        // and create full rect
+
+                        const p0:Point = this.$coordinates.value[0]!
+                        const p1:Point = this.$coordinates.value[1]!
+                        const p2:Point = current;
+                        
+                        const aoi_points:AoIRect = 
+                            aoi_rect_from_3_points(p0, p1, p2)
+                        this.$coordinates.value = aoi_points;
+                    }
+                    else if(this.aoi_state == 'finished')
+                        // stop the dragging process
+                        return 'stop';
+                    
+                    // else
+                    return 'continue'
+                },
+                (start:Point, end:Point) => {         //on_mouseup
+
+                    // const points:Point[] = this.$coordinates.value;
+                    // this.$coordinates.value = [];
+                    this.aoi_state = null;
+
+                    // this.props.on_finalize(points);
+                },
+                // dont automatically stop dragging on mouse up, wait for 'stop'
+                /* mode = */ 'manual',
+            )
+        }
+        else if(this.aoi_state == '3rd-point')
+            // add a third point
+            this.$coordinates.value = 
+                [...this.$coordinates.value, this.$coordinates.value[1]!]
+        //else
+        //    console.trace('Should not have happened')
+    }
+
+    set_coordinates(p0:Point, p1:Point) {
+        this.$coordinates.value = [p0, p1];
+    }
+}
+
+
+export type AoIRect = [Point, Point, Point, Point];
+
+// export 
+// function rect_from_2points_and_width(p0:Point, p1:Point, width:number): AoIRect {
+//     const dx:number = p1.x - p0.x;
+//     const dy:number = p1.y - p0.y;
+//     const len:number = Math.hypot(dx, dy);
+//     if (len === 0) {
+//         // degenerate: return a square centered at p0 with side = width
+//         const half:number = width / 2;
+//         return [
+//             { x: p0.x - half, y: p0.y - half },
+//             { x: p0.x + half, y: p0.y - half },
+//             { x: p0.x + half, y: p0.y + half },
+//             { x: p0.x - half, y: p0.y + half },
+//         ];
+//     }
+
+//     const ux:number = dx / len;
+//     const uy:number = dy / len;
+//     // perpendicular unit vector
+//     const px:number = -uy;
+//     const py:number = ux;
+//     const half:number = width / 2;
+//     const offX:number = px * half;
+//     const offY:number = py * half;
+//     return [
+//         { x: p0.x - offX, y: p0.y - offY },
+//         { x: p1.x - offX, y: p1.y - offY },
+//         { x: p1.x + offX, y: p1.y + offY },
+//         { x: p0.x + offX, y: p0.y + offY },
+//     ];
+// }
+
+
+/**
+ * Given line through p1-p2, and point p3, return point `output` such that:
+ * - line through p2 and output is perpendicular to line p1-p2
+ * - distance from output to line (p1-p2) equals distance from p3 to that line
+ */
+export function mirror_distance_perp(p1: Point, p2: Point, p3: Point): Point {
+    // direction vector of line p1->p2
+    const dx:number = p2.x - p1.x;
+    const dy:number = p2.y - p1.y;
+  
+    // degenerate line: if p1 == p2, treat as zero-length -> return p2
+    const len_sq:number = dx * dx + dy * dy;
+    if (len_sq === 0) 
+        return { ...p2 };
+  
+    // unit normal vector to the line
+    // normal (nx, ny) = (-dy, dx) normalized
+    const inv_len:number = 1 / Math.sqrt(len_sq);
+    const nx:number = -dy * inv_len;
+    const ny:number =  dx * inv_len;
+  
+    // signed distance from p3 to the line (p1-p2)
+    const signed_distanec:number = ( (p3.x - p1.x) * nx + (p3.y - p1.y) * ny );
+  
+    return {
+        x: p2.x + nx * signed_distanec,
+        y: p2.y + ny * signed_distanec,
+    };
+}
+
+
+function aoi_rect_from_3_points( p0:Point, p1:Point, p2:Point): AoIRect {
+    const p3:Point = mirror_distance_perp(p0, p1, p2)
+    const p4:Point = {
+        x: p3.x - p1.x + p0.x,
+        y: p3.y - p1.y + p0.y
+    }
+    return [p0, p1, p3, p4];
 }
 
