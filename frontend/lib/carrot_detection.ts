@@ -4,7 +4,6 @@ import { CARROT_Settings } from "./carrot_settings.ts";
 import { 
     wasm_postprocessing_initialize,
     CARROT_Postprocessing,
-    type PostprocessingResult,
     type TreeringPostprocessingResult,
     type CellsPostprocessingResult,
     type CombinedPostprocessingResult,
@@ -12,9 +11,11 @@ import {
 } from "../dep.ts"
 
 import type { 
-    WorkerResizeMaskCommand, 
-    WorkerAbortResizeMaskCommand,
-    WorkerMessage 
+    WorkerResizeMaskCommand,
+    WorkerRasterizeMaskCommand, 
+    WorkerAbortCommand,
+    WorkerCommand,
+    WorkerMessage, 
 } from "./carrot_worker.ts"
 
 
@@ -1152,7 +1153,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                 return new CARROT_Result('processed', output, input.name, treeringdata)
             }
         }
-        console.log('should not have happened')
+        console.trace('should not have happened')
         // else
         // should not happen
         return new CARROT_Result('failed', data, input.name)
@@ -1349,9 +1350,8 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
     ): Promise<File|UnfinishedFileInWASM|Error> {
         const treeringmap_og_shape:File|UnfinishedFileInWASM|Error = 
             wasm_output.cellmap_og_shape_png
-                ?? await resize_mask_in_worker(
-                    wasm_output.cellmap_workshape_png,
-                    image_sizes.display_size,
+                ?? await rasterize_og_mask_in_worker(
+                    wasm_output.cells_serialized,
                     image_sizes.og_size
                 )
         if('worker' in treeringmap_og_shape)
@@ -1361,7 +1361,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
     #terminate_prervious_workers(): void {
         for(const unfinishedfile of this.#unfinished_files)
-            abort_resize_mask(unfinishedfile)
+            worker_abort_command(unfinishedfile)
         this.#unfinished_files = []
     }
 }
@@ -1424,12 +1424,12 @@ type ProgressMessage = {
 }
 
 
-/** Start a web worker to resize a binary mask via wasm, to avoid blocking the UI */
-export async function resize_mask_in_worker(
-    mask: File, 
-    worksize: base.util.ImageSize,
-    og_size:  base.util.ImageSize
-): Promise<UnfinishedFileInWASM|File|Error> {
+
+async function run_command_in_worker(
+    command:   WorkerCommand,
+    onmessage: (e:MessageEvent) => File|Error,
+): Promise<UnfinishedFileInWASM|File|Error>  {
+    await 0;
     const file_ending:string = 
         base.util.is_deno()
         ? 'ts'
@@ -1447,13 +1447,7 @@ export async function resize_mask_in_worker(
 
     const resultfilepromise = new Promise((resolve: (x:File|Error) => void) => {
         worker.onmessage = (e:MessageEvent) => {
-            const data:WorkerMessage = e.data;
-            if(data instanceof Error)
-                resolve(data as Error);
-            else if(data.type == 'resize-mask-result') {
-                const result:File = new File([data.outputdata_png], mask.name)
-                resolve(result)
-            }
+            resolve( onmessage(e) );
         }
         worker.onerror = (e:ErrorEvent) => {
             e.preventDefault()
@@ -1461,13 +1455,6 @@ export async function resize_mask_in_worker(
             resolve(new Error(e.message))
         }
     })
-
-    const command:WorkerResizeMaskCommand = {
-        command:      'resize_mask',
-        maskdata_png: new Uint8Array(await mask.arrayBuffer()),
-        work_size:    worksize,
-        target_size:  og_size,
-    }
     worker.postMessage(command);
 
     const combinedpromise:Promise<Error|File> = Promise.race([
@@ -1481,7 +1468,54 @@ export async function resize_mask_in_worker(
     }
 }
 
-export function abort_resize_mask(unfinished:UnfinishedFileInWASM): void {
-    const command:WorkerAbortResizeMaskCommand = {command: 'abort_resize_mask'}
+/** Start a web worker to rasterize cells/objects in RLE format as return by 
+ *  the postprocessing functions. */
+export function rasterize_og_mask_in_worker(
+    cells_serialized: ArrayBuffer,
+    og_size: base.util.ImageSize,
+): Promise<UnfinishedFileInWASM|File|Error> {
+    const command:WorkerRasterizeMaskCommand = {
+        command:         'rasterize_mask',
+        cells_serialized: cells_serialized,
+        target_size:      og_size,
+    }
+    const onworkermessage: (e:MessageEvent) => File|Error = (e:MessageEvent) => {
+        const data:WorkerMessage = e.data;
+        if(data instanceof Error)
+            return (data as Error);
+        else if(data.type == 'rasterize-mask-result')
+            return  new File([data.outputdata_png], "mask.png")
+        else return new Error(`Unexpected worker message: ${data.type}`)
+    }
+    return run_command_in_worker(command, onworkermessage);
+}
+
+
+/** Start a web worker to resize a binary mask via wasm, to avoid blocking the UI */
+export async function resize_mask_in_worker(
+    mask: File, 
+    worksize: base.util.ImageSize,
+    og_size:  base.util.ImageSize
+): Promise<UnfinishedFileInWASM|File|Error> {
+
+    const command:WorkerResizeMaskCommand = {
+        command:      'resize_mask',
+        maskdata_png: new Uint8Array(await mask.arrayBuffer()),
+        work_size:    worksize,
+        target_size:  og_size,
+    }
+    const onworkermessage: (e:MessageEvent) => File|Error = (e:MessageEvent) => {
+        const data:WorkerMessage = e.data;
+        if(data instanceof Error)
+            return (data as Error);
+        else if(data.type == 'resize-mask-result')
+            return new File([data.outputdata_png], mask.name)
+        else return new Error(`Unexpected worker message: ${data.type}`)
+    }
+    return run_command_in_worker(command, onworkermessage)
+}
+
+export function worker_abort_command(unfinished:UnfinishedFileInWASM): void {
+    const command:WorkerAbortCommand = {command: 'abort'}
     unfinished.worker.postMessage(command)
 }

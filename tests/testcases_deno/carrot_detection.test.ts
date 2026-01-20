@@ -8,7 +8,8 @@ import {
     parse_inputfile_from_process_response,
     resize_mask_in_worker,
     resolve_unfinished_wasm_file,
-    abort_resize_mask,
+    worker_abort_command,
+    rasterize_og_mask_in_worker,
 } from "../../frontend/lib/carrot_detection.ts"
 import { imagetools } from "../../base/frontend/mod.ts";
 
@@ -24,6 +25,9 @@ const CELLSFILE0:string =
     import.meta.resolve('./assets/cellsonly/ELD_QURO_637A_4.jpg.cells.png')
     .replace('file://', '')
 
+
+const CELLS_SERIALIZED_FILE:string = 
+    import.meta.resolve('./assets/cells-serialized.bin').replace('file://', '')
 
 
 Deno.test('CARROT_Result.export-import', async () => {
@@ -426,7 +430,7 @@ Deno.test('resize-mask-in-worker', async () => {
     const resize_in_progress2 = await resize_mask_in_worker(file, worksize, og_size)
     asserts.assertNotInstanceOf(resize_in_progress2, Error)
     asserts.assertNotInstanceOf(resize_in_progress2, File)
-    abort_resize_mask(resize_in_progress2)
+    worker_abort_command(resize_in_progress2)
     const finished_file2:File|Error = await resize_in_progress2.file
     asserts.assertInstanceOf(finished_file2, Error)
 
@@ -453,5 +457,19 @@ Deno.test('resize-mask-in-worker', async () => {
      resize_in_progress5.worker.postMessage({command:'#$E#@JD@NFKD'})
      const finished_file5:File|Error = await resize_in_progress5.file
      asserts.assertInstanceOf(finished_file5, Error)
+})
+
+
+Deno.test('rasterize-mask-in-worker', async () => {
+    const rawdata:ArrayBuffer = Deno.readFileSync(CELLS_SERIALIZED_FILE).buffer
+    const og_size = {width: 77762, height: 13544}
+
+    const rasterized_in_progress = await rasterize_og_mask_in_worker(rawdata, og_size)
+    asserts.assertNotInstanceOf(rasterized_in_progress, Error)
+    asserts.assertNotInstanceOf(rasterized_in_progress, File)
+    
+    const finished_file = await rasterized_in_progress.file
+    asserts.assertNotInstanceOf(finished_file, Error)
+    asserts.assertEquals( await imagetools.read_image_size(finished_file), og_size )
 })
 

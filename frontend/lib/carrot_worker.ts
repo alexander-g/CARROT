@@ -6,6 +6,7 @@ import {
 
 type ImageSize = {width:number, height:number};
 
+// TODO: remove
 export type WorkerResizeMaskCommand = {
     command: 'resize_mask';
     
@@ -20,8 +21,19 @@ export type WorkerResizeMaskCommand = {
     target_size: ImageSize;
 }
 
-export type WorkerAbortResizeMaskCommand = {
-    command: 'abort_resize_mask';
+// TODO: rename
+export type WorkerAbortCommand = {
+    command: 'abort';
+}
+
+export type WorkerRasterizeMaskCommand = {
+    command: 'rasterize_mask';
+
+    /** Cells to rasterize, in RLE format as returned by postprocessing function */
+    cells_serialized: ArrayBuffer;
+
+    /** Target size */
+    target_size: ImageSize;
 }
 
 /** For unit tests */
@@ -29,23 +41,27 @@ export type SimulateErrorCommand = {
     command: '__simulate-error'
 }
 
-type WorkerCommand = 
+export type WorkerCommand = 
     WorkerResizeMaskCommand
-    | WorkerAbortResizeMaskCommand
+    | WorkerRasterizeMaskCommand
+    | WorkerAbortCommand
     | SimulateErrorCommand;
 
 
 
 
-type WorkerResizeMaskResult = {
-    type: 'resize-mask-result';
+type WorkerRasterizeMaskResult = {
+    type: 'rasterize-mask-result';
 
     /** Binary mask encoded as png.
         NOTE: uint8 instead of File, bc doesnt work (in deno) */
     outputdata_png: Uint8Array<ArrayBuffer>;
 }
+type WorkerResizeMaskResult = Omit<WorkerRasterizeMaskResult, 'type'> & {
+    type: 'resize-mask-result'
+};
 
-type WorkerResult = WorkerResizeMaskResult | Error;
+type WorkerResult = WorkerRasterizeMaskResult | WorkerResizeMaskResult | Error;
 export type WorkerMessage = WorkerResult;
 
 
@@ -88,7 +104,34 @@ async function resize_mask(
     }
 }
 
-async function abort_resize_mask(): Promise<Error> {
+
+async function rasterize_mask(
+    command: WorkerRasterizeMaskCommand
+): Promise<WorkerRasterizeMaskResult|Error> {
+    const t0:number = performance.now()
+    const module:CARROT_Postprocessing = await get_module();
+ 
+    const outputfile:File|Error = 
+        await module.rasterize_cell_indices_and_encode_as_png(
+            command.cells_serialized, 
+            command.target_size
+        );
+
+    if(outputfile instanceof Error)
+        return outputfile as Error;
+    const outputdata: Uint8Array<ArrayBuffer> 
+        = new Uint8Array(await outputfile.arrayBuffer())
+    
+    const t1:number = performance.now()
+    console.log(`Worker ${self.name} rasterize_mask(): ${t1-t0}`)
+
+    return {
+        type: 'rasterize-mask-result',
+        outputdata_png: outputdata,
+    }
+}
+
+async function abort(): Promise<Error> {
     return await new Error('Aborted')
 }
 
@@ -101,8 +144,10 @@ self.onmessage = async (e:MessageEvent) => {
     let result:WorkerResult;
     if(data.command == 'resize_mask')
         result = await resize_mask(data);
-    else if(data.command == 'abort_resize_mask')
-        result = await abort_resize_mask()
+    else if(data.command == 'rasterize_mask') 
+        result = await rasterize_mask(data);
+    else if(data.command == 'abort')
+        result = await abort()
     else if(data.command == '__simulate-error') 
         throw new Error('This should not be used in production')
     else
