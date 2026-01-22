@@ -1,6 +1,33 @@
 import { base } from "../dep.ts"
 import { CARROT_Settings } from "./carrot_settings.ts";
 
+import { 
+    wasm_postprocessing_initialize,
+    CARROT_Postprocessing,
+    type TreeringPostprocessingResult,
+    type CellsPostprocessingResult,
+    type CombinedPostprocessingResult,
+    type PairedPaths,
+} from "../dep.ts"
+
+import type { 
+    WorkerResizeMaskCommand,
+    WorkerRasterizeMaskCommand, 
+    WorkerAbortCommand,
+    WorkerCommand,
+    WorkerMessage, 
+} from "./carrot_worker.ts"
+
+
+
+/** File is being encoded in WASM, which might take time. */
+type UnfinishedFileInWASM = {
+    file:         Promise<File|Error>;
+    worker:       Worker;
+}
+
+
+
 type Point      = base.util.Point;
 type PointPair  = [Point,Point]
 type BaseResult = base.files.Result;
@@ -30,7 +57,7 @@ export type CellsOnlyData = {
     cellmap: File;
 
     /** Original size cellmap. Might be the same object as `cellmap`. */
-    cellmap_og: File;
+    cellmap_og: File|UnfinishedFileInWASM;
 
     /** RGB image with each cell in a random color */
     instancemap: File;
@@ -46,7 +73,7 @@ export type TreeringsOnlyData = {
      *  Potentially resized for display. */
     treeringmap:    File;
     /** Original size treeringmap. Might be the same object as `treeringmap`. */
-    treeringmap_og: File;
+    treeringmap_og: File|UnfinishedFileInWASM;
 
     treerings:    TreeringInfo[];
     reversed_growth_direction: boolean;
@@ -72,7 +99,7 @@ export type CellsAndTreeringsData = {
      *  Potentially resized for display. */
     cellmap:    File;
     /** Original size cellmap. Might be the same object as `cellmap`. */
-    cellmap_og: File;
+    cellmap_og: File|UnfinishedFileInWASM;
 
     /** RGB image with each cell in a random color */
     instancemap: File;
@@ -81,7 +108,7 @@ export type CellsAndTreeringsData = {
      *  Potentially resized for display. */
     treeringmap:     File;
     /** Original size treeringmap. Might be the same object as `treeringmap`. */
-    treeringmap_og:  File;
+    treeringmap_og:  File|UnfinishedFileInWASM;
 
     imagesize: base.util.ImageSize;
 
@@ -511,7 +538,7 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
     // const nfiles:number = Object.keys(zipdata).length;
     // if(nfiles != 2)
     //     return null;
-    
+
     const treeringmappath = `${inputname}/${inputname}.treerings.png`
     const associationpath = `${inputname}/treerings.json`
     let   treeringmap:File|undefined = zipdata[treeringmappath]
@@ -895,24 +922,43 @@ function convert_treerings_to_points(treerings:TreeringInfo[]):TwoNumberTuple[][
 }
 
 
-function export_cellsonly(
+async function export_cellsonly(
     data: CellsOnlyData, 
     inputname: string, 
     //years?:    number[],
-): Record<string, File> {
+): Promise<Record<string, File>> {
+    const cellmap_og:File = 
+        await resolve_unfinished_wasm_file(data.cellmap_og, data.cellmap)
     const output:Record<string, File> = {
-        [`${inputname}/${inputname}.cells.png`]: data.cellmap_og,
+        [`${inputname}/${inputname}.cells.png`]: cellmap_og,
         [`${inputname}/internal/${inputname}.instancemap.png`]: data.instancemap,
     }
-    if(data.cellmap_og != data.cellmap)
+    if(cellmap_og != data.cellmap)
         output[`${inputname}/internal/${inputname}.cells.png`] = data.cellmap;
     return output
 }
 
-function export_treeringsonly(
+
+export async function resolve_unfinished_wasm_file(
+    file:    File|UnfinishedFileInWASM, 
+    fallback:File
+): Promise<File> {
+    if(file instanceof File)
+        return file;
+    //else
+    const awaitresult:File|Error = await file.file;
+    if(awaitresult instanceof File)
+        return awaitresult;
+    //else
+    console.error('WASM file promise failed: ', awaitresult as Error)
+
+    return fallback;
+}
+
+async function export_treeringsonly(
     data:TreeringsOnlyData, 
     inputname:string
-): Record<string, File> {
+): Promise<Record<string, File>> {
     const years:number[] = data.treerings.map((x:TreeringInfo) => x.year)
 
     const associationdata: RingsAssociationData = {
@@ -921,22 +967,26 @@ function export_treeringsonly(
         reversed_growth_direction: data.reversed_growth_direction,
         imagesize:   [data.imagesize.width, data.imagesize.height],
     }
+
+    const treeringmap_og:File = 
+        await resolve_unfinished_wasm_file(data.treeringmap_og, data.treeringmap);
+
     const output:Record<string, File> =  {
         [`${inputname}.tree_ring_statistics.csv`] :
             format_treerings_for_export(data.treerings, data.px_per_um),
         [`${inputname}/treerings.json`]: 
             new File([JSON.stringify(associationdata)], 'treerings.json'),
-        [`${inputname}/${inputname}.treerings.png`]: data.treeringmap_og,
+        [`${inputname}/${inputname}.treerings.png`]: treeringmap_og,
     }
-    if(data.treeringmap_og != data.treeringmap)
+    if(treeringmap_og != data.treeringmap)
         output[`${inputname}/internal/${inputname}.treerings.png`] = data.treeringmap;
     return output
 }
 
-function export_full(
+async function export_full(
     data:CellsAndTreeringsData, 
     inputname:string
-): Record<string, File> {
+): Promise<Record<string, File>> {
     const years:number[] = data.treerings.map( (r:TreeringInfo) => r.year )
     const celldata:CellsAssociationData = {
         cells:     data.cells,
@@ -953,8 +1003,8 @@ function export_full(
     );
 
     return {
-        ...export_cellsonly(data, inputname, ),
-        ...export_treeringsonly(data, inputname),
+        ...await export_cellsonly(data, inputname, ),
+        ...await export_treeringsonly(data, inputname),
         [`${inputname}.cell_statistics.csv`] : cellstats_csv,
         [`${inputname}/cells.json`]: 
             new File([JSON.stringify(celldata)], 'cells.json'),
@@ -983,6 +1033,8 @@ extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Sett
 
     /** Process an image with the segment-anything encoder */
     abstract sam_encode(image:File): Promise<Float32Array|Error>;
+
+    // abstract add_aoi()
 }
 
 export function validate_CARROT_Backend(x:unknown): CARROT_Backend|null {
@@ -1002,7 +1054,112 @@ export function is_CARROT_Backend(x:unknown): x is CARROT_Backend {
  *  including some CARROT-specific ones. */
 export class CARROT_RemoteBackend extends CARROT_Backend {
     
-    async postprocess_result(r:UnfinishedCARROT_Result, input:File): 
+    /** Keeping workers in here to terminate them manually */
+    #unfinished_files:UnfinishedFileInWASM[] = []
+
+    override async postprocess_result(r: UnfinishedCARROT_Result, input: File): 
+    Promise<CARROT_Result> {
+        this.#terminate_prervious_workers()
+
+        const data:CARROT_Data = r.data
+        if( 'cellmap' in data || 'treeringmap' in data ){
+            console.log('DBG: postprocessing via wasm')
+            const sizes:OGandDisplaySizes|Error = await get_og_and_display_sizes(input)
+            if(sizes instanceof Error)
+                return new CARROT_Result('failed')
+            console.log("display size:", sizes.display_size)
+            console.log("og size:     ", sizes.og_size)
+
+            const t0 = performance.now()
+            const module:CARROT_Postprocessing = await wasm_postprocessing_initialize();
+            const output:CombinedPostprocessingResult
+                |CellsPostprocessingResult
+                |TreeringPostprocessingResult
+                |Error 
+                = await module.postprocess_combined(
+                    ('cellmap' in data)? data.cellmap : null, 
+                    ('treeringmap' in data)? data.treeringmap : null,
+                    sizes.display_size, 
+                    sizes.og_size
+                )
+            const t1 = performance.now()
+            console.log(t1-t0)
+            if(output instanceof Error){
+                console.log('WASM output is an error', output)
+                return new CARROT_Result('failed', output, input.name)
+            }
+
+            const current_rings:TreeringInfo[] = 
+                ('treerings' in data)? data.treerings : []
+            const current_years:number[] = current_rings.map(
+                (ring:TreeringInfo) => ring.year
+            )
+
+            let treeringmap_og_shape:File|UnfinishedFileInWASM|Error|undefined;
+            let cellmap_og_shape:File|UnfinishedFileInWASM|Error|undefined;
+            if('treeringmap_workshape_png' in output)
+                treeringmap_og_shape = 
+                    await this.#resolve_treeringmap_og_shape_png(output, sizes)
+            if('cellmap_workshape_png' in output)
+                cellmap_og_shape = 
+                    await this.#resolve_cellmap_og_shape_png(output, sizes)
+            
+            if(treeringmap_og_shape instanceof Error
+            || cellmap_og_shape instanceof Error)
+                return new CARROT_Result('failed', data, input.name);
+                        
+
+            if('ringmap_workshape_png' in output){
+                const combineddata:CellsAndTreeringsData = {
+                    cellmap:     output.cellmap_workshape_png,
+                    cellmap_og:  cellmap_og_shape!,
+                    instancemap: output.instancemap_workshape_png,
+    
+                    treeringmap:     output.treeringmap_workshape_png,
+                    treeringmap_og:  treeringmap_og_shape!,
+                    px_per_um:       this.settings.micrometer_factor,                                   // TODO: is this correct??
+                    imagesize:       sizes.og_size,
+                    reversed_growth_direction: false,                                                   // TODO: ??
+                    treerings:  convert_pairedpaths_to_treeringinfos(
+                        output.ring_points_xy, 
+                        current_years
+                    ),
+    
+                    cells: output.cell_info,
+                    colored_cellmap: output.ringmap_workshape_png,
+                }
+                return new CARROT_Result('processed', output, input.name, combineddata)
+            }
+            else if('cellmap_workshape_png' in output){
+                const cellsdata:CellsOnlyData = {
+                    cellmap:     output.cellmap_workshape_png,
+                    cellmap_og:  cellmap_og_shape!,
+                    instancemap: output.instancemap_workshape_png,
+                }
+                return new CARROT_Result('processed', output, input.name, cellsdata)
+            }
+            else if('treeringmap_workshape_png' in output){
+                const treeringdata:TreeringsOnlyData = {
+                    treeringmap:     output.treeringmap_workshape_png,
+                    treeringmap_og:  treeringmap_og_shape!,
+                    px_per_um:       this.settings.micrometer_factor,                                   // TODO: is this correct??
+                    imagesize:       sizes.og_size,
+                    reversed_growth_direction: false,                                                   // TODO: ??
+                    treerings:  convert_pairedpaths_to_treeringinfos(
+                        output.ring_points_xy, 
+                        current_years
+                    ),
+                }
+                return new CARROT_Result('processed', output, input.name, treeringdata)
+            }
+        }
+        console.trace('should not have happened')
+        // else
+        // should not happen
+        return new CARROT_Result('failed', data, input.name)
+    }
+    
+    async _postprocess_result(r:UnfinishedCARROT_Result, input:File): 
     Promise<CARROT_Result>{
         const data:CARROT_Data = r.data
         
@@ -1049,12 +1206,15 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             og_width:      sizes.og_size.width.toFixed(),
             og_height:     sizes.og_size.height.toFixed(),
         })
+        const t0 = performance.now()
         const response:Error|Response = 
             await base.util.fetch_no_throw(
                 `process/${r.inputname}?${params}`
             )
         if(response instanceof Error)
             return new CARROT_Result('failed')
+        const t1 = performance.now()
+        console.log(t1-t0)
 
         const full_result = 
             (await CARROT_Result.validate(response) as CARROT_Result|null)
@@ -1163,6 +1323,81 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         
         return new Float32Array(await sam_response.arrayBuffer())
     }
+
+    /** Mask is not resized to og shape in the wasm function.
+        Instead launching a manual resize operation in the background. */
+    async #resolve_treeringmap_og_shape_png(
+        wasm_output: CombinedPostprocessingResult|TreeringPostprocessingResult,
+        image_sizes: OGandDisplaySizes
+    ): Promise<File|UnfinishedFileInWASM|Error> {
+        const treeringmap_og_shape:File|UnfinishedFileInWASM|Error = 
+            wasm_output.treeringmap_og_shape_png
+                ?? await resize_mask_in_worker(
+                    wasm_output.treeringmap_workshape_png,
+                    image_sizes.display_size,
+                    image_sizes.og_size
+                )
+        if('worker' in treeringmap_og_shape)
+            this.#unfinished_files.push(treeringmap_og_shape)
+        return treeringmap_og_shape
+    }
+
+    /** Mask is not resized to og shape in the wasm function.
+        Instead launching a manual resize operation in the background. */
+    async #resolve_cellmap_og_shape_png(
+        wasm_output: CombinedPostprocessingResult|CellsPostprocessingResult,
+        image_sizes: OGandDisplaySizes
+    ): Promise<File|UnfinishedFileInWASM|Error> {
+        const treeringmap_og_shape:File|UnfinishedFileInWASM|Error = 
+            wasm_output.cellmap_og_shape_png
+                ?? await rasterize_og_mask_in_worker(
+                    wasm_output.cells_serialized,
+                    image_sizes.og_size
+                )
+        if('worker' in treeringmap_og_shape)
+            this.#unfinished_files.push(treeringmap_og_shape)
+        return treeringmap_og_shape
+    }
+
+    #terminate_prervious_workers(): void {
+        for(const unfinishedfile of this.#unfinished_files)
+            worker_abort_command(unfinishedfile)
+        this.#unfinished_files = []
+    }
+}
+
+
+function convert_pairedpaths_to_treeringinfos(
+    pairs:  PairedPaths, 
+    years?: number[]
+): TreeringInfo[] {
+    if(!years || pairs.length != years?.length){
+        // unequal number of pairs and years because user edited 
+        // or none at all because fresh from flask
+        const year_0:number = years?.length? years[0]! : 0;
+        years = base.util.arange(year_0, year_0 + pairs.length)
+    }
+
+
+    const output:TreeringInfo[] = []
+    for(const i in pairs){
+        const pathpair:PairedPaths[number] = pairs[i]!
+        const coordinates:PointPair[] = [];
+        for(let i:number = 0; i < pathpair[0].length; i++){
+            const p0:[number,number] = pathpair[0][i]!
+            const p1:[number,number] = pathpair[1][i]!
+
+            coordinates.push( [ 
+                {x:p0[0]!, y:p0[1]!}, 
+                {x:p1[0]!, y:p1[1]!} 
+            ] )
+        }
+        output.push({
+            coordinates, 
+            year: years[Number(i)]!,
+        })
+    }
+    return output;
 }
 
 
@@ -1186,4 +1421,101 @@ type ProgressMessage = {
     stage:    'cells'|'treerings';
     progress: number;
     image:    string;
+}
+
+
+
+async function run_command_in_worker(
+    command:   WorkerCommand,
+    onmessage: (e:MessageEvent) => File|Error,
+): Promise<UnfinishedFileInWASM|File|Error>  {
+    await 0;
+    const file_ending:string = 
+        base.util.is_deno()
+        ? 'ts'
+        : 'ts.js';
+    const url: URL = new URL(`carrot_worker.${file_ending}`, import.meta.url)
+    const worker = new Worker(url, {type:'module', name:crypto.randomUUID()} );
+
+    const errorpromise = new Promise((resolve: (x:Error) => void) => {
+        worker.addEventListener('error', (e:ErrorEvent) => {
+            e.preventDefault()
+            console.error('Error in worker:', e.message)
+            resolve(new Error(e.message))
+        })
+    })
+
+    const resultfilepromise = new Promise((resolve: (x:File|Error) => void) => {
+        worker.onmessage = (e:MessageEvent) => {
+            resolve( onmessage(e) );
+        }
+        worker.onerror = (e:ErrorEvent) => {
+            e.preventDefault()
+            console.error('Error in worker:', e.message)
+            resolve(new Error(e.message))
+        }
+    })
+    worker.postMessage(command);
+
+    const combinedpromise:Promise<Error|File> = Promise.race([
+        errorpromise, 
+        resultfilepromise, 
+    ])
+
+    return { 
+        file:   combinedpromise, 
+        worker: worker,
+    }
+}
+
+/** Start a web worker to rasterize cells/objects in RLE format as return by 
+ *  the postprocessing functions. */
+export function rasterize_og_mask_in_worker(
+    cells_serialized: ArrayBuffer,
+    og_size: base.util.ImageSize,
+): Promise<UnfinishedFileInWASM|File|Error> {
+    const command:WorkerRasterizeMaskCommand = {
+        command:         'rasterize_mask',
+        cells_serialized: cells_serialized,
+        target_size:      og_size,
+    }
+    const onworkermessage: (e:MessageEvent) => File|Error = (e:MessageEvent) => {
+        const data:WorkerMessage = e.data;
+        if(data instanceof Error)
+            return (data as Error);
+        else if(data.type == 'rasterize-mask-result')
+            return  new File([data.outputdata_png], "mask.png")
+        else return new Error(`Unexpected worker message: ${data.type}`)
+    }
+    return run_command_in_worker(command, onworkermessage);
+}
+
+
+/** Start a web worker to resize a binary mask via wasm, to avoid blocking the UI */
+export async function resize_mask_in_worker(
+    mask: File, 
+    worksize: base.util.ImageSize,
+    og_size:  base.util.ImageSize
+): Promise<UnfinishedFileInWASM|File|Error> {
+
+    const command:WorkerResizeMaskCommand = {
+        command:      'resize_mask',
+        maskdata_png: new Uint8Array(await mask.arrayBuffer()),
+        work_size:    worksize,
+        target_size:  og_size,
+    }
+    const onworkermessage: (e:MessageEvent) => File|Error = (e:MessageEvent) => {
+        const data:WorkerMessage = e.data;
+        if(data instanceof Error)
+            return (data as Error);
+        else if(data.type == 'resize-mask-result')
+            return new File([data.outputdata_png], mask.name)
+        else return new Error(`Unexpected worker message: ${data.type}`)
+    }
+    return run_command_in_worker(command, onworkermessage)
+}
+
+export function worker_abort_command(unfinished:UnfinishedFileInWASM): void {
+    const command:WorkerAbortCommand = {command: 'abort'}
+    unfinished.worker.postMessage(command)
 }

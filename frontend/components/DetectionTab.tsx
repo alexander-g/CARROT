@@ -397,10 +397,10 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         // NOTE: starting onnx download first, because smaller, no await here
         const onnxfilepromise:Promise<Error|Response> = 
             base.util.fetch_no_throw(`proxy?url=${HARDCODED_ONNX_URL}`)
-        const encoderfile:File|Error = await fetch_with_progress(
+        const encoderfile:File|Error = await base.util.fetch_with_progress(
             new URL(`proxy?url=${HARDCODED_ENCODER_URL}`, self.location.origin),
-            (progress:{total:number, received:number}) => {
-                const percent:number = 100 * progress.received / progress.total;
+            (progress:{total:number|null, received:number}) => {
+                const percent:number = 100 * progress.received / progress.total!;
                 this.sam_modal_ref.current!.show_downloading(percent)
             }
         )
@@ -453,44 +453,6 @@ function _get_map_for_editmode(
     if(mode == 'treerings' && 'treeringmap' in result.data)
         return result.data.treeringmap;
     return null;
-}
-
-async function fetch_with_progress(
-    url: URL,
-    on_progess: (x:{total:number, received:number}) => void
-): Promise<File|Error> {
-    const filename:string = 
-        url.pathname.substring(url.pathname.lastIndexOf('/') + 1);
-
-    const response:Response|Error = await base.util.fetch_no_throw(url);
-    if(response instanceof Error)
-        return response as Error;
-    
-    const total:number = Number(response.headers.get('content-length'));
-    if(!total) 
-        return new Error('Content-Length header missing');
-    
-    const reader:ReadableStreamDefaultReader<Uint8Array>|undefined = 
-        response.body?.getReader()
-    if(reader == undefined)
-        return new Error('Internal Error')
-    
-    let received:number = 0
-    const chunks:Uint8Array<ArrayBuffer>[] = []
-    while(true) {
-        try {
-            const {done, value} = await reader.read();
-            if(value != undefined){
-                chunks.push(value as Uint8Array<ArrayBuffer>)
-                received += value.length
-                on_progess({total, received})
-            }
-            if(done)
-                return new File(chunks, filename)
-        } catch (error) {
-            return error as Error;
-        }
-    }
 }
 
 
