@@ -8,6 +8,7 @@ import {
     type CellsPostprocessingResult,
     type CombinedPostprocessingResult,
     type PairedPaths,
+    type AreaOfInterest
 } from "../dep.ts"
 
 import type { 
@@ -17,6 +18,7 @@ import type {
     WorkerCommand,
     WorkerMessage, 
 } from "./carrot_worker.ts"
+
 
 
 
@@ -31,6 +33,9 @@ type UnfinishedFileInWASM = {
 type Point      = base.util.Point;
 type PointPair  = [Point,Point]
 type BaseResult = base.files.Result;
+
+export type AoIRect = [Point, Point, Point, Point];
+
 
 export type CellInfo = {
     area:   number,
@@ -51,6 +56,7 @@ export type CellMapOnlyUnfinishedData = {
     cellmap: File;
 }
 
+/** Result with only cells processed */
 export type CellsOnlyData = {
     /** Binary image with detected or manually annotated cells.
      *  Potentially resized for display. */
@@ -68,6 +74,7 @@ export type TreeringMapOnlyUnfinishedData = {
     treeringmap: File;
 }
 
+/** Result with only treerings processed */
 export type TreeringsOnlyData = {
     /** Binary image with detected or manually annotated treering boundaries.
      *  Potentially resized for display. */
@@ -79,8 +86,12 @@ export type TreeringsOnlyData = {
     reversed_growth_direction: boolean;
     px_per_um:    number;
     imagesize:    base.util.ImageSize;
+
+    /** Area to which the analysis is restricted. Full image if `null`. */
+    aoi: AoIRect|null;
 }
 
+// TODO: remove
 /** An old version of saved results that did not contain association data. */
 export type LegacySavedMapOnlyUnfinishedData = 
     TreeringMapOnlyUnfinishedData
@@ -117,6 +128,9 @@ export type CellsAndTreeringsData = {
     
     /** Whether to reverse the growth direction from what is predicted */
     reversed_growth_direction: boolean;
+
+    /** Area to which the analysis is restricted. Full image if `null`. */
+    aoi: AoIRect|null;
 }
 
 /** For unprocessed or failed results. */
@@ -563,6 +577,10 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
         convert_2x2_number_tuple_dual_array_to_points(adata.ring_points)
     const rings:TreeringInfo[] = 
         _zip_into_treerings(ring_points, adata.ring_years)
+    
+    const aoi_path = `${inputname}/area-of-interest.json`
+    const aoi_file:File|undefined = zipdata[aoi_path]
+    const aoi:AoIRect|null = validate_aoi_json(await aoi_file?.text() ?? '');
 
     const data:TreeringsOnlyData = {
         treeringmap:    treeringmap,
@@ -572,7 +590,8 @@ async function validate_rings_only_unzipped<T extends BaseResult>(
         reversed_growth_direction: adata.reversed_growth_direction ?? false,
         // NOTE: px_per_um is updated in state.ts (for now)
         px_per_um:   NaN,
-        imagesize:   {width:adata.imagesize[0], height:adata.imagesize[1]}
+        imagesize:   {width:adata.imagesize[0], height:adata.imagesize[1]},
+        aoi:         aoi,
     }
     return new ctor(
         'processed',
@@ -642,8 +661,7 @@ type RingsAssociationData = {
 }
 
 function validate_ringsonly_association_data(raw:string): RingsAssociationData|null {
-    const jsondata:unknown|Error = 
-        base.util.parse_json_no_throw(raw)
+    const jsondata:unknown|Error = base.util.parse_json_no_throw(raw)
     if(jsondata instanceof Error)
         return null;
 
@@ -658,6 +676,18 @@ function validate_ringsonly_association_data(raw:string): RingsAssociationData|n
         validate_2_number_tuple)
     ){
         return jsondata;
+    }
+    else return null;
+}
+
+function validate_aoi_json(raw:string): AoIRect|null {
+    const jsondata:unknown|Error = base.util.parse_json_no_throw(raw)
+    if(jsondata instanceof Error)
+        return null;
+
+    if(base.util.is_array_of_type(jsondata, base.util.validate_point)
+    && jsondata.length == 4) {
+        return jsondata as AoIRect;
     }
     else return null;
 }
@@ -980,6 +1010,9 @@ async function export_treeringsonly(
     }
     if(treeringmap_og != data.treeringmap)
         output[`${inputname}/internal/${inputname}.treerings.png`] = data.treeringmap;
+    if(data.aoi != null)
+        output[`${inputname}/area-of-interest.json`] = 
+            new File([JSON.stringify(data.aoi)], 'area-of-interest.json')
     return output
 }
 
@@ -1072,6 +1105,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
             const t0 = performance.now()
             const module:CARROT_Postprocessing = await wasm_postprocessing_initialize();
+            console.log('postprocess_combined: ', ('cellmap' in data)? data.cellmap : null, ('treeringmap' in data)? data.treeringmap : null, sizes.display_size, sizes.og_size, ('aoi' in data)? aoi_points_to_tuples(data.aoi) : undefined)
             const output:CombinedPostprocessingResult
                 |CellsPostprocessingResult
                 |TreeringPostprocessingResult
@@ -1080,7 +1114,8 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                     ('cellmap' in data)? data.cellmap : null, 
                     ('treeringmap' in data)? data.treeringmap : null,
                     sizes.display_size, 
-                    sizes.og_size
+                    sizes.og_size,
+                    ('aoi' in data)? aoi_points_to_tuples(data.aoi) : undefined,
                 )
             const t1 = performance.now()
             console.log(t1-t0)
@@ -1119,6 +1154,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                     treeringmap_og:  treeringmap_og_shape!,
                     px_per_um:       this.settings.micrometer_factor,                                   // TODO: is this correct??
                     imagesize:       sizes.og_size,
+                    aoi:             aoi_tuples_to_points(output.aoi),
                     reversed_growth_direction: false,                                                   // TODO: ??
                     treerings:  convert_pairedpaths_to_treeringinfos(
                         output.ring_points_xy, 
@@ -1144,6 +1180,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                     treeringmap_og:  treeringmap_og_shape!,
                     px_per_um:       this.settings.micrometer_factor,                                   // TODO: is this correct??
                     imagesize:       sizes.og_size,
+                    aoi:             aoi_tuples_to_points(output.aoi),
                     reversed_growth_direction: false,                                                   // TODO: ??
                     treerings:  convert_pairedpaths_to_treeringinfos(
                         output.ring_points_xy, 
@@ -1518,4 +1555,23 @@ export async function resize_mask_in_worker(
 export function worker_abort_command(unfinished:UnfinishedFileInWASM): void {
     const command:WorkerAbortCommand = {command: 'abort'}
     unfinished.worker.postMessage(command)
+}
+
+
+function aoi_tuples_to_points(aoi:AreaOfInterest|null): AoIRect|null {
+    return aoi ? [
+        {x: aoi[0][0], y:aoi[0][1]},
+        {x: aoi[1][0], y:aoi[1][1]},
+        {x: aoi[2][0], y:aoi[2][1]},
+        {x: aoi[3][0], y:aoi[3][1]},
+    ]: null;
+}
+
+function aoi_points_to_tuples(aoi:AoIRect|null): AreaOfInterest|undefined {
+    return aoi ? [
+        [aoi[0].x, aoi[0].y],
+        [aoi[1].x, aoi[1].y],
+        [aoi[2].x, aoi[2].y],
+        [aoi[3].x, aoi[3].y],
+    ] : undefined;
 }

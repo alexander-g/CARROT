@@ -1,12 +1,10 @@
 import { asserts } from "./dep.ts";
 
 import { 
-    rect_from_2points_and_width ,
     mirror_distance_perp,
-    AoIRect,
     Point,
 } from "../../frontend/components/TreeringsSVGOverlay.tsx"
-
+import { AoIRect } from "../../frontend/lib/carrot_detection.ts"
 
 // Deno.test("rect_from_2points_and_width - horizontal line", () => {
 //     const p0: Point = { x: 0, y: 0 };

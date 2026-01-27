@@ -3,6 +3,7 @@ import { base }    from "../../frontend/dep.ts"
 import { 
     CARROT_Result,
     CellsAndTreeringsData,
+    TreeringsOnlyData,
     CARROT_RemoteBackend,
     UnfinishedCARROT_Result,
     parse_inputfile_from_process_response,
@@ -30,7 +31,7 @@ const CELLS_SERIALIZED_FILE:string =
     import.meta.resolve('./assets/cells-serialized.bin').replace('file://', '')
 
 
-Deno.test('CARROT_Result.export-import', async () => {
+Deno.test('CARROT_Result.full.export-import', async () => {
     const inputname = 'file0.jpg'
     const data0:CellsAndTreeringsData = {
         colored_cellmap: new File(['...'], 'ringmap.png'),
@@ -47,6 +48,12 @@ Deno.test('CARROT_Result.export-import', async () => {
             },
         ],
         imagesize: {width:200, height:300},
+        aoi: [
+            {x:5,   y:5},
+            {x:555, y:5},
+            {x:555, y:555},
+            {x:5,   y:555},
+        ],
         px_per_um: 1.5,
         reversed_growth_direction: true,
         cellmap_og : new File(['...'], 'cellmap.png'),
@@ -94,6 +101,69 @@ Deno.test('CARROT_Result.export-import', async () => {
     asserts.assertEquals( imported.data.cells, data0.cells )
     
     asserts.assertEquals(imported.data.reversed_growth_direction, data0.reversed_growth_direction)
+    asserts.assertEquals(imported.data.aoi, data0.aoi)
+})
+
+
+Deno.test('CARROT_Result.rings-only.export-import', async () => {
+    const inputname = 'file0.jpg'
+    const data0:TreeringsOnlyData = {
+        treeringmap: new File(['...'], 'tringmap.png'),
+        treerings:[{
+            coordinates:[ 
+                [{x:0,y:0}, {x:10,y:10}], [{x:5,y:5}, {x:15,y:15}] 
+            ],
+            year:2222
+            },
+        ],
+        imagesize: {width:200, height:300},
+        px_per_um: 1.5,
+        reversed_growth_direction: true,
+        treeringmap_og : new File(['...'], 'treeringmap.png'),
+        aoi: [
+            {x:  1, y:  1},
+            {x:  1, y:199},
+            {x:199, y:199},
+            {x:199, y:  1},
+        ]
+    }
+    const r0 = new CARROT_Result(
+        'processed',
+        null,
+        inputname,
+        data0,
+    )
+
+    const exported: Record<string, File>|null = await r0.export()
+    asserts.assertExists(exported)
+    asserts.assertArrayIncludes(
+        Object.keys(exported),
+        [
+            `${inputname}.tree_ring_statistics.csv`,
+            `${inputname}/treerings.json`,
+            `${inputname}/area-of-interest.json`,
+            `${inputname}/${inputname}.treerings.png`,
+            `${inputname}/internal/${inputname}.treerings.png`,
+        ]
+    )
+
+    const zipped: File|Error = await base.zip.zip_files(exported, r0.inputname+'.zip')
+    asserts.assertInstanceOf(zipped, File)
+
+    const input_file_pair = {input:{name:inputname}, file:zipped}
+    const imported:CARROT_Result|null 
+        = await CARROT_Result.validate<CARROT_Result>(input_file_pair)
+    asserts.assertInstanceOf(imported, CARROT_Result)
+    asserts.assertEquals(imported.status, 'processed')
+    asserts.assertEquals(imported.inputname, inputname)
+
+    asserts.assert( 'treerings' in imported.data )
+    asserts.assert( Array.isArray(imported.data.treerings) )
+    asserts.assertEquals( imported.data.treerings, data0.treerings )
+    
+    asserts.assertEquals(imported.data.reversed_growth_direction, data0.reversed_growth_direction)
+    asserts.assert( 'aoi' in imported.data )
+    asserts.assertEquals(imported.data.aoi, data0.aoi)
 })
 
 

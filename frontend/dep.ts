@@ -8,5 +8,6 @@ export { wasm_postprocessing_initialize,
     type TreeringPostprocessingResult,
     type CellsPostprocessingResult,
     type CombinedPostprocessingResult,
-    type PairedPaths 
+    type PairedPaths,
+    type AreaOfInterest,
 } from "./deps-worker.ts"

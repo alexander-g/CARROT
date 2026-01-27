@@ -5,7 +5,8 @@ import {
     CARROT_Data,
     CARROT_Backend,
     UnfinishedCARROT_Result,
-    _zip_into_treerings
+    _zip_into_treerings,
+    AoIRect,
 } from "../lib/carrot_detection.ts"
 import { TreeringsSVGOverlay, PointPair } from "./TreeringsSVGOverlay.tsx"
 import { CARROT_ModelTypes } from "../lib/carrot_settings.ts";
@@ -73,6 +74,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     canvas_ref: preact.RefObject<EditCanvas> = preact.createRef()
     edit_menu_ref: preact.RefObject<EditMenu> = preact.createRef()
     sam_modal_ref: preact.RefObject<SAM_Modal> = preact.createRef()
+    svg_overlay_ref: preact.RefObject<TreeringsSVGOverlay> = preact.createRef()
     
     $active_editing_mode: Signal<CARROT_EditingMode> = new Signal(null)
     $editing_brush_size:  Signal<number> = new Signal(0)
@@ -126,6 +128,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 $visible  = { this.$overlays_visible }
             />
             <TreeringsSVGOverlay 
+                ref  = { this.svg_overlay_ref }
                 size = { this.$og_imagesize.value ?? {height:0, width:0} }
                 $result = { this.props.$result }
                 $scale  = { this.$scale }
@@ -219,10 +222,11 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 on_apply = { this.on_apply_editing_changes }
                 on_clear = { () => this.canvas_ref.current?.clear() }
                 on_undo  = { () => this.canvas_ref.current?.undo() }
+                on_set_aoi_to_full_image    = {this.on_set_aoi_to_full_image}
                 on_reverse_growth_direction = {this.on_reverse_growth_direction}
-                $active_modality = { this.$active_editing_mode }
-                $drawing_mode = { this.$drawing_mode }
-                $brush_size  = { this.$editing_brush_size }
+                $active_modality   = { this.$active_editing_mode }
+                $drawing_mode      = { this.$drawing_mode }
+                $brush_size        = { this.$editing_brush_size }
                 $too_large_for_sam = { this.$image_too_large_for_sam }
                 key = { 0 } // to make typescript happy
             />
@@ -237,30 +241,41 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         if(!(backend instanceof CARROT_Backend)
         || mode == null)
             return false;
-        if(mode == 'aoi') {
-            console.trace('TODO: apply AoI changes')
-            return true;
-        }
-        
-        const blob:Blob|null = await this.canvas_ref.current!.to_blob()
-        if(blob == null)
-            return false;
+
         
         const current_data:CARROT_Data = this.props.$result.value.data;
-        const filename = `${this.props.input.name}.${mode}.png`
-        const edited_file = new File([blob], filename)
-        const attribute:string= {
-            'cells'    : 'cellmap',
-            'treerings': 'treeringmap',
-        }[mode];
+        let new_data:CARROT_Data = {...current_data}
+        
+        if(mode == 'aoi') {
+            console.trace('TODO: apply AoI changes')
+            const aoi_points:AoIRect|null = this.svg_overlay_ref.current!.get_aoi();
+
+            // for type safety
+            type AOITYPE_IN_DATA = Extract<CARROT_Data, { aoi: unknown }>['aoi']
+            const aoi:AOITYPE_IN_DATA = aoi_points;
+            new_data = {...new_data, aoi}
+        }
+
+
+        
+        if(mode == 'cells' || mode == 'treerings'){
+            const blob:Blob|null = await this.canvas_ref.current!.to_blob()
+            if(blob == null)
+                return false;
+            
+            const filename = `${this.props.input.name}.${mode}.png`
+            const edited_file = new File([blob], filename)
+            const attribute:string= {
+                'cells'    : 'cellmap',
+                'treerings': 'treeringmap',
+            }[mode];
+            new_data = {...new_data, [attribute]:edited_file}
+        }
 
         const unfinished_result: UnfinishedCARROT_Result = {
             status:    'processing',
             inputname: this.props.input.name,
-            data: {
-                ...current_data,
-                [attribute]:edited_file,
-            }
+            data: new_data
         }
         // awkward
         this.props.$result.value = new CARROT_Result('processing');
@@ -275,6 +290,10 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     on_reverse_growth_direction = () => {
         this.props.$result.value = 
             CARROT_Result.reverse_growth_direction(this.props.$result.value)
+    }
+
+    on_set_aoi_to_full_image = () => {
+        this.svg_overlay_ref.current!.set_aoi_to_full_image()
     }
 
     override input_image_css(): 
@@ -482,6 +501,9 @@ type EditMenuProps = {
     /** Callback, user wants to reverse the direction of tree rings */
     on_reverse_growth_direction: () => void;
 
+    /** Callback issued when user requests to set the AoI the the full image */
+    on_set_aoi_to_full_image: () => void;
+
     /** @input If true, the "Segment Anything" button will be disabled */
     $too_large_for_sam: Readonly<Signal<boolean>>;
 }
@@ -570,7 +592,10 @@ class EditMenu extends preact.Component<EditMenuProps> {
                     $too_large_for_sam = {props.$too_large_for_sam}
                     on_undo            = {props.on_undo}
                 />
-                <EditSubMenu_AoI $active_modality = {props.$active_modality} />
+                <EditSubMenu_AoI 
+                    $active_modality     = {props.$active_modality} 
+                    on_set_to_full_image = { props.on_set_aoi_to_full_image }
+                />
 
             
                 <MenuDivider $visible={this.$editing_active} />
@@ -727,6 +752,9 @@ type EditSubMenu_AoI_Props = {
     /** @input The currently active drawing modality (cells/rings/aoi) 
      *  or `null` if not active. */
     $active_modality: Readonly<Signal<CARROT_EditingMode>>;
+
+    /** Callback issued when user requests to set the AoI the the full image */
+    on_set_to_full_image: () => void;
 }
 
 /** A part of the editing menu that is only shown when editing cells or treerings */
@@ -745,7 +773,7 @@ class EditSubMenu_AoI extends preact.Component<EditSubMenu_AoI_Props> {
                 label = 'Set to full image'
                 icon  = 'vector square'
                 $visible = { this.$active }
-                //on_click = {this.props.on_undo}
+                on_click = {this.props.on_set_to_full_image}
             />
         </>
     }

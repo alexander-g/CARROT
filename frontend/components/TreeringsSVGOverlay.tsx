@@ -5,6 +5,7 @@ import {
     TreeringInfo,
     compute_treering_width,
     _zip_into_treerings,
+    AoIRect,
 } from "../lib/carrot_detection.ts"
 
 export type Point     = base.util.Point;
@@ -20,7 +21,7 @@ type TreeringsSVGOverlayProps = {
     /** The current zoom level of the image */
     $scale?: Readonly<Signal<number>>;
 
-    // TODO
+    /** @input whether aoi editing should be active */
     $aoi_edit_active: Readonly<Signal<boolean>>;
 } & base.ui_util.MaybeHiddenProps;
 
@@ -33,7 +34,13 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
     /** Ref to the instance of {@link $drawing_aoi} */
     drawing_aoi_ref: preact.RefObject<IntermediateAoIOverlay> = preact.createRef()
 
-    $aoi_points: Signal<Point[]> = new Signal([]);
+    #_ = this.props.$aoi_edit_active.subscribe( (aoi_edit_active:boolean) => {
+        if(aoi_edit_active) {
+            const resultdata:CARROT_Data = this.props.$result.value.data;
+            this.drawing_aoi_ref.current!.$coordinates.value = 
+                ('aoi' in resultdata)? resultdata.aoi ?? [] : [];
+        }
+    } )
 
 
     render(props:TreeringsSVGOverlayProps): JSX.Element {
@@ -44,6 +51,8 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             ('px_per_um' in resultdata)? resultdata.px_per_um : 1.0;
         const og_size:base.util.ImageSize = 
             ('imagesize' in resultdata)? resultdata.imagesize: props.size;
+        const aoi_coordinates:AoIRect|null = 
+            ('aoi' in resultdata)? resultdata.aoi : null;
         
         const viewbox = `0 0 ${og_size.width} ${og_size.height}`
         const treerings_svg: JSX.Element[]|undefined = 
@@ -79,15 +88,23 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
         >
             { treerings_svg }
             
+            {/* AoI overlay that is currently edited and not yet in the result */}
             <IntermediateAoIOverlay 
                 ref       = {this.drawing_aoi_ref} 
                 imagesize = {this.props.size}
                 $active   = {this.props.$aoi_edit_active}
-                on_finalize = { this.on_new_aoi_points }
             />
-            {/* <AoIOverlay 
-                $coordinates = {this.$aoi_points}
-            /> */}
+            {/* the currently active AoI in the result */}
+            {
+                aoi_coordinates?
+                <AoIOverlay 
+                    $coordinates = { signals.computed( () => aoi_coordinates ) }
+                    $active = {
+                        // active when not editing
+                        signals.computed( () => !this.props.$aoi_edit_active.value ) 
+                    }
+                /> : null
+            }
         </svg>
         </>
     }
@@ -107,11 +124,6 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             this.props.$result.value = new_result;
     }
 
-    /** Called when user wants to set a new area-of-interest */
-    on_new_aoi_points = (points:Point[]) => {
-        this.$aoi_points.value = points;
-    }
-
     /** Hande aoi editing. */
     on_mouse_down = (mousedown_event:MouseEvent) => {
         if(this.ref.current == null
@@ -120,6 +132,18 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             return;
 
         this.drawing_aoi_ref.current.on_mouse_down(mousedown_event, this.ref.current);
+    }
+
+    get_aoi(): AoIRect|null {
+        const aoi_points:Point[] = 
+            this.drawing_aoi_ref.current?.$coordinates.value ?? []
+        if(aoi_points.length != 4)
+            return null
+        return aoi_points as AoIRect;
+    }
+
+    set_aoi_to_full_image(): void {
+        this.drawing_aoi_ref.current!.$coordinates.value = [];
     }
 }
 
@@ -144,6 +168,7 @@ type TreeringComponentProps = {
     px_per_um: number;
 }
 
+/** A single tree ring, from border to border */
 class TreeringComponent extends preact.Component<TreeringComponentProps> {
 
     render(props:TreeringComponentProps): JSX.Element {
@@ -374,10 +399,28 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
 
 type AoIOverlayProps = {
     $coordinates: Signal<Point[]>;
+
+    /** Whether to show this overlay */
+    $active?: Readonly<Signal<boolean>>;
+
+    /** Main (inner) color of the AoI overlay */
+    color0: string;
+    /** Secondary (outer) color of the AoI overlay */
+    color1: string;
 }
 
 class AoIOverlay extends preact.Component<AoIOverlayProps> {
+    static override defaultProps: 
+    Pick<AoIOverlayProps, 'color0'|'color1'> = {
+        color0:  'white',
+        color1: '#cccccc',
+    }
+
     render(): JSX.Element {
+        if(this.props.$active?.value === false)
+            // deno-lint-ignore jsx-no-useless-fragment
+            return <></>
+        
         let points:Point[] = this.props.$coordinates.value
         if(points.length > 0)
             points = points.concat(points[0]!)
@@ -387,14 +430,14 @@ class AoIOverlay extends preact.Component<AoIOverlayProps> {
         ).join(' ')
 
         const css_border_inner: JSX.CSSProperties = {
-            stroke:          "white",
+            stroke:          this.props.color0,
             strokeWidth:     30,
             //strokeDasharray: "50%, 50%",
             strokeLinecap:   'square',
             fill:            "none",
         }
         const css_border_outer = {
-            stroke:         "#cccccc",
+            stroke:         this.props.color1,
             strokeWidth:    40,
             strokeLinecap:  'square',
             fill:           "none",
@@ -420,11 +463,11 @@ class AoIOverlay extends preact.Component<AoIOverlayProps> {
 type IntermediateAoIOverlayProps = {
     imagesize: base.util.ImageSize;
 
+    /** Whether to show this overlay */
     $active: Readonly<Signal<boolean>>;
-
-    on_finalize: ( points:Point[] ) => void;
 }
 
+/** An AoI that is currently being edited */
 class IntermediateAoIOverlay extends preact.Component<IntermediateAoIOverlayProps> {
 
     $coordinates:Signal<Point[]> = new Signal([])
@@ -441,7 +484,11 @@ class IntermediateAoIOverlay extends preact.Component<IntermediateAoIOverlayProp
 
     render(): JSX.Element {
         return <>
-            <AoIOverlay $coordinates={this.$coordinates}/>
+            <AoIOverlay 
+                $coordinates = {this.$coordinates} 
+                color0 = "#aaaaaa" 
+                color1 = "white"
+            />
         </>
     }
 
@@ -515,46 +562,11 @@ class IntermediateAoIOverlay extends preact.Component<IntermediateAoIOverlayProp
         //else
         //    console.trace('Should not have happened')
     }
-
-    set_coordinates(p0:Point, p1:Point) {
-        this.$coordinates.value = [p0, p1];
-    }
 }
 
 
-export type AoIRect = [Point, Point, Point, Point];
 
-// export 
-// function rect_from_2points_and_width(p0:Point, p1:Point, width:number): AoIRect {
-//     const dx:number = p1.x - p0.x;
-//     const dy:number = p1.y - p0.y;
-//     const len:number = Math.hypot(dx, dy);
-//     if (len === 0) {
-//         // degenerate: return a square centered at p0 with side = width
-//         const half:number = width / 2;
-//         return [
-//             { x: p0.x - half, y: p0.y - half },
-//             { x: p0.x + half, y: p0.y - half },
-//             { x: p0.x + half, y: p0.y + half },
-//             { x: p0.x - half, y: p0.y + half },
-//         ];
-//     }
 
-//     const ux:number = dx / len;
-//     const uy:number = dy / len;
-//     // perpendicular unit vector
-//     const px:number = -uy;
-//     const py:number = ux;
-//     const half:number = width / 2;
-//     const offX:number = px * half;
-//     const offY:number = py * half;
-//     return [
-//         { x: p0.x - offX, y: p0.y - offY },
-//         { x: p1.x - offX, y: p1.y - offY },
-//         { x: p1.x + offX, y: p1.y + offY },
-//         { x: p0.x + offX, y: p0.y + offY },
-//     ];
-// }
 
 
 /**
