@@ -119,6 +119,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     static sam_downloaded: boolean = false;
 
     $image_too_large_for_sam:Signal<boolean> = new Signal(false)
+    $aoi_disabled:Readonly<Signal<boolean>>  = signals.computed(
+        () => !('treeringmap' in this.props.$result.value.data)
+    )
 
 
     override result_overlays(): JSX.Element {
@@ -228,6 +231,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 $drawing_mode      = { this.$drawing_mode }
                 $brush_size        = { this.$editing_brush_size }
                 $too_large_for_sam = { this.$image_too_large_for_sam }
+                $aoi_disabled      = { this.$aoi_disabled }
                 key = { 0 } // to make typescript happy
             />
         ]
@@ -506,6 +510,9 @@ type EditMenuProps = {
 
     /** @input If true, the "Segment Anything" button will be disabled */
     $too_large_for_sam: Readonly<Signal<boolean>>;
+
+    /** @input If true, "Edit Area of Interest" will be disabled */
+    $aoi_disabled: Readonly<Signal<boolean>>;
 }
 
 class EditMenu extends preact.Component<EditMenuProps> {
@@ -572,6 +579,7 @@ class EditMenu extends preact.Component<EditMenuProps> {
                     $highlighted = { signals.computed( 
                         () => this.props.$active_modality.value == 'aoi' ) 
                     }
+                    $disabled = { this.props.$aoi_disabled }
                     on_click = { () => this.activate_mode('aoi') }
                 />
                 <MenuButton 

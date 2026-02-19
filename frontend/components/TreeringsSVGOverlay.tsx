@@ -1,3 +1,5 @@
+// deno-lint-ignore-file no-window
+
 import { base, preact, Signal, signals, JSX } from "../dep.ts"
 import { 
     CARROT_Result,
@@ -43,6 +45,17 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
     } )
 
 
+    $pt_per_px:Signal<number> = 
+        new Signal( this.props.size.width / globalThis.innerWidth );
+
+    /** Update $pt_per_px after scale changes **with some delay** 
+     * to allow for HTML for layout changes. */
+    #_2 = this.props.$scale?.subscribe( () => {
+        setTimeout( this._update_pt_per_px, 10 )
+    } )
+
+
+
     render(props:TreeringsSVGOverlayProps): JSX.Element {
         const resultdata:CARROT_Data = props.$result.value.data;
         const treerings:TreeringInfo[] = 
@@ -66,6 +79,7 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
                         year            = { ring.year }
                         on_new_year     = { this.on_new_year }
                         $scale          = { props.$scale }
+                        $pt_per_px       = { this.$pt_per_px }
                         px_per_um       = { px_per_um }
                         key = {null}
                     /> 
@@ -86,19 +100,22 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             onMouseDown = {this.on_mouse_down}
             //onKeyDown={console.log}  // TODO: 'escape' to cancel
         >
-            { treerings_svg }
+            { this.props.$aoi_edit_active.value ? null : treerings_svg }
             
             {/* AoI overlay that is currently edited and not yet in the result */}
             <IntermediateAoIOverlay 
                 ref       = {this.drawing_aoi_ref} 
                 imagesize = {this.props.size}
                 $active   = {this.props.$aoi_edit_active}
+                $pt_per_px  = { this.$pt_per_px }
             />
             {/* the currently active AoI in the result */}
             {
                 aoi_coordinates?
                 <AoIOverlay 
                     $coordinates = { signals.computed( () => aoi_coordinates ) }
+                    $pt_per_px   = { this.$pt_per_px }
+                    imagesize    = { this.props.size }
                     $active = {
                         // active when not editing
                         signals.computed( () => !this.props.$aoi_edit_active.value ) 
@@ -107,6 +124,22 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             }
         </svg>
         </>
+    }
+
+    // NOTE: private via # causes errors
+    private _update_pt_per_px = () => {
+        const px_width:number = 
+            this.ref.current?.getBoundingClientRect().width 
+            ?? window.innerWidth * 0.9;
+        const pt_width:number  = this.props.size.width;
+        const pt_per_px:number = pt_width / px_width
+        if(isFinite(pt_per_px) && pt_per_px != 0)
+            this.$pt_per_px.value  = pt_per_px;
+        // console.log(`pt_per_px: ${pt_per_px.toFixed(3)}`)
+    }
+
+    override componentDidUpdate(): void {
+        globalThis.setTimeout(this._update_pt_per_px, 100)
     }
 
     /** Called when user wants to modify a year number */
@@ -164,12 +197,17 @@ type TreeringComponentProps = {
     /** The current zoom level of the image */
     $scale?: Readonly<Signal<number>>;
 
+    $pt_per_px: Readonly<Signal<number>>;
+
     /** Pixels per um as set by user */
     px_per_um: number;
 }
 
 /** A single tree ring, from border to border */
 class TreeringComponent extends preact.Component<TreeringComponentProps> {
+
+    polyline0_ref:preact.RefObject<SVGPolylineElement> = preact.createRef()
+    polyline1_ref:preact.RefObject<SVGPolylineElement> = preact.createRef()
 
     render(props:TreeringComponentProps): JSX.Element {
         const points_upper:string = props.treering_points.map(
@@ -200,11 +238,13 @@ class TreeringComponent extends preact.Component<TreeringComponentProps> {
                 class  = "treering-border upper" 
                 points = {points_upper}
                 style  = {css_border}
+                ref    = {this.polyline0_ref}
             />
             <polyline 
                 class  = "treering-border lower" 
                 points = {points_lower}
                 style  = {css_border}
+                ref    = {this.polyline1_ref}
             />
             <polygon 
                 class  = "treering-area" 
@@ -220,6 +260,11 @@ class TreeringComponent extends preact.Component<TreeringComponentProps> {
                 parentsvg = { props.parentsvg }
                 on_new_year = { props.on_new_year }
                 $scale      = { props.$scale }
+                $pt_per_px   = { props.$pt_per_px }
+
+                // polyline0   = {this.polyline0_ref}
+                // polyline1   = {this.polyline1_ref}
+                treering_points = {this.props.treering_points}
             />
         </g>
     }
@@ -254,23 +299,30 @@ type TreeringLabelProps = {
 
     /** The current zoom level of the image */
     $scale?: Readonly<Signal<number>>;
+
+    $pt_per_px: Readonly<Signal<number>>;
+
+    treering_points: PointPair[];
 }
 
 class TreeringLabel extends preact.Component<TreeringLabelProps>{
     #ref:     preact.RefObject<HTMLDivElement> = preact.createRef()
     #inputref:preact.RefObject<HTMLLabelElement> = preact.createRef()
 
-    /** Size of the component (in image coordinates). Used to offset to the center */
-    #$divsize: Signal<base.util.Size> = new Signal({width:0, height:0});
-
     #labeltext: string = ""
 
+
+    // ugly
+    #$rerender: Signal<unknown> = new Signal();
+
     render(props:TreeringLabelProps): JSX.Element {
-        const scale:number = this.#estimate_scale();
+        // just to subscribe
+        this.#$rerender.value;
+
         const css_fo = {
             width:     "100%",
             height:    "100%",
-            transform: `scale(${scale})`,
+            transform:        this.#compute_transform_matrix(),
             color:            "white",
             "font-weight":    "bold",
             "pointer-events": "none",
@@ -278,11 +330,10 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
 
         this.#labeltext = props.year.toFixed(0)
         return <>
-        <svg 
-            class = "treering-overlay-label unselectable" 
-            x     = {props.position.x - this.#$divsize.value.width/2} 
-            y     = {props.position.y - this.#$divsize.value.height/2}
-        >
+        {/* <rect {...this.#desired_bbox()} style={ {fill:'pink'} } /> */}
+
+        {/* NOTE: cannot select the contenteditable label without this <svg>  */}
+        <svg class = "treering-overlay-label unselectable" >
         <foreignObject style={css_fo}>
             <div class="size-query-div" style="width:fit-content;" ref={this.#ref}>
                 <div>
@@ -302,53 +353,90 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
                     {props.width_um.toFixed(1)}μm
                 </label>
             </div>
+
         </foreignObject>
         </svg>
         </>
     }
 
+    override componentDidMount(): void {
+        setTimeout( () => this.#$rerender.value = Date.now() )
+    }
+
     override componentDidUpdate(): void {
-        this.#update_divsize()
         // sometimes the label is not updated probably because of contenteditable
         // make sure it is
         this.#inputref.current!.innerText = this.#labeltext
     }
 
-    override componentDidMount(): void {
-        this.#update_divsize()
+    #desired_bbox(): DOMRect {
+        const center_x:number = this.props.position.x;
+        const center_y:number = this.props.position.y;
+
+        // desired actual width in pixels: 4% of the total window width
+        const width_in_px:number = window.innerWidth * 0.04;
+        const width_in_pt:number = width_in_px * this.props.$pt_per_px.value;
+
+        const polygon_size_available_pt:base.util.ImageSize|null = 
+            estimate_available_space_inbetween_two_paths(this.props.treering_points)
+        const available_width_pt:number = 
+            (polygon_size_available_pt?.width ?? 1e9) * 0.8;
+        const available_height_pt:number = 
+            (polygon_size_available_pt?.height ?? 1e9) * 0.8;
+        
+
+        // final width in pt: limit by available space between ring boundaries
+        let width:number = Math.min( width_in_pt, available_width_pt*0.8 );
+        // height: 66% of width (guesstimate)
+        let height:number = width * 0.66;
+
+        // again limit by space, on the y axis
+        if(height > available_height_pt) {
+            width  = width * (available_height_pt/height);
+            height = available_height_pt;
+        }
+
+        return new DOMRect(
+            center_x - width/2,
+            center_y - height/2,
+            width,
+            height
+        )
     }
-    
 
-    /** Store the size of the label after each update, 
-     *  so that it can be centered properly */
-    #update_divsize(): void {
-        if(this.props.parentsvg == null || this.#ref.current == null)
-            return
-        
-        const divsize:base.util.Size = 
-            this.#ref.current?.getBoundingClientRect() ?? {width:0, height:0}
-        
-        const p0:Point|null = base.ui_util.page2element_coordinates(
-            {x:0, y:0},
-            this.props.parentsvg,
-            this.props.imagesize,
-        )
-        const p1:Point|null = base.ui_util.page2element_coordinates(
-            {x:divsize.width, y:divsize.height},
-            this.props.parentsvg,
-            this.props.imagesize,
-        )
-        const in_viewport_width:number = p1.x - p0.x
-        const in_viewport_height:number = p1.y - p0.y
 
-        if( 
-            Math.abs(this.#$divsize.value.width - in_viewport_width) > 1 
-            || Math.abs(this.#$divsize.value.height - in_viewport_height) > 1 
-        )
-            this.#$divsize.value = {
-                width:  in_viewport_width, 
-                height: in_viewport_height
-            };
+    #last_scale_x:number = 1.0;
+    #last_scale_y:number = 1.0;
+
+    #compute_transform_matrix() {
+        // NOTE: accessing $signal already here to make sure its subscribed
+        const pt_per_px:number = this.props.$pt_per_px.value;
+
+        if(this.#ref.current == null)
+            return 'matrix(1,0,0,1,0,0)';
+
+
+        const rect_scaled_px:DOMRect = this.#ref.current.getBoundingClientRect();
+        // actual width and height if not zoomed in
+        const width_px:number  = rect_scaled_px.width / this.#last_scale_x;
+        const height_px:number = rect_scaled_px.height / this.#last_scale_y;
+
+        const desired_bbox_pt:DOMRect  = this.#desired_bbox();
+        const desired_width_px:number  = desired_bbox_pt.width / pt_per_px;
+        const desired_height_px:number = desired_bbox_pt.height / pt_per_px;
+
+        const scale_x:number = desired_width_px / width_px;
+        const scale_y:number = desired_height_px / height_px;
+
+        if(isFinite(scale_x) && scale_x != 0)
+            this.#last_scale_x = scale_x
+        if(isFinite(scale_y) && scale_y != 0)
+            this.#last_scale_y = scale_y
+
+        const offset_x_pt:number = desired_bbox_pt.x
+        const offset_y_pt:number = desired_bbox_pt.y
+
+        return `matrix(${scale_x}, 0, 0, ${scale_x}, ${offset_x_pt}, ${offset_y_pt})`
     }
 
     on_keyup = ((_event:KeyboardEvent): void => {
@@ -378,42 +466,106 @@ class TreeringLabel extends preact.Component<TreeringLabelProps>{
             this.props.on_new_year(this.props.index, year);
         }
     } ).bind(this)
-
-    #estimate_scale(): number {
-        let parentwidth:number = 
-            this.props.parentsvg?.getBoundingClientRect().width
-            // deno-lint-ignore no-window
-            || window.innerWidth * 0.9;
-        const scale:number = this.props.$scale?.value ?? 1.0
-        parentwidth = parentwidth / scale
-        const imagewidth:number = 
-            this.props.imagesize.width;
-        
-        return imagewidth / parentwidth * 1.5 / scale;
-    }
 }
 
 
+
+function argmin(x:number[]): number|null {
+    if(x.length == 0)
+        return null;
+
+    let smallest_index:number = 0;
+    let smallest_value:number = x[0]!
+    for(const i in x)
+        if(x[i]! < smallest_value) {
+            smallest_value = x[i]!
+            smallest_index = Number(i);
+        }
+    return smallest_index
+}
+
+
+function estimate_available_space_inbetween_two_paths(
+    pathpair:PointPair[]
+): base.util.Size|null {
+    if(pathpair.length == 0)
+        return null;
+
+    const points_flat:Point[] = pathpair.flat()
+    const p_min:Point = {
+        x: Math.min(...points_flat.map(p => p.x)),
+        y: Math.min(...points_flat.map(p => p.y)),
+    }
+    const p_max:Point = {
+        x: Math.max(...points_flat.map(p => p.x)),
+        y: Math.max(...points_flat.map(p => p.y)),
+    }
+    const centroid:Point = mean_point( pathpair.flat() ) ?? {x:0, y:0}
+
+    // four points arranged in a cross
+    const center_left   = {x: p_min.x,    y: centroid.y}
+    const center_right  = {x: p_max.x,    y: centroid.y}
+    const center_top    = {x: centroid.x, y: p_min.y}
+    const center_bottom = {x: centroid.x, y: p_max.y}
+
+
+    const path0:Point[] = pathpair.map( pair => pair[0] )
+    const path1:Point[] = pathpair.map( pair => pair[1] )
+
+
+    // point from path0 closest to center-left
+    const p0_left:Point = path0[
+        argmin( path0.map( p => base.util.distance(p, center_left) ) )!
+    ]!
+    // point from path1 closest to center right
+    const p1_right:Point = path1[
+        argmin( path1.map( p => base.util.distance(p, center_right) ) )!
+    ]!
+
+    // point from path0 closest to center-top
+    const p0_top:Point = path0[
+        argmin( path0.map( p => base.util.distance(p, center_top) ) )!
+    ]!
+    // point from path0 closest to center-bottom
+    const p1_bottom:Point = path1[
+        argmin( path1.map( p => base.util.distance(p, center_bottom) ) )!
+    ]!
+    
+    return {
+        width:  Math.abs(p0_left.x - p1_right.x),
+        height: Math.abs(p0_top.y  - p1_bottom.y),
+    }
+}
 
 
 
 type AoIOverlayProps = {
     $coordinates: Signal<Point[]>;
 
+    /** SVG/viewpoint points per actually displayed pixel ratio */
+    $pt_per_px: Readonly<Signal<number>>;
+
+    /** Size of the image/SVG */
+    imagesize: base.util.Size;
+
     /** Whether to show this overlay */
     $active?: Readonly<Signal<boolean>>;
 
-    /** Main (inner) color of the AoI overlay */
+    /** Main (inner) color of the AoI overlay. (Default: white) */
     color0: string;
-    /** Secondary (outer) color of the AoI overlay */
+    /** Secondary (outer) color of the AoI overlay. (Default: #cccccc) */
     color1: string;
+
+    /** Make the rectangle outline dashed instead of solid. (Default: false) */
+    dashed: boolean;
 }
 
 class AoIOverlay extends preact.Component<AoIOverlayProps> {
     static override defaultProps: 
-    Pick<AoIOverlayProps, 'color0'|'color1'> = {
-        color0:  'white',
+    Pick<AoIOverlayProps, 'color0'|'color1'|'dashed'> = {
+        color0: 'white',
         color1: '#cccccc',
+        dashed: false,
     }
 
     render(): JSX.Element {
@@ -422,23 +574,32 @@ class AoIOverlay extends preact.Component<AoIOverlayProps> {
             return <></>
         
         let points:Point[] = this.props.$coordinates.value
-        if(points.length > 0)
+        // if more than a line, add a return point
+        // (no return on a line, creates artifacts with dashed lines)
+        if(points.length > 2)
             points = points.concat(points[0]!)
         
         const points_svg_str:string = points.map(
             (p:Point) => `${p.x}, ${p.y} `
         ).join(' ')
 
+
+        const dashlen0:number = 5 * this.props.$pt_per_px.value;
+        const dashlen1:number = 9 * this.props.$pt_per_px.value;
+        const dasharray:string = 
+            this.props.dashed? `${dashlen0}px, ${dashlen1}px` : 'none';
+        const [stroke_width_inner, stroke_width_outer] = this.#stroke_widths()
         const css_border_inner: JSX.CSSProperties = {
             stroke:          this.props.color0,
-            strokeWidth:     30,
-            //strokeDasharray: "50%, 50%",
+            strokeWidth:     stroke_width_inner,
+            strokeDasharray: dasharray,
             strokeLinecap:   'square',
             fill:            "none",
         }
         const css_border_outer = {
             stroke:         this.props.color1,
-            strokeWidth:    40,
+            strokeWidth:    stroke_width_outer,
+            strokeDasharray: dasharray,
             strokeLinecap:  'square',
             fill:           "none",
         }
@@ -456,6 +617,17 @@ class AoIOverlay extends preact.Component<AoIOverlayProps> {
             />
         </>
     }
+
+    #stroke_widths():[number, number] {
+        const desired_width:number = 4 * this.props.$pt_per_px.value
+        const smallest_size:number = 
+            Math.min(this.props.imagesize.width, this.props.imagesize.height) 
+        
+        const width_inner:number = Math.min(desired_width, smallest_size*0.03)
+        const width_outer:number = width_inner * 1.5;
+        return [width_inner, width_outer]
+    }
+
 }
 
 
@@ -465,6 +637,9 @@ type IntermediateAoIOverlayProps = {
 
     /** Whether to show this overlay */
     $active: Readonly<Signal<boolean>>;
+
+    /** SVG/viewpoint points per actually displayed pixel ratio */
+    $pt_per_px: Readonly<Signal<number>>;
 }
 
 /** An AoI that is currently being edited */
@@ -486,8 +661,10 @@ class IntermediateAoIOverlay extends preact.Component<IntermediateAoIOverlayProp
         return <>
             <AoIOverlay 
                 $coordinates = {this.$coordinates} 
-                color0 = "#aaaaaa" 
-                color1 = "white"
+                $pt_per_px   = {this.props.$pt_per_px}
+                imagesize    = {this.props.imagesize}
+                // deno-lint-ignore jsx-boolean-value
+                dashed = { true }
             />
         </>
     }
