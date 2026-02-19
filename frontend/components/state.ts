@@ -28,11 +28,16 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
     ): Promise<boolean>{
         const changed:boolean = await super.set_files(files_raw);
 
+        // after setting the files, add the current px_per_um value from settings
+        // FIXME: super-ugly
         for(const pair of this.$files.value){
             const result = pair.$result.value as CARROT_Result;
-            if(result.data && 'px_per_um' in result.data)
+            if(result.data && 'px_per_um' in result.data) {
                 result.data.px_per_um = 
                     this.$settings.value?.micrometer_factor ?? 1;
+                pair.$result.value = new CARROT_Result('processing')
+                pair.$result.value = result;
+            }
         }
 
         // saved results do not contain all information that is needed
