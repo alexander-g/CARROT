@@ -12,6 +12,7 @@ import {
 
 export type Point     = base.util.Point;
 export type PointPair = [Point,Point];
+type Vector = base.util.Vector;
 
 type TreeringsSVGOverlayProps = {
     /** Size of the corresponding input image, for svg viewbox */
@@ -108,6 +109,7 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
                 imagesize = {this.props.size}
                 $active   = {this.props.$aoi_edit_active}
                 $pt_per_px  = { this.$pt_per_px }
+                px_per_um   = { px_per_um }
             />
             {/* the currently active AoI in the result */}
             {
@@ -115,6 +117,8 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
                 <AoIOverlay 
                     $coordinates = { signals.computed( () => aoi_coordinates ) }
                     $pt_per_px   = { this.$pt_per_px }
+                    px_per_um    = { px_per_um }
+                    show_size_labels = {false}
                     imagesize    = { this.props.size }
                     $active = {
                         // active when not editing
@@ -197,6 +201,7 @@ type TreeringComponentProps = {
     /** The current zoom level of the image */
     $scale?: Readonly<Signal<number>>;
 
+    /** SVG/image points per actual browser pixels (depends on zoom) */
     $pt_per_px: Readonly<Signal<number>>;
 
     /** Pixels per um as set by user */
@@ -227,7 +232,7 @@ class TreeringComponent extends preact.Component<TreeringComponentProps> {
 
         const css_border = {
             stroke:         "white",
-            'stroke-width': "8",
+            'stroke-width': "8",    // TODO: should depend on pt_per_px
             fill:           "none",
         }
         const label_position:Point =
@@ -558,6 +563,12 @@ type AoIOverlayProps = {
 
     /** Make the rectangle outline dashed instead of solid. (Default: false) */
     dashed: boolean;
+
+    /** Pixels per um as set by user */
+    px_per_um: number;
+
+    /** Show length of width and height */
+    show_size_labels: boolean;
 }
 
 class AoIOverlay extends preact.Component<AoIOverlayProps> {
@@ -605,6 +616,8 @@ class AoIOverlay extends preact.Component<AoIOverlayProps> {
         }
 
         return <>
+            { this.#outer_dimmer() }
+
             <polyline 
                 class  = "area-of-interest-line-outer" 
                 points = {points_svg_str}
@@ -615,6 +628,30 @@ class AoIOverlay extends preact.Component<AoIOverlayProps> {
                 points = {points_svg_str}
                 style  = {css_border_inner}
             />
+            
+
+            {
+                (points.length >= 2 && this.props.show_size_labels)
+                ? <AoISizeLabel 
+                    p0 = {points[0]!} 
+                    p1 = {points[1]!} 
+                    $pt_per_px = {this.props.$pt_per_px} 
+                    px_per_um  = {this.props.px_per_um}
+                />
+                : null
+            }
+
+            {
+                (points.length >= 3 && this.props.show_size_labels)
+                ? <AoISizeLabel 
+                    p0 = {points[1]!} 
+                    p1 = {points[2]!} 
+                    $pt_per_px = {this.props.$pt_per_px}
+                    px_per_um  = {this.props.px_per_um} 
+                />
+                : null
+            }
+
         </>
     }
 
@@ -628,7 +665,234 @@ class AoIOverlay extends preact.Component<AoIOverlayProps> {
         return [width_inner, width_outer]
     }
 
+
+    #id = self.crypto.randomUUID();
+
+    /** A mask to dim everything outside of this AoI */
+    #outer_dimmer(): JSX.Element|null {
+        if(this.props.$coordinates.value.length < 3)
+            return null;
+
+        let points:Point[] = this.props.$coordinates.value
+        if(points.length > 2)
+            points = points.concat(points[0]!)
+        
+        const points_svg_str:string = points.map(
+            (p:Point) => `${p.x}, ${p.y} `
+        ).join(' ')
+
+        const mask_id = `mask-${this.#id}`
+
+        return <>
+            <mask id = {mask_id} mask-type="luminance">
+                <rect 
+                    x = "0" 
+                    y = "0" 
+                    width  = {this.props.imagesize.width} 
+                    height = {this.props.imagesize.height} 
+                    fill   = "white" 
+                />
+
+                <polyline 
+                    points = {points_svg_str}
+                    style  = { {fill:"black"} }
+                />
+            </mask>
+
+            <rect 
+                x = "0" 
+                y = "0" 
+                width   = {this.props.imagesize.width} 
+                height  = {this.props.imagesize.height} 
+                fill    = "black" 
+                opacity = "0.6" 
+                mask    = {`url(#${mask_id})`}
+            />
+        </>
+    }
 }
+
+
+
+class AoISizeLabel extends preact.Component<{
+    p0: Point,
+    p1: Point,
+
+    /** SVG/image points per actual browser pixels (depends on zoom) */
+    $pt_per_px: Readonly<Signal<number>>;
+
+    /** Pixels per um as set by user */
+    px_per_um: number;
+
+}> {
+    ref: preact.RefObject<SVGTextElement> = preact.createRef()
+
+    static id_counter = 0;
+    id: string = String(AoISizeLabel.id_counter++);
+
+    /** The computed length ang heigh of the text element */
+    $textlength_pt: Signal<number|undefined> = new Signal(undefined);
+    $textheight_pt: Signal<number|undefined> = new Signal(undefined);
+
+
+
+    render(): JSX.Element {
+        const path_id = `aoi-label-path-${this.id}`;
+        const filter_id = `filter=${this.id}`
+
+        const x0:number = this.props.p0.x;
+        const y0:number = this.props.p0.y;
+        const x1:number = this.props.p1.x;
+        const y1:number = this.props.p1.y;
+        const path_str = `M ${x0},${y0} L ${x1},${y1}`
+        
+        const cx:number = (x0 + x1) / 2
+        const cy:number = (y0 + y1) / 2
+        const center_str = `${cx} ${cy}`
+
+        const distance:number = base.util.distance(this.props.p0, this.props.p1)
+        const length_um:number = distance / this.props.px_per_um
+        const text:string = `${length_um.toFixed(1)}μm`
+
+        return <>
+            <path
+                id     = {path_id}
+                fill   = "none"
+                stroke = "none"
+                d      = {path_str} />
+            {/* http://stackoverflow.com/questions/15500894/ddg#31013492 */}
+            <defs>
+                <filter x="0" y="0" width="1" height="1" id ={filter_id}>
+                    <feFlood flood-color="white" result="bg" />
+                    <feMerge>
+                        <feMergeNode in="bg"/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+            </defs>
+            <polyline 
+                points = {this.$bg_polyline_coordinates_str}
+                fill   = "white" 
+                transform        = {this.#$scale_css } 
+                transform-origin = {center_str}
+            />
+            <text 
+                ref = {this.ref} 
+                text-anchor = "middle"
+                transform   = { this.#$scale_css } 
+                transform-origin = {center_str}
+                // filter = { `url(#${filter_id})` }
+            >
+                <textPath 
+                    // @ts-ignore yes href= does exist
+                    href = { "#"+path_id }  
+                    // dominant-baseline="hanging" 
+                    dominant-baseline = "middle"
+                    startOffset = "50%"
+                    fill        = "red" 
+                    font-weight = "bold"
+                    font-family = "monospace"
+                    // NOTE: not really relevant because scale() is auto-adjusted
+                    // but large values (1000px) cause truncation
+                    font-size = "1px"
+                >
+                    { text } 
+                </textPath>
+            </text>
+        </>
+    }
+
+    override componentDidMount(): void {
+        this.#update_textlength_pt()
+    }
+
+    override componentDidUpdate(): void {
+        this.#update_textlength_pt()
+    }
+
+    #update_textlength_pt = () => {
+        if(this.ref.current) {
+            // NOTE: getComputedTextLength is not affected by scale() css
+            this.$textlength_pt.value = this.ref.current.getComputedTextLength()
+            if(this.ref.current.getNumberOfChars() > 0) {
+                const degrees:number = this.ref.current.getRotationOfChar(0)
+                const radians:number = degrees / 180 * Math.PI;
+                const box:DOMRect = this.ref.current.getExtentOfChar(0)
+                // not quite correct, the height still changes depending on angle
+                // but seems good enough for now
+                this.$textheight_pt.value = (
+                    box.height * Math.abs(Math.cos(radians))
+                    + box.width * Math.abs(-Math.sin(radians))
+                )
+            }
+        }      
+    }
+
+    #$scale_css: Readonly<Signal<string>> = signals.computed( () => {
+        // try to keep size constant relative to visible portion of the image
+        const image_width_px:number = window.innerWidth;
+        const desired_width_px:number = 0.05 * image_width_px
+        const desired_width_pt:number = desired_width_px * this.props.$pt_per_px.value;
+
+        // constrained by a fraction of the image size
+        const image_size_pt:number = 1e9  //TODO: Math.min(image_size.width, image_size.height)
+        const max_width_pt:number = image_size_pt * 0.05;
+
+        // and constrained by the length of the line
+        const linelength_pt:number = base.util.distance(this.props.p0, this.props.p1)
+
+        const target_width:number = 
+            Math.min(desired_width_pt, max_width_pt, linelength_pt);
+        const scale:number = target_width / (this.$textlength_pt.value ?? 1)
+
+        return `scale(${isFinite(scale)? scale: 1.0})`;
+    });
+
+    $bg_rect_coordinates: Readonly<Signal<Point[]>> = signals.computed( () => {
+        const direction:Vector = base.util.normalize_vector(
+            base.util.direction_vector(this.props.p0, this.props.p1)
+        )
+        const orthogonal:Vector = base.util.orthogonal_vector(direction)
+
+        const x0:number = this.props.p0.x;
+        const x1:number = this.props.p1.x;
+        const y0:number = this.props.p0.y;
+        const y1:number = this.props.p1.y;
+
+        const line_center:Point = {
+            x: (x0 + x1) / 2,
+            y: (y0 + y1) / 2,
+        }
+
+        const width:number  = this.$textlength_pt.value ?? 0;
+        const height:number = this.$textheight_pt.value ?? 0;
+        const p0:Point = base.util.add_vectors(
+            base.util.add_vectors(
+                line_center,
+                base.util.scale_vector(direction, -width/2)
+            ),
+            base.util.scale_vector(orthogonal, height/2)
+        )
+        const p1:Point = 
+            base.util.add_vectors(p0, base.util.scale_vector(direction, width))
+        const p2:Point = 
+            base.util.add_vectors(p1, base.util.scale_vector(orthogonal, -height))
+        const p3:Point = 
+            base.util.add_vectors(p2, base.util.scale_vector(direction, -width))
+
+        return [p0,p1,p2,p3];
+    } )
+
+    $bg_polyline_coordinates_str: Readonly<Signal<string>> = signals.computed(() => {
+        const coordinates:Point[] = this.$bg_rect_coordinates.value;
+        const p0:Point = coordinates[0]!;
+        const p1:Point = coordinates[1]!;
+        const p2:Point = coordinates[2]!;
+        const p3:Point = coordinates[3]!;
+        return `${p0.x},${p0.y} ${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y}`
+    })
+}
+
 
 
 
@@ -640,6 +904,9 @@ type IntermediateAoIOverlayProps = {
 
     /** SVG/viewpoint points per actually displayed pixel ratio */
     $pt_per_px: Readonly<Signal<number>>;
+
+    /** Pixels per um as set by user */
+    px_per_um: number;
 }
 
 /** An AoI that is currently being edited */
@@ -649,8 +916,10 @@ class IntermediateAoIOverlay extends preact.Component<IntermediateAoIOverlayProp
 
     /** Reset coordinates when not active */
     #_ = this.props.$active.subscribe( (active:boolean) => {
-        if(!active)
+        if(!active) {
             this.$coordinates.value = [];
+            this.aoi_state = null;
+        }
     } )
 
     aoi_state:'1st-point'|'2nd-point'|'3rd-point'|'finished'|null = null;
@@ -662,7 +931,10 @@ class IntermediateAoIOverlay extends preact.Component<IntermediateAoIOverlayProp
             <AoIOverlay 
                 $coordinates = {this.$coordinates} 
                 $pt_per_px   = {this.props.$pt_per_px}
+                px_per_um    = {this.props.px_per_um}
                 imagesize    = {this.props.imagesize}
+                // deno-lint-ignore jsx-boolean-value
+                show_size_labels = {true}
                 // deno-lint-ignore jsx-boolean-value
                 dashed = { true }
             />
@@ -713,7 +985,7 @@ class IntermediateAoIOverlay extends preact.Component<IntermediateAoIOverlayProp
                             aoi_rect_from_3_points(p0, p1, p2)
                         this.$coordinates.value = aoi_points;
                     }
-                    else if(this.aoi_state == 'finished')
+                    else if(this.aoi_state == null || this.aoi_state == 'finished')
                         // stop the dragging process
                         return 'stop';
                     
