@@ -1,6 +1,9 @@
 name: Build Windows Binaries
 
 on:
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 
@@ -28,12 +31,6 @@ jobs:
         run: |
           ./deno.bat task cache
           pip install -r requirements.frozen.txt
-      
-
-      - name: DEBUG
-        run: |
-          python -c "import pkgutil, importlib; p=importlib.import_module('traininglib.datalib'); print(p.__file__)" 
-          python -c "import pkgutil, importlib; p=importlib.import_module('traininglib'); print(p.__file__)" 
         
       - name: Build
         run: python build.py --zip
@@ -44,3 +41,35 @@ jobs:
           name: binaries
           path: builds/*.zip
         if-no-files-found: error
+
+
+  integration_tests:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 60
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: build/
+
+      - run: |
+          ls
+          ls build/
+          unzip build/*.zip
+
+      - name: Run integration tests
+        shell: bash
+        run: |
+          MAINBAT=$(find ./ -name main.bat)
+          if [ -z "$MAINBAT" ]; then
+            echo "main.bat not found in artifact" >&2
+            exit 1
+          fi
+          CMD=$MAINBAT ./run_tests_integration.sh
+
+
+
