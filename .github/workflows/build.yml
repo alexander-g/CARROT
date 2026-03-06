@@ -40,7 +40,7 @@ jobs:
         with:
           name: binaries
           path: builds/*.zip
-        if-no-files-found: error
+          if-no-files-found: error
 
 
   integration_tests:
