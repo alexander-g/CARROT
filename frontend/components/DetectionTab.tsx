@@ -5,7 +5,8 @@ import {
     CARROT_Data,
     CARROT_Backend,
     UnfinishedCARROT_Result,
-    _zip_into_treerings
+    _zip_into_treerings,
+    AoIRect,
 } from "../lib/carrot_detection.ts"
 import { TreeringsSVGOverlay, PointPair } from "./TreeringsSVGOverlay.tsx"
 import { CARROT_ModelTypes } from "../lib/carrot_settings.ts";
@@ -50,6 +51,8 @@ type Box   = base.boxes.Box;
 type Point = base.util.Point;
 type ImageSize = base.util.ImageSize;
 
+type CARROT_EditingMode = CARROT_ModelTypes | 'aoi' | null;
+
 
 type GenericBackend = base.files.ProcessingModule<File, CARROT_Result>;
 
@@ -71,8 +74,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     canvas_ref: preact.RefObject<EditCanvas> = preact.createRef()
     edit_menu_ref: preact.RefObject<EditMenu> = preact.createRef()
     sam_modal_ref: preact.RefObject<SAM_Modal> = preact.createRef()
+    svg_overlay_ref: preact.RefObject<TreeringsSVGOverlay> = preact.createRef()
     
-    $active_editing_mode: Signal<CARROT_ModelTypes|null> = new Signal(null)
+    $active_editing_mode: Signal<CARROT_EditingMode> = new Signal(null)
     $editing_brush_size:  Signal<number> = new Signal(0)
     
     /** Whether to draw, erase or use SAM */
@@ -85,7 +89,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     /** Whether to show overlays */
     $overlays_visible:Readonly<Signal<boolean>> = signals.computed(() => {
         return this.$result_visible.value 
-        && (this.$active_editing_mode.value == null)
+        && this.$active_editing_mode.value != 'cells'
+        && this.$active_editing_mode.value != 'treerings'
     })
 
     /** Checkbox value, whether to show cells grouped by ring or individually */
@@ -114,6 +119,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     static sam_downloaded: boolean = false;
 
     $image_too_large_for_sam:Signal<boolean> = new Signal(false)
+    $aoi_disabled:Readonly<Signal<boolean>>  = signals.computed(
+        () => !('treeringmap' in this.props.$result.value.data)
+    )
 
 
     override result_overlays(): JSX.Element {
@@ -123,10 +131,14 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 $visible  = { this.$overlays_visible }
             />
             <TreeringsSVGOverlay 
+                ref  = { this.svg_overlay_ref }
                 size = { this.$og_imagesize.value ?? {height:0, width:0} }
                 $result = { this.props.$result }
                 $scale  = { this.$scale }
                 $visible = { this.$overlays_visible }
+                $aoi_edit_active = { signals.computed(
+                    () => this.$active_editing_mode.value == 'aoi'
+                )}
             />
             <EditCanvas 
                 ref = {this.canvas_ref} 
@@ -213,11 +225,13 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 on_apply = { this.on_apply_editing_changes }
                 on_clear = { () => this.canvas_ref.current?.clear() }
                 on_undo  = { () => this.canvas_ref.current?.undo() }
+                on_set_aoi_to_full_image    = {this.on_set_aoi_to_full_image}
                 on_reverse_growth_direction = {this.on_reverse_growth_direction}
-                $active_modality = { this.$active_editing_mode }
-                $drawing_mode = { this.$drawing_mode }
-                $brush_size  = { this.$editing_brush_size }
+                $active_modality   = { this.$active_editing_mode }
+                $drawing_mode      = { this.$drawing_mode }
+                $brush_size        = { this.$editing_brush_size }
                 $too_large_for_sam = { this.$image_too_large_for_sam }
+                $aoi_disabled      = { this.$aoi_disabled }
                 key = { 0 } // to make typescript happy
             />
         ]
@@ -227,27 +241,45 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     on_apply_editing_changes: () => Promise<boolean> = async () => {
         const backend:GenericBackend|CARROT_Backend|null = 
             this.props.$processingmodule.value
-        const mode:CARROT_ModelTypes|null = this.$active_editing_mode.value
+        const mode:CARROT_EditingMode = this.$active_editing_mode.value
         if(!(backend instanceof CARROT_Backend)
         || mode == null)
             return false;
-        const blob:Blob|null = await this.canvas_ref.current!.to_blob()
-        if(blob == null)
-            return false;
+
         
         const current_data:CARROT_Data = this.props.$result.value.data;
-        const filename = `${this.props.input.name}.${mode}.png`
-        const edited_file = new File([blob], filename)
-        const attribute:'cellmap'|'treeringmap'= 
-            mode == 'cells'? 'cellmap' : 'treeringmap';
+        let new_data:CARROT_Data = {...current_data}
+        
+        if(mode == 'aoi') {
+            console.trace('TODO: apply AoI changes')
+            const aoi_points:AoIRect|null = this.svg_overlay_ref.current!.get_aoi();
+
+            // for type safety
+            type AOITYPE_IN_DATA = Extract<CARROT_Data, { aoi: unknown }>['aoi']
+            const aoi:AOITYPE_IN_DATA = aoi_points;
+            new_data = {...new_data, aoi}
+        }
+
+
+        
+        if(mode == 'cells' || mode == 'treerings'){
+            const blob:Blob|null = await this.canvas_ref.current!.to_blob()
+            if(blob == null)
+                return false;
+            
+            const filename = `${this.props.input.name}.${mode}.png`
+            const edited_file = new File([blob], filename)
+            const attribute:string= {
+                'cells'    : 'cellmap',
+                'treerings': 'treeringmap',
+            }[mode];
+            new_data = {...new_data, [attribute]:edited_file}
+        }
 
         const unfinished_result: UnfinishedCARROT_Result = {
             status:    'processing',
             inputname: this.props.input.name,
-            data: {
-                ...current_data,
-                [attribute]:edited_file,
-            }
+            data: new_data
         }
         // awkward
         this.props.$result.value = new CARROT_Result('processing');
@@ -262,6 +294,10 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     on_reverse_growth_direction = () => {
         this.props.$result.value = 
             CARROT_Result.reverse_growth_direction(this.props.$result.value)
+    }
+
+    on_set_aoi_to_full_image = () => {
+        this.svg_overlay_ref.current!.set_aoi_to_full_image()
     }
 
     override input_image_css(): 
@@ -384,10 +420,10 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         // NOTE: starting onnx download first, because smaller, no await here
         const onnxfilepromise:Promise<Error|Response> = 
             base.util.fetch_no_throw(`proxy?url=${HARDCODED_ONNX_URL}`)
-        const encoderfile:File|Error = await fetch_with_progress(
+        const encoderfile:File|Error = await base.util.fetch_with_progress(
             new URL(`proxy?url=${HARDCODED_ENCODER_URL}`, self.location.origin),
-            (progress:{total:number, received:number}) => {
-                const percent:number = 100 * progress.received / progress.total;
+            (progress:{total:number|null, received:number}) => {
+                const percent:number = 100 * progress.received / progress.total!;
                 this.sam_modal_ref.current!.show_downloading(percent)
             }
         )
@@ -400,7 +436,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         const onnxfile = new File([await onnxfileresponse.blob()], HARDCODED_ONNX_FILENAME)
         const response1:Response|Error = 
             await base.util.upload_file_no_throw(onnxfile, `upload_model/sam/${HARDCODED_ONNX_FILENAME}`)
-        // TODO: check responses
+        // TODO: check responses!
 
         return true
     }
@@ -432,7 +468,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
 
 function _get_map_for_editmode(
-    mode:   CARROT_ModelTypes|null, 
+    mode:   CARROT_EditingMode, 
     result: CARROT_Result,
 ): File|null {
     if(mode == 'cells' && 'cellmap' in result.data)
@@ -442,51 +478,13 @@ function _get_map_for_editmode(
     return null;
 }
 
-async function fetch_with_progress(
-    url: URL,
-    on_progess: (x:{total:number, received:number}) => void
-): Promise<File|Error> {
-    const filename:string = 
-        url.pathname.substring(url.pathname.lastIndexOf('/') + 1);
-
-    const response:Response|Error = await base.util.fetch_no_throw(url);
-    if(response instanceof Error)
-        return response as Error;
-    
-    const total:number = Number(response.headers.get('content-length'));
-    if(!total) 
-        return new Error('Content-Length header missing');
-    
-    const reader:ReadableStreamDefaultReader<Uint8Array>|undefined = 
-        response.body?.getReader()
-    if(reader == undefined)
-        return new Error('Internal Error')
-    
-    let received:number = 0
-    const chunks:Uint8Array[] = []
-    while(true) {
-        try {
-            const {done, value} = await reader.read();
-            if(value != undefined){
-                chunks.push(value)
-                received += value.length
-                on_progess({total, received})
-            }
-            if(done)
-                return new File(chunks, filename)
-        } catch (error) {
-            return error as Error;
-        }
-    }
-}
-
 
 
 
 type EditMenuProps = {
-    /** @input The currently active drawing modality (cells/rings) 
+    /** @input-output The currently active drawing modality (cells/rings/aoi) 
      *  or `null` if not active. */
-    $active_modality: Signal<CARROT_ModelTypes|null>;
+    $active_modality: Signal<CARROT_EditingMode>;
 
     /** @output Whether to draw, erase or use SAM */
     $drawing_mode: Signal<DrawingMode>;
@@ -507,7 +505,14 @@ type EditMenuProps = {
     /** Callback, user wants to reverse the direction of tree rings */
     on_reverse_growth_direction: () => void;
 
+    /** Callback issued when user requests to set the AoI the the full image */
+    on_set_aoi_to_full_image: () => void;
+
+    /** @input If true, the "Segment Anything" button will be disabled */
     $too_large_for_sam: Readonly<Signal<boolean>>;
+
+    /** @input If true, "Edit Area of Interest" will be disabled */
+    $aoi_disabled: Readonly<Signal<boolean>>;
 }
 
 class EditMenu extends preact.Component<EditMenuProps> {
@@ -520,16 +525,16 @@ class EditMenu extends preact.Component<EditMenuProps> {
     )
 
     $editing_active: Readonly<Signal<boolean>> = signals.computed(
-        () => ['cells', 'treerings'].includes(
+        () => ['cells', 'treerings', 'aoi'].includes(
             // @ts-ignore stupid typescript
             this.props.$active_modality.value
         )
     )
 
 
-    render(_props:EditMenuProps): JSX.Element {
-        const sam_button_tooltip:string|undefined = 
-            _props.$too_large_for_sam.value? "Image too large" : undefined;
+    render(props:EditMenuProps): JSX.Element {
+        // const sam_button_tooltip:string|undefined = 
+        //     props.$too_large_for_sam.value? "Image too large" : undefined;
         
         return (
         <div class={
@@ -547,7 +552,7 @@ class EditMenu extends preact.Component<EditMenuProps> {
                     $highlighted = { signals.computed( 
                         () => this.props.$active_modality.value == 'cells' ) 
                     }
-                    on_click = {this.on_edit_cells}
+                    on_click = { () => this.activate_mode('cells') }
                 />
                 <MenuButton 
                     label = 'Edit tree rings'
@@ -560,7 +565,22 @@ class EditMenu extends preact.Component<EditMenuProps> {
                     $highlighted = { signals.computed( 
                         () => this.props.$active_modality.value == 'treerings' ) 
                     }
-                    on_click = {this.on_edit_treerings}
+                    on_click = { () => this.activate_mode('treerings') }
+                />
+                <MenuButton 
+                    label = 'Edit area of interest'
+                    // icon  = 'vector square'
+                    icon  = 'expand'
+                    $visible = { signals.computed(
+                        () => ['aoi', null].includes(
+                            this.props.$active_modality.value
+                        )
+                    ) }
+                    $highlighted = { signals.computed( 
+                        () => this.props.$active_modality.value == 'aoi' ) 
+                    }
+                    $disabled = { this.props.$aoi_disabled }
+                    on_click = { () => this.activate_mode('aoi') }
                 />
                 <MenuButton 
                     label = 'Reverse growth direction'
@@ -572,63 +592,19 @@ class EditMenu extends preact.Component<EditMenuProps> {
                     on_click = {this.props.on_reverse_growth_direction}
                 />
         
-                <MenuDivider $visible={this.$editing_active} />
-                <MenuDivider $visible={this.$editing_active} />
-                <MenuButton 
-                    label = 'Paint'
-                    icon  = 'paint brush'
-                    $visible = { this.$editing_active }
-                    $highlighted = { signals.computed(
-                        () => this.props.$drawing_mode.value == 'brush'
-                    ) }
-                    on_click = {() => this.props.$drawing_mode.value = 'brush'}
+                {/* visible only if edit mode is active */}
+                <EditSubMenu_CellsTreerings 
+                    $active_modality   = {props.$active_modality}
+                    $drawing_mode      = {props.$drawing_mode}
+                    $brush_size        = {props.$brush_size}
+                    $too_large_for_sam = {props.$too_large_for_sam}
+                    on_undo            = {props.on_undo}
                 />
-                <MenuButton 
-                    label = 'Erase'
-                    icon  = 'eraser'
-                    $visible = { this.$editing_active }
-                    $highlighted = { signals.computed(
-                        () => this.props.$drawing_mode.value == 'erase'
-                    ) }
-                    on_click = {() => this.props.$drawing_mode.value = 'erase'}
+                <EditSubMenu_AoI 
+                    $active_modality     = {props.$active_modality} 
+                    on_set_to_full_image = { props.on_set_aoi_to_full_image }
                 />
-                <MenuButton 
-                    label = 'Segment Anything'
-                    icon  = 'magic'
-                    $visible = { signals.computed(
-                        () => this.props.$active_modality.value == 'cells'
-                    ) }
-                    $highlighted = { signals.computed(
-                        () => this.props.$drawing_mode.value == 'sam'
-                    ) }
-                    on_click = {() => this.props.$drawing_mode.value = 'sam'}
-                    tooltip  = { sam_button_tooltip }
-                    $disabled = { _props.$too_large_for_sam }
-                />
-        
-                <MenuDivider $visible={this.$editing_active} />
-                <MenuButton 
-                    label = 'Brush size'
-                    icon  = 'brush'
-                    $visible = { signals.computed(
-                        () => this.$editing_active.value 
-                            && this.props.$drawing_mode.value != 'sam'
-                    ) }
-                > 
-                    <div 
-                        class = "ui slider brush-size-slider" 
-                        style = "padding:0px; padding-top:5px;"
-                        ref   = {this.brush_size_slider}
-                    ></div>
-                </MenuButton>
 
-                <MenuDivider $visible={this.$editing_active} />
-                <MenuButton 
-                    label = 'Undo'
-                    icon  = 'undo'
-                    $visible = { this.$editing_active }
-                    on_click = {this.on_undo}
-                />
             
                 <MenuDivider $visible={this.$editing_active} />
                 <MenuButton 
@@ -648,27 +624,8 @@ class EditMenu extends preact.Component<EditMenuProps> {
         )
     }
 
-    override componentDidMount(): void {
-        const starting_brush_size = 10
-        this.props.$brush_size.value = starting_brush_size
-        $(this.brush_size_slider.current)
-            .slider({
-                min:   0,
-                max:   60,
-                start: starting_brush_size,
-                onChange: (x:number) => this.props.$brush_size.value = x
-            })
-    }
 
-    on_edit_cells = () => {
-        this.activate_mode('cells')
-    }
-
-    on_edit_treerings = () => {
-        this.activate_mode('treerings')
-    }
-
-    activate_mode(mode:CARROT_ModelTypes) {
+    activate_mode(mode:Exclude<CARROT_EditingMode, null>) {
         this.on_clear()
         this.props.$active_modality.value = mode;
     }
@@ -687,11 +644,149 @@ class EditMenu extends preact.Component<EditMenuProps> {
         if(status)
             this.on_clear()
     }
+}
 
-    on_undo = async () => {
-        await this.props.on_undo()
+
+
+type EditSubMenu_CellsTreeringsProps = {
+    /** @input The currently active drawing modality (cells/rings/aoi) 
+     *  or `null` if not active. */
+    $active_modality: Readonly<Signal<CARROT_EditingMode>>;
+
+    /** @output Whether to draw, erase or use SAM */
+    $drawing_mode: Signal<DrawingMode>;
+
+    /** @output The brush size as selected by the user in the slider */
+    $brush_size: Signal<number>;
+
+    /** Called when user clicks on the undo button */
+    on_undo: () => unknown;
+
+    /** @input If true, the "Segment Anything" button will be disabled */
+    $too_large_for_sam: Readonly<Signal<boolean>>;
+}
+
+/** A part of the editing menu that is only shown when editing cells or treerings */
+class EditSubMenu_CellsTreerings extends preact.Component<EditSubMenu_CellsTreeringsProps>{
+
+    /** @input Whether to show this submenu */
+    $active: Readonly<Signal<boolean>> = signals.computed( () => {
+        return this.props.$active_modality.value == 'cells'
+            || this.props.$active_modality.value == 'treerings';
+    } )
+
+    brush_size_slider:preact.RefObject<HTMLDivElement> = preact.createRef()
+
+    render(): JSX.Element {
+        const sam_button_tooltip:string|undefined = 
+            this.props.$too_large_for_sam.value? "Image too large" : undefined;
+
+        return <>
+            <MenuDivider $visible={this.$active} />
+            <MenuDivider $visible={this.$active} />
+            <MenuButton 
+                label = 'Paint'
+                icon  = 'paint brush'
+                $visible = { this.$active }
+                $highlighted = { signals.computed(
+                    () => this.props.$drawing_mode.value == 'brush'
+                ) }
+                on_click = {() => this.props.$drawing_mode.value = 'brush'}
+            />
+            <MenuButton 
+                label = 'Erase'
+                icon  = 'eraser'
+                $visible = { this.$active }
+                $highlighted = { signals.computed(
+                    () => this.props.$drawing_mode.value == 'erase'
+                ) }
+                on_click = {() => this.props.$drawing_mode.value = 'erase'}
+            />
+            <MenuButton 
+                label = 'Segment Anything'
+                icon  = 'magic'
+                $visible = { signals.computed(
+                    () => this.props.$active_modality.value == 'cells'
+                ) }
+                $highlighted = { signals.computed(
+                    () => this.props.$drawing_mode.value == 'sam'
+                ) }
+                on_click = {() => this.props.$drawing_mode.value = 'sam'}
+                tooltip  = { sam_button_tooltip }
+                $disabled = { this.props.$too_large_for_sam }
+            />
+
+            <MenuDivider $visible={this.$active} />
+            <MenuButton 
+                label = 'Brush size'
+                icon  = 'brush'
+                $visible = { signals.computed(
+                    () => this.$active.value 
+                        && this.props.$drawing_mode.value != 'sam'
+                ) }
+            > 
+                <div 
+                    class = "ui slider brush-size-slider" 
+                    style = "padding:0px; padding-top:5px;"
+                    ref   = {this.brush_size_slider}
+                ></div>
+            </MenuButton>
+
+            <MenuDivider $visible={this.$active} />
+            <MenuButton 
+                label = 'Undo'
+                icon  = 'undo'
+                $visible = { this.$active }
+                on_click = {this.props.on_undo}
+            />
+        </>
+    }
+
+    override componentDidMount(): void {
+        const starting_brush_size = 10
+        this.props.$brush_size.value = starting_brush_size
+        $(this.brush_size_slider.current)
+            .slider({
+                min:   0,
+                max:   60,
+                start: starting_brush_size,
+                onChange: (x:number) => this.props.$brush_size.value = x
+            })
     }
 }
+
+
+type EditSubMenu_AoI_Props = {
+    /** @input The currently active drawing modality (cells/rings/aoi) 
+     *  or `null` if not active. */
+    $active_modality: Readonly<Signal<CARROT_EditingMode>>;
+
+    /** Callback issued when user requests to set the AoI the the full image */
+    on_set_to_full_image: () => void;
+}
+
+/** A part of the editing menu that is only shown when editing cells or treerings */
+class EditSubMenu_AoI extends preact.Component<EditSubMenu_AoI_Props> {
+
+    /** @input Whether to show this submenu */
+    $active: Readonly<Signal<boolean>> = signals.computed( () => {
+        return this.props.$active_modality.value == 'aoi';
+    } )
+
+
+    render(): JSX.Element {
+        return <>
+            <MenuDivider $visible={this.$active} />
+            <MenuButton 
+                label = 'Set to full image'
+                icon  = 'vector square'
+                $visible = { this.$active }
+                on_click = {this.props.on_set_to_full_image}
+            />
+        </>
+    }
+}
+
 
 
 
@@ -739,7 +834,7 @@ function MenuDivider(props:{
 type EditCanvasProps = {
     /** @input The currently active drawing modality (cells/rings) 
      *  or `null` if not active. */
-    $active_modality: Readonly< Signal<CARROT_ModelTypes|null> >;
+    $active_modality: Readonly< Signal<CARROT_EditingMode> >;
     
     /** @input Whether to draw, erase or use SAM */
     $drawing_mode: Readonly< Signal<DrawingMode> >;
@@ -760,11 +855,18 @@ type EditCanvasProps = {
 class EditCanvas extends preact.Component<EditCanvasProps> {
     ref: preact.RefObject<HTMLCanvasElement> = preact.createRef()
 
+    /** @input Whether the canvas should be drawing */
+    $active: Readonly<Signal<boolean>> = signals.computed( 
+        () => (this.props.$active_modality.value == 'cells'
+            || this.props.$active_modality.value == 'treerings'
+        )
+    )
+
     /** The full image is stored after each modification in here. */
     undo_history: Blob[] = [];
 
     /** Clear the undo_history on every mode change */
-    #_ = this.props.$active_modality.subscribe( () => {
+    #_ = this.$active.subscribe( () => {
         this.undo_history = [];
     } )
 
@@ -772,7 +874,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         let canvas: JSX.Element|null = null
 
         // TODO: need to paste previous result onto canvas
-        if(this.props.$active_modality.value != null){
+        if(this.$active.value){
             const css:JSX.CSSProperties = {
                 ...base.styles.overlay_css,
                 // TODO: maybe no cursor at all, bc of the rendering offset issue
@@ -841,7 +943,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
 
     on_mousedown = async (mousedown_event:MouseEvent): Promise<boolean> => {
         if(this.ref.current == null
-        || this.props.$active_modality.value == null)
+        || !this.$active.value)
             return false;
         
         // ignore if shift key is pressed; user wants to move the image

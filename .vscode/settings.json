@@ -1,0 +1,8 @@
+{
+    "deno.path": "./deno.sh",
+    "deno.config": "./deno.jsonc",
+    "search.exclude": {
+        "base/frontend/thirdparty/": true,
+        "carrot_ml": true
+    }
+}
