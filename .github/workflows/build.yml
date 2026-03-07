@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          #cache: 'pip' # caching pip dependencies
+          cache: 'pip' # caching pip dependencies
 
       - name: WORKAROUND UNTIL I HAVE A BETTER SOLUTION
         run: |
@@ -56,20 +56,31 @@ jobs:
           name: binaries
           path: build/
 
-      - run: |
+      - name: Unzip
+        shell: bash
+        run: |
           ls
           ls build/
-          unzip build/*.zip
+          #unzip build/*.zip
+          for f in build/*.zip; do unzip -o "$f" -d build/extracted/; done
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - run: pip install pytest
 
       - name: Run integration tests
         shell: bash
         run: |
-          MAINBAT=$(find ./ -name main.bat)
+          MAINBAT=$(find build/extracted -name main.bat)
           if [ -z "$MAINBAT" ]; then
             echo "main.bat not found in artifact" >&2
             exit 1
           fi
-          CMD=$MAINBAT ./run_tests_integration.sh
-
-
+          # forward slashes to backward slashes
+          MAINBATWINPATH="${MAINBAT//\//\\}"
+          CMD="cmd.exe /c ${MAINBATWINPATH}"
+          echo "CMD=${CMD}"
+          CMD=$CMD ./run_tests_integration.sh
 

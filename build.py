@@ -57,14 +57,6 @@ os.remove('./main.spec')
 if args.zip:
     shutil.rmtree(build_dir+'/cache', ignore_errors=True)
 
-    print('Zipping update package...')
-    files_to_zip  = []
-    files_to_zip += [os.path.join(build_dir, 'main', 'main.exe')]
-    files_to_zip += glob.glob(os.path.join(build_dir, 'static/**'), recursive=True)
-    with zipfile.ZipFile(build_dir+'.update.zip', 'w') as archive:
-        for f in files_to_zip:
-            archive.write(f, f.replace(build_dir, ''))
-
     print('Zipping full package...')
     shutil.make_archive(build_dir, "zip", build_dir)
 

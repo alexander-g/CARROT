@@ -35,7 +35,7 @@ def _terminate_windows(p):
 @pytest.fixture
 def subprocess_fixture(request:_pytest.fixtures.SubRequest):
     cmd = request.param.get("cmd")
-    shell = request.param.get("shell", True)
+    shell = request.param.get("shell", False)
     cwd = request.param.get("cwd", None)
     env = request.param.get("env", None)
 
@@ -43,6 +43,7 @@ def subprocess_fixture(request:_pytest.fixtures.SubRequest):
         kw = {'creationflags':subprocess.CREATE_NEW_PROCESS_GROUP} # type: ignore
     else:
         kw = {'preexec_fn':os.setsid}
+
 
     p = subprocess.Popen(cmd, shell = shell, cwd = cwd, env = env, **kw)
     yield p
