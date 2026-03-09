@@ -1,6 +1,7 @@
 @echo off
 setlocal
 
+SET PYTHONUNBUFFERED=1
 SET ROOT_PATH=%~dp0
 
 rem check if we are running from within a zip archive
@@ -10,7 +11,10 @@ if %errorlevel% equ 0 (
     pause
     exit /b
 ) 
-
 rem else run normally
+
+rem change working directory to bash script
+pushd "%~dp0"
+
 main\main.exe
 pause

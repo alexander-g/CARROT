@@ -31,4 +31,4 @@ if is_win:
 
 # collect library-wide utility extension modules
 hiddenimports = ['scipy._lib.%s' % m for m in [
-    'messagestream', "_ccallback_c", "_fpumode"]]
+    'messagestream', "_ccallback_c", "_fpumode", "array_api_compat.numpy.fft"]]
