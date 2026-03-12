@@ -1067,7 +1067,11 @@ extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Sett
     /** Process an image with the segment-anything encoder */
     abstract sam_encode(image:File): Promise<Float32Array|Error>;
 
-    // abstract add_aoi()
+    /** Process an image with the segment-anything v3 model */
+    abstract sam3_encode_decode(
+        image:File, 
+        box:  base.boxes.Box
+    ): Promise<Uint8Array|Error>;
 }
 
 export function validate_CARROT_Backend(x:unknown): CARROT_Backend|null {
@@ -1353,13 +1357,41 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             return upload_ok as Error
         
         const url:string = `sam_encode/${image.name}`                           // TODO: px/um
-        const sam_response:Response|Error = 
-            await base.util.fetch_no_throw(url)
+        const sam_response:Response|Error = await base.util.fetch_no_throw(url)
         if(sam_response instanceof Error)
             return sam_response as Error
         
+        // TODO: verify size of the buffer
         return new Float32Array(await sam_response.arrayBuffer())
     }
+
+    override async sam3_encode_decode(
+        image: File, 
+        box:   base.boxes.Box
+    ): Promise<Uint8Array|Error> {
+        const upload_ok:Response|Error = 
+            await base.util.upload_file_no_throw(image)
+        if(upload_ok instanceof Error)
+            return upload_ok as Error
+        
+        const boxtuple:[number,number,number,number] = [box.x0, box.y0, box.x1, box.y1]
+        const boxtuple_str:string = JSON.stringify(boxtuple)
+        const GET_params:string = new URLSearchParams({box: boxtuple_str}).toString()
+        const url:string = `sam3/${image.name}?${GET_params}`                           // TODO: px/um
+        const sam3_response:Response|Error = await base.util.fetch_no_throw(url)
+        if(sam3_response instanceof Error)
+            return sam3_response as Error
+        
+        // TODO: verify size of the buffer
+        const result = new Uint8Array(await sam3_response.arrayBuffer())
+
+        let sum:number = 0;
+        for(const i of result)
+            sum += i;
+        console.log('sam3 result:', result.length, sum)
+        return result;
+    }
+
 
     /** Mask is not resized to og shape in the wasm function.
         Instead launching a manual resize operation in the background. */

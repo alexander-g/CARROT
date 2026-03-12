@@ -46,7 +46,7 @@ class CARROT_DetectionTab extends base.detectiontab.DetectionTab<CARROT_State> {
 
 
 
-type DrawingMode = 'brush' | 'erase' | 'sam';
+type DrawingMode = 'brush' | 'erase' | 'sam' | 'sam3';
 type Box   = base.boxes.Box;
 type Point = base.util.Point;
 type ImageSize = base.util.ImageSize;
@@ -320,6 +320,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         // TODO: clear cursor when activating sam
         if(mode == 'sam')
             this.on_sam_activate(this.#_prev_drawing_mode)
+        // else if(mode == 'sam3')
+        //     this.on_sam3_activate(this.#_prev_drawing_mode)
         
         this.#_prev_drawing_mode = mode;
     } )
@@ -329,7 +331,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     #sam_embeddings?:Float32Array;
     #sam_orig_im_size?:base.util.ImageSize;
 
-    // TODO:
     on_sam_activate = async (prev_mode:DrawingMode) => {
         const backend:GenericBackend|CARROT_Backend|null = 
             this.props.$processingmodule.value
@@ -414,6 +415,19 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         await this.sam_modal_ref.current!.close()
     }
 
+    // on_sam3_activate = async (prev_mode:DrawingMode) => {
+    //     const backend:GenericBackend|CARROT_Backend|null = 
+    //         this.props.$processingmodule.value
+    //     if(!(backend instanceof CARROT_Backend)){
+    //         console.error('Processing backend is not a CARROT backend', backend)
+    //         this.$drawing_mode.value = prev_mode;
+    //         return;
+    //     }
+
+    //     await backend.sam3_encode_decode(this.props.input)
+    // }
+
+
     async _download_sam(): Promise<boolean> {
         await this.sam_modal_ref.current!.show_downloading()
 
@@ -442,6 +456,15 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     }
 
     on_sam_new_box = async (box:Box) => {
+        if(this.$drawing_mode.value == 'sam')
+            this.on_sam1_new_box(box)
+        else if(this.$drawing_mode.value == 'sam3')
+            this.on_sam3_new_box(box)
+        else
+            console.error(`Unexpected drawing mode ${this.$drawing_mode.value}`)
+    }
+
+    on_sam1_new_box = async (box:Box) => {
         // send embeddings + box to onnx
         if(!this.#sam_embeddings 
         || !sam_onnx_session 
@@ -463,6 +486,33 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
         console.log('SAM:', box, output.mask.shape)
         this.canvas_ref.current!.sam_paste_result(output.mask.data, this.#sam_orig_im_size)
+    }
+
+    on_sam3_new_box = async (box:Box) => {
+        const backend:GenericBackend|CARROT_Backend|null = 
+            this.props.$processingmodule.value
+        if(!(backend instanceof CARROT_Backend)){
+            console.error('Processing backend is not a CARROT backend', backend)
+            return;
+        }
+
+        const imsize:base.util.ImageSize|Error = 
+            await base.imagetools.read_image_size(this.props.input)
+        if(imsize instanceof Error){
+            console.error('Failed to read image size')
+            return 
+        }
+
+        // TODO: awkward
+        const result0 = this.props.$result.value;
+        this.props.$result.value = new CARROT_Result('processing');
+        const output:Uint8Array|Error = 
+            await backend.sam3_encode_decode(this.props.input, box)
+        this.props.$result.value = result0;
+        if(output instanceof Error)
+            return output;
+        
+        this.canvas_ref.current!.sam_paste_result(output, imsize)
     }
 }
 
@@ -715,6 +765,19 @@ class EditSubMenu_CellsTreerings extends preact.Component<EditSubMenu_CellsTreer
                 tooltip  = { sam_button_tooltip }
                 $disabled = { this.props.$too_large_for_sam }
             />
+            <MenuButton 
+                label = 'Segment Anything 3'
+                icon  = 'magic'
+                $visible = { signals.computed(
+                    () => this.props.$active_modality.value == 'cells'
+                ) }
+                $highlighted = { signals.computed(
+                    () => this.props.$drawing_mode.value == 'sam3'
+                ) }
+                on_click = {() => this.props.$drawing_mode.value = 'sam3'}
+                tooltip  = { sam_button_tooltip }
+                //$disabled = { this.props.$too_large_for_sam }0
+            />
 
             <MenuDivider $visible={this.$active} />
             <MenuButton 
@@ -954,7 +1017,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         if(ctx == null)
             return false;
         
-        if(this.props.$drawing_mode.value == 'sam')
+        if(['sam', 'sam3'].includes(this.props.$drawing_mode.value))
             return await this._sam_mousedown(mousedown_event, ctx)
         else
             return await this._brush_mousedown(mousedown_event, ctx)

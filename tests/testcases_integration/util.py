@@ -1,10 +1,24 @@
 import os
 import signal
+import socket
 import subprocess
 import sys
+import time
 
 import pytest
 import _pytest
+
+
+
+DEFAULT_CMD = f"{sys.executable} -u main.py"
+CMD = os.environ.get('CMD', default=DEFAULT_CMD).split(' ')
+
+fixture = pytest.mark.parametrize(
+    "subprocess_fixture",
+    [ {"cmd":CMD} ],
+    indirect=True
+)
+
 
 
 IS_WINDOWS = sys.platform.startswith("win")
@@ -52,5 +66,18 @@ def subprocess_fixture(request:_pytest.fixtures.SubRequest):
         _terminate_windows(p)
     else:
         _terminate_posix(p)
+
+
+
+def wait_until_port_available(host:str, port:int, timeout=30, interval=1):
+    deadline = time.time() + timeout
+    while True:
+        try:
+            with socket.create_connection((host, port), timeout=interval):
+                return True
+        except OSError:
+            if time.time() > deadline:
+                raise TimeoutError(f"{host}:{port} not available after {timeout}s")
+            time.sleep(interval)
 
 

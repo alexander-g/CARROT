@@ -1,5 +1,6 @@
 import inspect
 import json
+import time
 import typing as tp
 
 from base.backend.pubsub import PubSub
@@ -11,6 +12,7 @@ from carrot_ml.src import cc_postprocessing, treerings_clustering_legacy
 
 import threading, pickle, os
 import numpy as np
+import onnxruntime as ort
 import PIL.Image
 PIL.Image.MAX_IMAGE_PIXELS = None
 import tifffile
@@ -18,6 +20,9 @@ import torch
 
 # NOTE: np.bool got removed in numpy v 1.20, but used by some older models
 np.bool = np.bool_          # type: ignore
+
+# x0,y0,x1,y0
+Box = tp.Tuple[float, float, float, float]
 
 
 def write_image(path:str, x:np.ndarray):
@@ -207,3 +212,86 @@ def sam_encode(imagepath:str) -> np.ndarray:
     )
     output = sam_encoder(imagedata).detach()
     return output.numpy()
+
+
+
+HARDCODED_SAM3_IMAGE_ENCODER_PATH = 'models/sam3/sam3_image_encoder.onnx'
+HARDCODED_SAM3_DECODER_PATH = 'models/sam3/sam3_decoder-with-boxfeats.onnx'
+
+VERY_VERY_HARDCODED_LANGUAGE_FEATURES_PATH = './language_features.bytes'
+VERY_VERY_HARDCODED_LANGUAGE_MASK_PATH = './language_mask.bytes'
+
+def sam3_encode_decode(imagepath:str, box:Box):
+    session_image  = ort.InferenceSession(HARDCODED_SAM3_IMAGE_ENCODER_PATH)
+    session_decode = ort.InferenceSession(HARDCODED_SAM3_DECODER_PATH)
+
+    language_features = np.frombuffer(
+        open(VERY_VERY_HARDCODED_LANGUAGE_FEATURES_PATH, 'rb').read(),
+        dtype = 'float32'
+    ).reshape([32, 1, 256])
+    language_mask = np.frombuffer(
+        open(VERY_VERY_HARDCODED_LANGUAGE_MASK_PATH, 'rb').read(),
+        dtype = 'bool'
+    ).reshape([1, 32])
+
+    image_og = PIL.Image.open(imagepath).convert('RGB')
+    size_og  = image_og.size
+    image_resized = image_og.resize([1008, 1008])
+    image_data = np.array(image_resized).transpose(2,0,1)
+
+    t0 = time.time()
+    encoder_output = session_image.run(None, {"image": image_data})
+    t1 = time.time()
+    print('SAM3 image encoding time: ', t1-t0)
+
+
+    box_feats = encoder_output[5]
+    vision_pos_enc2, bb_fpn0, bb_fpn1, bb_fpn2 = encoder_output[2:6]
+    relbox = convert_box_to_relative_cxcywh(box, (0,0)+size_og )
+
+    decoder_output = session_decode.run(
+        None,
+        {
+            "original_height": np.array(size_og[1], dtype=np.int64),
+            "original_width":  np.array(size_og[0], dtype=np.int64),
+            "backbone_fpn_0":  bb_fpn0,
+            "backbone_fpn_1":  bb_fpn1,
+            "backbone_fpn_2":  bb_fpn2,
+            "vision_pos_enc_2":  vision_pos_enc2,
+            "language_mask":     language_mask,
+            "language_features": language_features,
+            "box_coords": np.array(relbox).reshape(1,1,4).astype('float32'),
+            "box_labels": np.array([[1]], dtype=np.int64),
+            "box_masks":  np.array([[False]], dtype=np.bool_),
+            
+            'box_feats': box_feats,
+        },
+    )
+    t2 = time.time()
+    print('SAM3 decoding time: ', t2-t1)
+
+    boxes  = decoder_output[0]
+    scores = decoder_output[1]
+    masks  = decoder_output[2]
+    if len(boxes) > 0:
+        print('dbg:', len(boxes), scores.min(), masks.reshape(len(boxes), -1).sum(-1).min()**0.5, masks.reshape(len(boxes), -1).sum(-1).max()**0.5 )
+
+    mask = masks.any(0)[0]
+    outputpath = imagepath + '.sam3.png'
+    PIL.Image.fromarray(mask).save(outputpath)
+
+    return mask
+
+
+
+def convert_box_to_relative_cxcywh(box:Box, relative_to:Box) -> Box:
+    W = abs(relative_to[0] - relative_to[2])
+    H = abs(relative_to[1] - relative_to[3])
+
+    cx = (box[0] + box[2])/2 - relative_to[0]
+    cy = (box[1] + box[3])/2 - relative_to[1]
+    w  = abs(box[0] - box[2])
+    h  = abs(box[1] - box[3])
+
+    return (cx/W, cy/H, w/W, h/H) 
+

@@ -8,31 +8,8 @@ import urllib.request
 
 import pytest
 
-from util import subprocess_fixture
+from util import subprocess_fixture, wait_until_port_available, fixture
 
-
-#DEFAULT_CMD = [sys.executable, "-u", "main.py"]
-DEFAULT_CMD = f"{sys.executable} -u main.py"
-CMD = os.environ.get('CMD', default=DEFAULT_CMD).split(' ')
-print('CMD:', CMD)
-
-fixture = pytest.mark.parametrize(
-    "subprocess_fixture",
-    [ {"cmd":CMD} ],
-    indirect=True
-)
-
-
-def wait_until_port_available(host:str, port:int, timeout=30, interval=1):
-    deadline = time.time() + timeout
-    while True:
-        try:
-            with socket.create_connection((host, port), timeout=interval):
-                return True
-        except OSError:
-            if time.time() > deadline:
-                raise TimeoutError(f"{host}:{port} not available after {timeout}s")
-            time.sleep(interval)
 
 
 @fixture
