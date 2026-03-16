@@ -61,7 +61,17 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
             return changed;
         }
 
-        for(const pair of unfinished_results){
+        // NOTE: not waiting for the promise to finish
+        // so that the settings modal is shown immediately
+        const _promise:Promise<void> = 
+            this.#_postprocess_unfinished_results(unfinished_results, backend);
+
+        return changed;
+    }
+
+    #_postprocess_unfinished_results = 
+    async (results:BaseInputResultPair[], backend:CARROT_Backend ) =>  {
+        for(const pair of results) {
             const result = pair.$result.value;
 
             if(result instanceof CARROT_Result
@@ -82,7 +92,6 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
                 console.error('Unexpected unfinished result:', result)
             }
         }
-        return changed;
     }
 
     // a terrible way to update micrometer values

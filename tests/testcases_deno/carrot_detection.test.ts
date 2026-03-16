@@ -39,10 +39,11 @@ Deno.test('CARROT_Result.full.export-import', async () => {
         treeringmap: new File(['...'], 'tringmap.png'),
         cells:[
             {id:2, area:777, position_within:0.5, year_index:0, box_xy:[10,10,30,30]},
+            {id:3, area:555, position_within:0.8, year_index:0, box_xy:[30,30,50,50]},
         ],
         treerings:[{
             coordinates:[ 
-                [{x:0,y:0}, {x:10,y:10}], [{x:5,y:5}, {x:15,y:15}] 
+                [{x:0,y:0}, {x:10,y:10}], [{x:5,y:2}, {x:15,y:12}] 
             ],
             year:2222
             },
@@ -102,6 +103,58 @@ Deno.test('CARROT_Result.full.export-import', async () => {
     
     asserts.assertEquals(imported.data.reversed_growth_direction, data0.reversed_growth_direction)
     asserts.assertEquals(imported.data.aoi, data0.aoi)
+
+
+
+
+    const cells_csv_text:string = await exported[`${inputname}.cell_statistics.csv`]?.text()!
+    const cells_csv_lines:string[] = cells_csv_text.trim().split('\n')
+    const cells_csv_items:string[][] = cells_csv_lines.map( line => line.split(',') )
+    asserts.assertEquals( 
+        1, 
+        (new Set( cells_csv_items.map( item => item.length ) )).size , 
+        'lines in cells csv file have different number of items'
+    )
+    // lumen area in um2
+    asserts.assertAlmostEquals( Number(cells_csv_items[1]![4]!),  345.33, /*tolerance=*/0.1, )
+
+    // cell diameter in um
+    asserts.assertAlmostEquals( Number(cells_csv_items[1]![6]!),  20.96, /*tolerance=*/0.1 )
+
+
+
+    const rings_csv_text:string = await exported[`${inputname}.tree_ring_statistics.csv`]?.text()!
+    const rings_csv_lines:string[] = rings_csv_text.trim().split('\n')
+    const rings_csv_items:string[][] = rings_csv_lines.map( line => line.split(',') )
+    asserts.assertEquals( 
+        1, 
+        (new Set( rings_csv_items.map( item => item.length ) )).size , 
+        'lines in tree rings csv file have different number of items'
+    )
+    // treering width um
+    asserts.assertAlmostEquals( Number(rings_csv_items[1]![2]!),  9.43, /*tolerance=*/0.1, )
+
+    // treering area um2
+    asserts.assertAlmostEquals( Number(rings_csv_items[1]![4]!),  13.33, /*tolerance=*/0.1, )
+
+    // mean lumen area um2
+    asserts.assertAlmostEquals( Number(rings_csv_items[1]![5]!),  296.0, /*tolerance=*/0.1, )
+
+    // number of cells n
+    asserts.assertEquals( Number(rings_csv_items[1]![6]!),  2 )
+
+    // vessel density n/mm2 (not a realistic number here)
+    asserts.assertAlmostEquals( Number(rings_csv_items[1]![7]!),  150000, /*tolerance=*/0.1, )
+
+    // Hydraulic Diameter(Tyree and Zimmermann)
+    asserts.assertAlmostEquals( Number(rings_csv_items[1]![8]!),  19.54, /*tolerance=*/0.1, )
+
+    // Hydraulic Diameter(Sperry et al)
+    asserts.assertAlmostEquals( Number(rings_csv_items[1]![9]!),  19.86, /*tolerance=*/0.1, )
+
+    //// Hydraulic Conductivity
+    //asserts.assertAlmostEquals( Number(rings_csv_items[1]![10]!),  7.143585813*(10**12), /*tolerance=*/0.1, )
+    
 })
 
 
