@@ -716,11 +716,17 @@ PointPair[][] {
 }
 
 
+function cell_area_diameter(cell:CellInfo, px_per_um:number) {
+    const cell_area_um2:number = (cell.area / (px_per_um ** 2));
+    const cell_diameter_um:number = 2* Math.sqrt(cell_area_um2 / Math.PI)
+    return {area:cell_area_um2, diameter:cell_diameter_um}
+}
+
 function format_cells_for_export(
     cells: CellInfo[],
     years: number[],
     imagesize: base.util.ImageSize,
-    micrometer_factor: number,
+    px_per_um: number,
     ignore_buffer_px:  number,
 ): File {
     const header:string[] = [
@@ -728,8 +734,9 @@ function format_cells_for_export(
         'X(px)',
         'Y(px)',
         'Lumen Area(px)', 
-        'Lumen Area(μm^2)',
+        'Lumen Area(um^2)',
         'Position within tree ring(0-100)',
+        'Lumen Diameter(um)'
     ]
 
     let csv_text:string = header.join(', ')+'\n';
@@ -743,13 +750,17 @@ function format_cells_for_export(
         if(box_distance_from_border(cell.box_xy, imagesize) < ignore_buffer_px)
             continue;
         
+        const {area:cell_area_um2, diameter:cell_diameter_um} = 
+            cell_area_diameter(cell, px_per_um);
+
         const celldata:string[] = [
             years[cell.year_index]?.toFixed(0) ?? '',
             box_center(cell.box_xy)[0].toFixed(0),
             box_center(cell.box_xy)[1].toFixed(0),
             cell.area.toFixed(1),
-            (cell.area / (micrometer_factor ** 2)).toFixed(1),
+            cell_area_um2.toFixed(1),
             Number(cell.position_within).toFixed(1),
+            cell_diameter_um.toFixed(1),
         ]
 
         //sanity check
@@ -774,32 +785,93 @@ function box_center(box: [number,number,number,number]): [number,number]{
     return [ (box[2]+box[0])/2, (box[3]+box[1])/2 ]
 }
 
-function format_treerings_for_export(
+function format_treering_statistics_for_export(
     treerings: TreeringInfo[],
     px_per_um: number,
+    cellinfo?: CellInfo[],
 ): File {
     const header:string[] = [
         'Year', 
         'Mean Tree Ring Width(px)',
-        'Mean Tree Ring Width(μm)',
+        'Mean Tree Ring Width(um)',
         'Tree Ring Area(px)',
-        'Tree Ring Area(μm^2)',
+        'Tree Ring Area(um^2)',
+        ...(cellinfo
+            ? [
+                'Mean Lumen Area(um^2)',
+                'Number of Vessels(n)',
+                'Vessel Density(n/mm^2)',
+                'Hydraulic Diameter(Tyree and Zimmermann)',
+                'Hydraulic Diameter(Sperry et al)',
+                //'Hydraulic Conductivity',
+                // 'Specific Hydraulic Conductivity',
+                // 'Coefficient of Variation'
+            ] 
+            : []),
     ];
     
     let csv_text:string =''
     csv_text += header.join(', ')+'\n';
 
     const px_per_um_sq:number = px_per_um**2;
-    for(const treering of treerings){
-        const width: number = compute_treering_width(treering.coordinates)
-        const area:number = compute_treering_area(treering.coordinates);
+    for(const treering_index in treerings){
+        const treering:TreeringInfo = treerings[treering_index]!
+
+        const width_px:number = compute_treering_width(treering.coordinates)
+        const area_px2:number = compute_treering_area(treering.coordinates);
+        const width_um:number = width_px / px_per_um
+        const area_um2:number = area_px2 / px_per_um_sq
+        const area_mm2:number = area_um2 / 1000**2;
+
         const ring_data:string[] = [
             treering.year.toFixed(0),
-            width.toFixed(2),
-            (width / px_per_um).toFixed(2),
-            area.toFixed(2), 
-            (area / px_per_um_sq).toFixed(2),
+            width_px.toFixed(2),
+            width_um.toFixed(2),
+            area_px2.toFixed(2), 
+            area_um2.toFixed(2),
         ]
+        
+        if(cellinfo) {
+            let n_cells_in_this_treering:number = 0;
+            let cell_lumen_area_sum:number = 0;
+            let cell_diameter_um4_sum:number = 0;
+            let cell_diameter_um5_sum:number = 0;
+            for(const cell of cellinfo ?? []) {
+                if(cell.year_index == Number(treering_index)) {
+                    n_cells_in_this_treering++;
+                    const {area, diameter} = cell_area_diameter(cell, px_per_um);
+                    cell_lumen_area_sum += area;
+                    cell_diameter_um4_sum   += diameter**4;
+                    cell_diameter_um5_sum   += diameter**5;
+                }
+            }
+            const cell_lumen_area_mean:number = 
+                cell_lumen_area_sum / n_cells_in_this_treering;
+            const vessel_density_n_mm2:number = n_cells_in_this_treering / area_mm2;
+            const hydraulic_diameter_TZ:number = 
+                (cell_diameter_um4_sum / n_cells_in_this_treering) ** 0.25
+            const hydraulic_diameter_S:number = 
+                (cell_diameter_um5_sum / cell_diameter_um4_sum)
+            
+            // const ni_water_viscosity:number = 1.002*10**-9 ;     // MPa
+            // const rho_water_density:number = 998.2               // (kg/m^3)
+            // const hydraulic_conductivity:number = 
+            //     (Math.PI * cell_diameter_um4_sum) / (128 * ni_water_viscosity)
+            // const specific_hydraulic_conductivity:number = 
+            //     Math.PI * rho_water_density / (128 * ni_water_viscosity * (area_um2 / 10^12)) * cell_diameter_um4_sum
+            //const coefficient_of_varition = 
+            
+            ring_data.push(
+                cell_lumen_area_mean.toFixed(2),
+                n_cells_in_this_treering.toFixed(0),
+                vessel_density_n_mm2.toFixed(2),
+                hydraulic_diameter_TZ.toFixed(2),
+                hydraulic_diameter_S.toFixed(2),
+            );
+        }
+
+
+
          //sanity check
          if(header.length != ring_data.length){
             console.error('CSV data length mismatch:', header, ring_data)
@@ -1003,7 +1075,7 @@ async function export_treeringsonly(
 
     const output:Record<string, File> =  {
         [`${inputname}.tree_ring_statistics.csv`] :
-            format_treerings_for_export(data.treerings, data.px_per_um),
+            format_treering_statistics_for_export(data.treerings, data.px_per_um),
         [`${inputname}/treerings.json`]: 
             new File([JSON.stringify(associationdata)], 'treerings.json'),
         [`${inputname}/${inputname}.treerings.png`]: treeringmap_og,
@@ -1034,10 +1106,17 @@ async function export_full(
         data.px_per_um, 
         ignore_buffer_px
     );
+    const ringstats_csv:File = format_treering_statistics_for_export(
+        data.treerings, 
+        data.px_per_um, 
+        data.cells
+    )
 
     return {
         ...await export_cellsonly(data, inputname, ),
         ...await export_treeringsonly(data, inputname),
+        // overwrite
+        [`${inputname}.tree_ring_statistics.csv`] : ringstats_csv,
         [`${inputname}.cell_statistics.csv`] : cellstats_csv,
         [`${inputname}/cells.json`]: 
             new File([JSON.stringify(celldata)], 'cells.json'),

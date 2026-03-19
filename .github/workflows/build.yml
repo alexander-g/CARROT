@@ -5,6 +5,11 @@ on:
     branches:
       - master
   workflow_dispatch:
+    inputs:
+      release:
+        type: boolean
+        default: false
+
 
 
 jobs:
@@ -83,4 +88,29 @@ jobs:
           CMD="cmd.exe /c ${MAINBATWINPATH}"
           echo "CMD=${CMD}"
           CMD=$CMD ./run_tests_integration.sh
+
+  release:
+    if: ${{ github.event.inputs.release == 'true' }}
+    needs: integration_tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: build/
+      
+      - name: Set tag 
+        id: set_tag
+        run: |
+          TAGNAME=v$(date +%F)
+          echo $TAGNAME
+          echo "TAG=${TAGNAME}" >> $GITHUB_OUTPUT
+      
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "build/*.zip"
+          prerelease: true
+          tag: ${{ steps.set_tag.outputs.TAG }}
 

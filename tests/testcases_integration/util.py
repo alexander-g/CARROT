@@ -4,6 +4,8 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.request
+import uuid
 
 import pytest
 import _pytest
@@ -80,4 +82,28 @@ def wait_until_port_available(host:str, port:int, timeout=30, interval=1):
                 raise TimeoutError(f"{host}:{port} not available after {timeout}s")
             time.sleep(interval)
 
+
+
+def file_upload(url:str, path:str):
+    with open(path, "rb") as f:
+        data = f.read()
+
+    boundary = uuid.uuid4().hex
+    crlf = "\r\n"
+    filename = os.path.basename(path)
+
+    part = (
+        f"--{boundary}{crlf}"
+        f'Content-Disposition: form-data; name="files"; filename="{filename}"{crlf}'
+        f"Content-Type: application/octet-stream{crlf}{crlf}"
+    ).encode() + data + f"{crlf}".encode()
+    closing = f"--{boundary}--{crlf}".encode()
+    body = part + closing
+
+    request = urllib.request.Request(url, data=body, method="POST")
+    request.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    request.add_header("Content-Length", str(len(body)))
+
+    with urllib.request.urlopen(request) as response:
+        assert response.status == 200
 
