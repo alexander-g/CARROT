@@ -6,12 +6,13 @@ import {
     CARROT_Backend,
     UnfinishedCARROT_Result,
     _zip_into_treerings,
-    AoIRect,
+    type AoIRect,
+    type Sam3Output,
 } from "../lib/carrot_detection.ts"
 import { TreeringsSVGOverlay, PointPair } from "./TreeringsSVGOverlay.tsx"
-import { CARROT_ModelTypes } from "../lib/carrot_settings.ts";
-import * as onnx_sam from "../lib/onnx_sam.ts"
-import { CURSORS_B64, base64_to_uint8 } from "./cursors.ts"
+import { CARROT_ModelTypes }              from "../lib/carrot_settings.ts";
+import * as onnx_sam                      from "../lib/onnx_sam.ts"
+import { CURSORS_B64, base64_to_uint8 }   from "./cursors.ts"
 
 
 export 
@@ -38,8 +39,20 @@ class CARROT_DetectionTab extends base.detectiontab.DetectionTab<CARROT_State> {
                     modelnames.includes('sam_decoder_vit_b')
                 sam_downloaded = (encoder_ok && decoder_ok)
             }
-
             CARROT_Content.sam_downloaded = sam_downloaded;
+
+            let sam3_downloaded:boolean = false;
+            if(avmodels && 'sam' in avmodels){
+                const modelnames:string[] = avmodels['sam'].map( 
+                    (info:base.settings.ModelInfo) => info.name 
+                )
+                const encoder_ok:boolean = 
+                    modelnames.includes('sam3_image_encoder_full')
+                const decoder_ok:boolean = 
+                    modelnames.includes('sam3_decoder_with_box_feats')
+                    sam3_downloaded = (encoder_ok && decoder_ok)
+            }
+            CARROT_Content.sam3_downloaded = sam3_downloaded;
         }
     )
 }
@@ -60,12 +73,21 @@ type GenericBackend = base.files.ProcessingModule<File, CARROT_Result>;
 /** Global sam onnx session because only one model */
 let sam_onnx_session:onnx_sam.ONNX_SamSession|undefined = undefined;
 
-const HARDCODED_ENCODER_FILENAME = 'sam_encoder_vit_b.torchscript'
-const HARDCODED_ENCODER_URL = `https://github.com/alexander-g/segment-anything/releases/download/v2025-09-17/${HARDCODED_ENCODER_FILENAME}`
-const HARDCODED_ONNX_FILENAME = 'sam_decoder_vit_b.onnx'
-const HARDCODED_ONNX_URL = `https://github.com/alexander-g/segment-anything/releases/download/v2025-09-17/${HARDCODED_ONNX_FILENAME}`
+const HARDCODED_SAM_DECODER_FILENAME = 'sam_decoder_vit_b.onnx'
+//const HARDCODED_SAM_MAX_SIZE_PX = 4096;
+const HARDCODED_SAM_MAX_SIZE_PX = 1024*5;
 
-const HARDCODED_SAM_MAX_SIZE_PX = 4096;
+
+const HARDCODED_SAM_URLS = {
+    'sam': {
+        'encoder': `https://github.com/alexander-g/segment-anything/releases/download/v2025-09-17/sam_encoder_vit_b.torchscript`,
+        'decoder': `https://github.com/alexander-g/segment-anything/releases/download/v2025-09-17/${HARDCODED_SAM_DECODER_FILENAME}`,
+    },
+    'sam3': {
+        'encoder': `https://github.com/alexander-g/sam3-onnx/releases/download/v2026-03-13/sam3_image_encoder_full.onnx`,
+        'decoder': `https://github.com/alexander-g/sam3-onnx/releases/download/v2026-03-13/sam3_decoder_with_box_feats.onnx`,
+    }
+}
 
 
 
@@ -115,8 +137,10 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         }
     } )
 
+    // TODO: ugly
     /** Indicates if sam is alread downloaded. NOTE: set from outside.*/
     static sam_downloaded: boolean = false;
+    static sam3_downloaded:boolean = false;
 
     $image_too_large_for_sam:Signal<boolean> = new Signal(false)
     $aoi_disabled:Readonly<Signal<boolean>>  = signals.computed(
@@ -320,8 +344,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         // TODO: clear cursor when activating sam
         if(mode == 'sam')
             this.on_sam_activate(this.#_prev_drawing_mode)
-        // else if(mode == 'sam3')
-        //     this.on_sam3_activate(this.#_prev_drawing_mode)
+        else if(mode == 'sam3')
+            this.on_sam3_activate(this.#_prev_drawing_mode)
         
         this.#_prev_drawing_mode = mode;
     } )
@@ -331,6 +355,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     #sam_embeddings?:Float32Array;
     #sam_orig_im_size?:base.util.ImageSize;
 
+    /** Download SAM (v1) if needed, send image to flask for encoding, 
+     *  create a new ONNX session for the decoder. */
     on_sam_activate = async (prev_mode:DrawingMode) => {
         const backend:GenericBackend|CARROT_Backend|null = 
             this.props.$processingmodule.value
@@ -349,14 +375,14 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
         if(!CARROT_Content.sam_downloaded){
             const proceed:boolean = 
-                await this.sam_modal_ref.current!.show_download_required()
+                await this.sam_modal_ref.current!.show_download_required('sam')
             if(!proceed) {
                 // user cancelled or something went wrong, back to previous mode
                 this.$drawing_mode.value = prev_mode;
                 return;
             }
 
-            const ok:boolean = await this._download_sam()
+            const ok:boolean = await this._download_sam('sam')
             if(!ok){
                 await this.sam_modal_ref.current!.show_error(
                     "Failed to download Segment Anything"
@@ -396,7 +422,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         
         const session:Error|onnx_sam.ONNX_SamSession = 
             await onnx_sam.ONNX_SamSession.initialize(
-                `models/sam/${HARDCODED_ONNX_FILENAME}`
+                `models/sam/${HARDCODED_SAM_DECODER_FILENAME}`
             )
         if(session instanceof Error){
             // TODO: unlock modal / show error
@@ -415,47 +441,82 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         await this.sam_modal_ref.current!.close()
     }
 
-    // on_sam3_activate = async (prev_mode:DrawingMode) => {
-    //     const backend:GenericBackend|CARROT_Backend|null = 
-    //         this.props.$processingmodule.value
-    //     if(!(backend instanceof CARROT_Backend)){
-    //         console.error('Processing backend is not a CARROT backend', backend)
-    //         this.$drawing_mode.value = prev_mode;
-    //         return;
-    //     }
+    /** Download SAM3 if needed. */
+    on_sam3_activate = async (prev_mode:DrawingMode) => {
+        const backend:GenericBackend|CARROT_Backend|null = 
+            this.props.$processingmodule.value
+        if(!(backend instanceof CARROT_Backend)){
+            console.error('Processing backend is not a CARROT backend', backend)
+            this.$drawing_mode.value = prev_mode;
+            return;
+        }
 
-    //     await backend.sam3_encode_decode(this.props.input)
-    // }
+        if(!CARROT_Content.sam3_downloaded) {
+            const proceed:boolean = 
+                await this.sam_modal_ref.current!.show_download_required('sam3')
+            if(!proceed) {
+                // user cancelled or something went wrong, back to previous mode
+                this.$drawing_mode.value = prev_mode;
+                return;
+            }
+
+            const ok:boolean = await this._download_sam('sam3')
+            if(!ok){
+                await this.sam_modal_ref.current!.show_error(
+                    "Failed to download Segment Anything 3"
+                )
+                // back to previous mode
+                this.$drawing_mode.value = prev_mode;
+                return;
+            }
+        }
+
+        await this.sam_modal_ref.current!.close()
+    }
 
 
-    async _download_sam(): Promise<boolean> {
+    async _download_sam(samversion:'sam'|'sam3'): Promise<boolean> {
         await this.sam_modal_ref.current!.show_downloading()
 
-        // NOTE: starting onnx download first, because smaller, no await here
+        const {encoder:encoderurl, decoder:decoderurl} = HARDCODED_SAM_URLS[samversion];
+
+        // NOTE: starting encoder download first, because smaller, no await here
         const onnxfilepromise:Promise<Error|Response> = 
-            base.util.fetch_no_throw(`proxy?url=${HARDCODED_ONNX_URL}`)
+            base.util.fetch_no_throw(`proxy?url=${decoderurl}`)
         const encoderfile:File|Error = await base.util.fetch_with_progress(
-            new URL(`proxy?url=${HARDCODED_ENCODER_URL}`, self.location.origin),
+            new URL(`proxy?url=${encoderurl}`, self.location.origin),
             (progress:{total:number|null, received:number}) => {
                 const percent:number = 100 * progress.received / progress.total!;
                 this.sam_modal_ref.current!.show_downloading(percent)
             }
         )
         const onnxfileresponse:Response|Error = await onnxfilepromise;
-        if(encoderfile instanceof Error || onnxfileresponse instanceof Error){
+        if(encoderfile instanceof Error || onnxfileresponse instanceof Error)
             return false;
-        }
-        const response0:Response|Error = 
-            await base.util.upload_file_no_throw(encoderfile, `upload_model/sam/${HARDCODED_ENCODER_FILENAME}`)
-        const onnxfile = new File([await onnxfileresponse.blob()], HARDCODED_ONNX_FILENAME)
-        const response1:Response|Error = 
-            await base.util.upload_file_no_throw(onnxfile, `upload_model/sam/${HARDCODED_ONNX_FILENAME}`)
-        // TODO: check responses!
+
+        const encoderfilename:string = base.util.file_basename(encoderurl);
+        const decoderfilename:string = base.util.file_basename(decoderurl)
+        
+        const response0:Response|Error = await base.util.upload_file_no_throw(
+            encoderfile, 
+            `upload_model/sam/${encoderfilename}`
+        )
+        const onnxfile = 
+            new File([await onnxfileresponse.blob()], decoderfilename)
+        const response1:Response|Error = await base.util.upload_file_no_throw(
+            onnxfile, 
+            `upload_model/sam/${decoderfilename}`
+        )
+        
+        if(response0 instanceof Error || response1 instanceof Error)
+            return false;
+
+        // TODO: need to reload settings, otherwise will download again
 
         return true
     }
 
-    on_sam_new_box = async (box:Box) => {
+    on_sam_new_box = (box:Box) => {
         if(this.$drawing_mode.value == 'sam')
             this.on_sam1_new_box(box)
         else if(this.$drawing_mode.value == 'sam3')
@@ -496,23 +557,16 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             return;
         }
 
-        const imsize:base.util.ImageSize|Error = 
-            await base.imagetools.read_image_size(this.props.input)
-        if(imsize instanceof Error){
-            console.error('Failed to read image size')
-            return 
-        }
-
         // TODO: awkward
         const result0 = this.props.$result.value;
         this.props.$result.value = new CARROT_Result('processing');
-        const output:Uint8Array|Error = 
+        const output:Sam3Output|Error = 
             await backend.sam3_encode_decode(this.props.input, box)
         this.props.$result.value = result0;
         if(output instanceof Error)
             return output;
         
-        this.canvas_ref.current!.sam_paste_result(output, imsize)
+        this.canvas_ref.current!.sam_paste_result(output.maskdata, output.masksize)
     }
 }
 
@@ -1368,16 +1422,25 @@ function interpolate_points(a: Point, b: Point, step: number): Point[] {
 type SAM_Modal_States = 
     'download-required'|'downloading'|'initializing'|'error';
 
+type SAM_Modal_State = {
+    samversion: 'sam'|'sam3',
+    state: 'download-required'|'downloading'|'initializing'|'error'
+}
+
 
 class SAM_Modal extends preact.Component {
     ref: preact.RefObject<HTMLDivElement> = preact.createRef()
     progress_ref: preact.RefObject<HTMLDivElement> = preact.createRef()
 
-    $state:Signal<SAM_Modal_States> = new Signal('download-required')
+    $state:Signal<SAM_Modal_State> = new Signal({
+        state: 'download-required',
+        samversion: 'sam',
+    })
 
 
 
     render(): JSX.Element {
+        const state:SAM_Modal_State = this.$state.value;
         return <div class="ui modal" ref={this.ref}>
             <div class="header">
                 Segment Anything
@@ -1387,13 +1450,13 @@ class SAM_Modal extends preact.Component {
                     <i class="massive magic icon"></i>
                 </div>
                 {
-                    (this.$state.value == 'download-required')?
-                        this.#download_required_description() :
-                    (this.$state.value == 'downloading')?
+                    (state.state == 'download-required')?
+                        this.#download_required_description(state.samversion) :
+                    (state.state == 'downloading')?
                         this.#downloading_description() :
-                    (this.$state.value == 'initializing')?
+                    (state.state == 'initializing')?
                         this.#initializing_description() :
-                    (this.$state.value == 'error')?
+                    (state.state == 'error')?
                         this.#error_description() :
                         null
                 }
@@ -1419,8 +1482,11 @@ class SAM_Modal extends preact.Component {
     }
 
 
-    show_download_required(): Promise<boolean> {
-        this.$state.value = 'download-required';
+    show_download_required(samversion:'sam'|'sam3'): Promise<boolean> {
+        this.$state.value = {
+            state: 'download-required',
+            samversion,
+        };
 
         const promise = new Promise(
             (resolve: (value:boolean) => void) => {
@@ -1438,7 +1504,10 @@ class SAM_Modal extends preact.Component {
     }
 
     async show_downloading(percent:number = 0) {
-        this.$state.value = 'downloading';
+        this.$state.value = {
+            state:'downloading',
+            samversion: this.$state.value.samversion
+        };
         $(this.ref.current).modal({
             closable: false, 
             onDeny:    () => false,
@@ -1449,7 +1518,10 @@ class SAM_Modal extends preact.Component {
     }
 
     show_initializing() {
-        this.$state.value = 'initializing';
+        this.$state.value = {
+            state:'initializing',
+            samversion: this.$state.value.samversion
+        };;
 
         $(this.ref.current).modal({
             closable: false, 
@@ -1466,7 +1538,10 @@ class SAM_Modal extends preact.Component {
     #error_message:string = 'Error'
 
     show_error(message:string) {
-        this.$state.value = 'error';
+        this.$state.value = {
+            state:'error',
+            samversion: this.$state.value.samversion
+        };
         $(this.ref.current).modal({
             closable: true,
         }).modal('show')
@@ -1492,11 +1567,29 @@ class SAM_Modal extends preact.Component {
         </div>
     }
 
-    #download_required_description():JSX.Element {
+    #download_required_description_sam():JSX.Element {
         return <div class="description">
             <p>Segment Anything is a foundation model by <a href="https://openaccess.thecvf.com/content/ICCV2023/papers/Kirillov_Segment_Anything_ICCV_2023_paper.pdf" target="_blank">Kirillov et al. (2023)</a> that can be used to accelerate cell annotation.</p>
         </div>
     }
+
+    #download_required_description_sam3():JSX.Element {
+        return <div class="description">
+            <p>Segment Anything 3 is a foundation model by <a href="https://arxiv.org/abs/2511.16719" target="_blank">
+                Carion et al. (2025)</a> that can be used to annotate and detect all cells in an image without additional retraining.
+            </p>
+        </div>
+    }
+
+    #download_required_description(samversion:'sam'|'sam3'): JSX.Element {
+        if(samversion == 'sam')
+            return this.#download_required_description_sam()
+        else if(samversion == 'sam3')
+            return this.#download_required_description_sam3()
+        else
+            return <div>INTERNAL ERROR</div>
+    }
+    
 
     #downloading_description():JSX.Element {
         return <div class="description" style="width:100%">
@@ -1538,8 +1631,8 @@ class SAM_Modal extends preact.Component {
         () => { 
             return {
                 display: base.ui_util.boolean_to_display_css(
-                    this.$state.value == 'download-required'
-                    || this.$state.value == 'error'
+                    this.$state.value.state == 'download-required'
+                    || this.$state.value.state == 'error'
                 )
             }
         }
@@ -1549,7 +1642,7 @@ class SAM_Modal extends preact.Component {
         () => { 
             return {
                 display: base.ui_util.boolean_to_display_css(
-                    this.$state.value == 'download-required'
+                    this.$state.value.state == 'download-required'
                 )
             }
         }

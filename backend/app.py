@@ -29,8 +29,8 @@ from backend.processing import (
     get_treeringsmap_name,
     get_treeringsmap_og_name,
     sam_encode,
-    sam3_encode_decode,
 )
+from backend.sam import sam3_encode_decode, ImageSize
 
 
 
@@ -239,12 +239,19 @@ class App(BaseApp):
 
         args = flask.request.args
         box  = args.get('box', type=json.loads)
-        if not isinstance(box, list):
+        if not isinstance(box, list) or not len(box) == 4:
             flask.abort(400)
-        if not len(box) == 4:
+        
+        displaywidth  = args.get('displaywidth',  type=int)
+        displayheight = args.get('displayheight', type=int)
+        if displaywidth is None or displayheight is None:
             flask.abort(400)
 
-        output = sam3_encode_decode(full_path, tuple(box))
+        output = sam3_encode_decode(
+            full_path, 
+            box = tuple(box), 
+            worksize = ImageSize(width=displaywidth, height=displayheight)
+        )
         assert output.dtype.itemsize == 1
 
         return flask.Response(

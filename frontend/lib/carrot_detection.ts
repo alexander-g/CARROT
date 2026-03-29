@@ -1134,6 +1134,11 @@ export type UnfinishedCARROT_Result = {
 }
 
 
+export type Sam3Output = {
+    maskdata: Uint8Array;
+    masksize: base.util.ImageSize;
+}
+
 
 export abstract class CARROT_Backend
 extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Settings> {
@@ -1150,7 +1155,7 @@ extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Sett
     abstract sam3_encode_decode(
         image:File, 
         box:  base.boxes.Box
-    ): Promise<Uint8Array|Error>;
+    ): Promise<Sam3Output|Error>;
 }
 
 export function validate_CARROT_Backend(x:unknown): CARROT_Backend|null {
@@ -1447,15 +1452,23 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
     override async sam3_encode_decode(
         image: File, 
         box:   base.boxes.Box
-    ): Promise<Uint8Array|Error> {
+    ): Promise<Sam3Output|Error> {
         const upload_ok:Response|Error = 
             await base.util.upload_file_no_throw(image)
         if(upload_ok instanceof Error)
             return upload_ok as Error
+
+        const sizes:OGandDisplaySizes|Error = await get_og_and_display_sizes(image)
+        if(sizes instanceof Error)
+            return sizes as Error;
         
         const boxtuple:[number,number,number,number] = [box.x0, box.y0, box.x1, box.y1]
         const boxtuple_str:string = JSON.stringify(boxtuple)
-        const GET_params:string = new URLSearchParams({box: boxtuple_str}).toString()
+        const GET_params:string = new URLSearchParams({
+            box:           boxtuple_str,
+            displaywidth:  sizes.display_size.width.toFixed(0),
+            displayheight: sizes.display_size.height.toFixed(0),
+        }).toString()
         const url:string = `sam3/${image.name}?${GET_params}`                           // TODO: px/um
         const sam3_response:Response|Error = await base.util.fetch_no_throw(url)
         if(sam3_response instanceof Error)
@@ -1468,7 +1481,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         for(const i of result)
             sum += i;
         console.log('sam3 result:', result.length, sum)
-        return result;
+        return {maskdata:result, masksize:sizes.display_size};
     }
 
 

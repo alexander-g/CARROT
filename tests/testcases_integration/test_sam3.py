@@ -1,3 +1,4 @@
+import io
 import os
 import socket
 import subprocess
@@ -8,9 +9,15 @@ import urllib.request
 import urllib.parse
 import uuid
 
+import numpy as np
 import pytest
 
-from util import subprocess_fixture, wait_until_port_available, fixture
+from util import (
+    subprocess_fixture, 
+    wait_until_port_available, 
+    fixture, 
+    file_upload
+)
 
 
 
@@ -37,35 +44,49 @@ def test_sam3_basics0(subprocess_fixture:subprocess.Popen):
 
     file_upload('http://localhost:5000/file_upload', HARDCODED_TEST_IMAGE)
 
-    args = "?" + urllib.parse.urlencode({'box':[1570,811, 2180,1400]})
+    args = "?" + urllib.parse.urlencode({
+        'box':[1570,811, 2180,1400],
+        'displaywidth': 3000,
+        'displayheight':4200,
+    })
     with urllib.request.urlopen(f'http://localhost:5000/sam3/{imagename}'+args) as response:
         assert response.status == 200
 
+        flatmask = np.frombuffer(response.read(), dtype='uint8')
+        assert len(flatmask) == 3000*4200
 
 
-def file_upload(url:str, path:str):
-    with open(path, "rb") as f:
-        data = f.read()
 
-    boundary = uuid.uuid4().hex
-    crlf = "\r\n"
-    filename = os.path.basename(path)
 
-    part = (
-        f"--{boundary}{crlf}"
-        f'Content-Disposition: form-data; name="files"; filename="{filename}"{crlf}'
-        f"Content-Type: application/octet-stream{crlf}{crlf}"
-    ).encode() + data + f"{crlf}".encode()
-    closing = f"--{boundary}--{crlf}".encode()
-    body = part + closing
+import sys
+sys.path.append('./')
 
-    request = urllib.request.Request(url, data=body, method="POST")
-    request.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
-    request.add_header("Content-Length", str(len(body)))
+from backend.sam import find_suitable_cropbox
+from base.backend.processing import ImageSize
 
-    with urllib.request.urlopen(request) as response:
-        assert response.status == 200
+import numpy as np
 
+
+def test_suitable_cropbox():
+    cropbox0 = find_suitable_cropbox(
+        imagesize = ImageSize(width=1600, height=1200),
+        objectbox = (100,100,260,260),
+        acceptable_fraction = (0.1, 0.2),
+    )
+    # full image
+    assert cropbox0 == (0,0, 1600, 1200)
+
+
+    cropbox1 = find_suitable_cropbox(
+        imagesize = ImageSize(width=1600, height=1200),
+        objectbox = (100,100,200,200),
+        acceptable_fraction = (0.1, 0.2),
+    )
+    assert (np.array(cropbox1) >= 0).all()
+    assert cropbox1[2] > cropbox1[0]
+    assert cropbox1[3] > cropbox1[1]
+    assert 0.1 <= 100/(cropbox1[2] - cropbox1[0]) <= 0.2
+    assert 0.1 <= 100/(cropbox1[3] - cropbox1[1]) <= 0.2
 
 
 
