@@ -77,10 +77,14 @@ def test_sam3_basics0(subprocess_fixture:subprocess.Popen):
 import sys
 sys.path.append('./')
 
-from backend.sam import find_suitable_cropbox, find_suitable_grid
+from backend.sam import (
+    find_suitable_grid,
+    postprocess_sam3_masks,
+)
 from base.backend.processing import ImageSize
 
 import numpy as np
+
 
 
 def test_suitable_cropbox():
@@ -128,4 +132,23 @@ def test_suitable_grid():
     assert 0.1 <= 100/(best_cell1[2] - best_cell1[0]) <= 0.2
     assert 0.1 <= 100/(best_cell1[3] - best_cell1[1]) <= 0.2
 
+
+def test_postprocess_sam3_masks_filters_border_and_size():
+    masks = np.zeros([3, 20, 20], dtype=bool)
+
+    # valid object
+    masks[0, 5:9, 5:9] = True
+    # invalid: touches border
+    masks[1, 0:4, 10:14] = True
+    # invalid: too small
+    masks[2, 14:15, 14:15] = True
+
+    box = (0, 0, 4, 4)
+    merged = postprocess_sam3_masks(masks, box)
+
+    expected = np.zeros([20, 20], dtype=bool)
+    expected[5:9, 5:9] = True
+
+    assert merged.dtype == np.bool_
+    assert np.array_equal(merged, expected)
 

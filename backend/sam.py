@@ -6,6 +6,7 @@ import numpy as np
 import onnxruntime as ort
 import PIL.Image
 PIL.Image.MAX_IMAGE_PIXELS = None
+import scipy.ndimage
 import torch
 
 from traininglib import datalib
@@ -46,8 +47,15 @@ def sam3_encode_decode(
     best_gridcell_xy = \
         (best_gridcell[1], best_gridcell[0], best_gridcell[3], best_gridcell[2])
     relbox = convert_box_to_relative_cxcywh(box, best_gridcell_xy )
-    best_gridcell_mask, box_feats = \
-        run_sam3_on_crop(imagedata, relbox, best_gridcell_xy, session_encode, session_decode)
+    best_gridcell_mask, box_feats = run_sam3_on_crop(
+        imagedata, 
+        box, 
+        relbox, 
+        best_gridcell_xy, 
+        session_encode, 
+        session_decode,
+        remove_border_objects = (not process_full_image)
+    )
 
 
     if not process_full_image:
@@ -73,11 +81,13 @@ def sam3_encode_decode(
             gridcell_xy = (gridcell[1], gridcell[0], gridcell[3], gridcell[2])
             mask, _ = run_sam3_on_crop(
                 imagedata, 
+                box,
                 relbox, 
                 gridcell_xy, 
                 session_encode, 
                 session_decode, 
-                box_feats
+                remove_border_objects = (not process_full_image),
+                box_feats = box_feats,
             )
             all_masks.append(mask)
 
@@ -98,15 +108,6 @@ def pad_mask_to_full_size(mask:np.ndarray, imagesize:ImageSize, cropbox:IntBox):
     y0 = cropbox[1]
     full_mask[y0:, x0:][:mask.shape[0], :mask.shape[1]] = mask
     return full_mask
-
-def combine_masks_and_pad_to_full_size(
-    masks:     np.ndarray, 
-    imagesize: ImageSize, 
-    cropbox:   IntBox,
-) -> np.ndarray:
-    mask = masks.any(0)[0]  # type: ignore
-    return pad_mask_to_full_size(mask, imagesize, cropbox)
-
 
 
 def convert_box_to_relative_cxcywh(box:Box, relative_to:Box) -> Box:
@@ -225,11 +226,13 @@ def find_suitable_grid(
 
 def run_sam3_on_crop(
     imagedata:      np.ndarray,
+    box:            Box,
     # object box relative its gridcell, which is not necessarily the one here
     relbox:         Box,
     gridcell:       IntBox,
     session_encode: ort.InferenceSession, 
     session_decode: ort.InferenceSession,
+    remove_border_objects: bool,
     box_feats:      tp.Optional[np.ndarray] = None,
 ) -> tp.Tuple[np.ndarray, np.ndarray]:
     assert imagedata.ndim == 3 and  imagedata.shape[2] == 3
@@ -273,40 +276,60 @@ def run_sam3_on_crop(
     t2 = time.time()
     print(f'SAM3 encoding/decoding times: {t1-t0:.3f} / {t2-t1:.3f}')
 
-    masks = decoder_output[2]
-    mask  = masks.any(0)[0]
+    masks = decoder_output[2][:,0]
+    mask = \
+        postprocess_sam3_masks(masks, box, remove_border_objects=remove_border_objects)
 
     return mask, box_feats
 
 
-# currently only compute no load
-def compute_or_load_sam3_image_features(
-    imagepath:str, 
-    worksize: ImageSize,
-    box:      Box
-) -> tp.Tuple[tp.Dict[str, np.ndarray], IntBox]:
-    image = PIL.Image.open(imagepath)\
-            .convert('RGB')         \
-            .resize([worksize.width, worksize.height])
-    cropbox  = find_suitable_cropbox(worksize, box)
-    crop     = image.crop(cropbox)
 
 
-    cropdata = np.array(crop.resize([1008,1008])).transpose(2,0,1)
+def postprocess_sam3_masks(
+    masks:      np.ndarray, 
+    box:        Box, 
+    size_range: tp.Tuple[float, float] = (0.5, 2.0),
+    remove_border_objects: bool = True,
+) -> np.ndarray:
+    '''Given boolean masks of shape [B,H,W], each containing a single object,
+       - remove objects that touch the border (optional)
+       - remove objects that are much larger or smaller than the box 
+       - merge into a single mask, making sure objects dont touch '''
+    assert masks.ndim == 3
+    B,H,W = masks.shape
+    if len(masks) == 0:
+        return np.zeros([H,W], dtype=masks.dtype)
 
-    session_image  = ort.InferenceSession(HARDCODED_SAM3_IMAGE_ENCODER_PATH)
-    t0 = time.time()
-    encoder_output = session_image.run(None, {"image": cropdata})
-    t1 = time.time()
-    print('SAM3 image encoding time: ', t1-t0)
-    
-    box_feats = encoder_output[5]
-    vision_pos_enc2, bb_fpn0, bb_fpn1, bb_fpn2 = encoder_output[2:6]
-    return {
-        "backbone_fpn_0":  bb_fpn0,
-        "backbone_fpn_1":  bb_fpn1,
-        "backbone_fpn_2":  bb_fpn2,
-        "vision_pos_enc_2":  vision_pos_enc2,
-        'box_feats': box_feats,
-    }, cropbox
+    if remove_border_objects:
+        touches_top    = masks[:, 0].any(-1)
+        touches_bottom = masks[:,-1].any(-1)
+        touches_left   = masks[:, :, 0].any(-1)
+        touches_right  = masks[:, :,-1].any(-1)
+        touches_any = touches_top | touches_bottom | touches_left | touches_right
+
+        masks = masks[~touches_any]
+        if len(masks) == 0:
+            return np.zeros([H,W], dtype=masks.dtype)
+
+
+    (x0,y0,x1,y1) = box
+    box_size = (abs(x0 - x1) * abs(y0 - y1))**0.5
+    object_sizes = masks.reshape(len(masks), -1).sum(-1) ** 0.5
+
+    objects_too_small = object_sizes < box_size * size_range[0]
+    objects_too_large = object_sizes > box_size * size_range[1]
+    objects_ok = ~(objects_too_large | objects_too_small)
+    masks = masks[objects_ok]
+    if len(masks) == 0:
+        return np.zeros([H,W], dtype=masks.dtype)
+
+    dilated_masks = []
+    for mask in masks:
+        dilated = scipy.ndimage.binary_dilation(mask, structure=np.ones([3,3]))
+        dilated_masks.append(dilated)
+    # areas where two or more objects overlap after dilation
+    overlap = np.sum(dilated_masks, axis=0) > 1
+    # remove those areas
+    merged  = np.any(masks, axis=0) & (~overlap)
+    return merged
 
