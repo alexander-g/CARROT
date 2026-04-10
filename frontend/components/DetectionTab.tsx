@@ -248,6 +248,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 ref = {this.edit_menu_ref}
                 on_apply = { this.on_apply_editing_changes }
                 on_clear = { () => this.canvas_ref.current?.clear() }
+                on_sam3_propagate = { this.on_sam3_full }
                 on_undo  = { () => this.canvas_ref.current?.undo() }
                 on_set_aoi_to_full_image    = {this.on_set_aoi_to_full_image}
                 on_reverse_growth_direction = {this.on_reverse_growth_direction}
@@ -256,6 +257,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 $brush_size        = { this.$editing_brush_size }
                 $too_large_for_sam = { this.$image_too_large_for_sam }
                 $aoi_disabled      = { this.$aoi_disabled }
+                $can_show_sam3_propgate = { 
+                    signals.computed( () => this.#$last_sam3_box.value != null ) 
+                }
                 key = { 0 } // to make typescript happy
             />
         ]
@@ -450,6 +454,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             this.$drawing_mode.value = prev_mode;
             return;
         }
+        // clear last box if still there
+        this.#$last_sam3_box.value = null;
 
         if(!CARROT_Content.sam3_downloaded) {
             const proceed:boolean = 
@@ -549,7 +555,20 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         this.canvas_ref.current!.sam_paste_result(output.mask.data, this.#sam_orig_im_size)
     }
 
-    on_sam3_new_box = async (box:Box) => {
+    /** User has drawn a box in SAM3 mode, apply on a patch around the box first. */
+    on_sam3_new_box = (box:Box) => {
+        this.process_sam3(box, /*full=*/false)
+    }
+
+    #$last_sam3_box:Signal<Box|null> = new Signal(null);
+
+    /** User seems happy with the sam3 box and wants to apply it the full image */
+    on_sam3_full = () => {
+        if(this.#$last_sam3_box.value != null)
+            this.process_sam3(this.#$last_sam3_box.value, /*full=*/true)
+    }
+
+    async process_sam3(box:Box, full:boolean) {
         const backend:GenericBackend|CARROT_Backend|null = 
             this.props.$processingmodule.value
         if(!(backend instanceof CARROT_Backend)){
@@ -558,15 +577,24 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         }
 
         // TODO: awkward
-        const result0 = this.props.$result.value;
+        const result0:CARROT_Result = this.props.$result.value;
         this.props.$result.value = new CARROT_Result('processing');
+        const on_progress = (progress:number) => {
+            const r = new CARROT_Result('processing')
+            // TODO: this should be part of the constructor
+            r.progress = progress;
+            r.message  = 'Processing full image ...' 
+            this.props.$result.value = r;
+        }
         const output:Sam3Output|Error = 
-            await backend.sam3_encode_decode(this.props.input, box)
+            await backend.sam3_encode_decode(this.props.input, box, full, on_progress)
         this.props.$result.value = result0;
         if(output instanceof Error)
             return output;
         
         this.canvas_ref.current!.sam_paste_result(output.maskdata, output.masksize)
+        // set box if applied locally, clear if applied globally
+        this.#$last_sam3_box.value = full? null : box;
     }
 }
 
@@ -606,6 +634,9 @@ type EditMenuProps = {
     /** Callback issued when user wants to undo the last step */
     on_undo: () => void;
 
+    /** Callback issued when user wants to apply SAM3 on the full image */
+    on_sam3_propagate: () => void;
+
     /** Callback, user wants to reverse the direction of tree rings */
     on_reverse_growth_direction: () => void;
 
@@ -617,6 +648,9 @@ type EditMenuProps = {
 
     /** @input If true, "Edit Area of Interest" will be disabled */
     $aoi_disabled: Readonly<Signal<boolean>>;
+
+    /** @input If true will show "Propagate" button in sam3 mode */
+    $can_show_sam3_propgate: Readonly<Signal<boolean>>;
 }
 
 class EditMenu extends preact.Component<EditMenuProps> {
@@ -633,6 +667,14 @@ class EditMenu extends preact.Component<EditMenuProps> {
             // @ts-ignore stupid typescript
             this.props.$active_modality.value
         )
+    )
+
+    // TODO: do not show button sam3 output already covers the full image
+    // TODO: or when not performed on a single local patch yet
+    $sam3_propagate_visible: Readonly<Signal<boolean>> = signals.computed(
+        () => this.$editing_active.value 
+           && this.props.$drawing_mode.value == 'sam3'
+           && this.props.$can_show_sam3_propgate.value
     )
 
 
@@ -718,6 +760,12 @@ class EditMenu extends preact.Component<EditMenuProps> {
                     on_click = {this.on_clear}
                 />
                 <MenuButton 
+                    label = 'Propagate'
+                    icon  = 'forward blue'
+                    $visible = { this.$sam3_propagate_visible }
+                    on_click = {this.on_sam3_propagate}
+                />
+                <MenuButton 
                     label = 'Apply'
                     icon  = 'check green'
                     $visible = { this.$editing_active }
@@ -747,6 +795,11 @@ class EditMenu extends preact.Component<EditMenuProps> {
         // only clear if successful
         if(status)
             this.on_clear()
+    }
+
+    /** Process the full image with SAM3 */
+    on_sam3_propagate = async () => {
+        this.props.on_sam3_propagate()   
     }
 }
 
@@ -829,7 +882,7 @@ class EditSubMenu_CellsTreerings extends preact.Component<EditSubMenu_CellsTreer
                     () => this.props.$drawing_mode.value == 'sam3'
                 ) }
                 on_click = {() => this.props.$drawing_mode.value = 'sam3'}
-                tooltip  = { sam_button_tooltip }
+                //tooltip  = { sam_button_tooltip }
                 //$disabled = { this.props.$too_large_for_sam }0
             />
 
@@ -839,7 +892,10 @@ class EditSubMenu_CellsTreerings extends preact.Component<EditSubMenu_CellsTreer
                 icon  = 'brush'
                 $visible = { signals.computed(
                     () => this.$active.value 
-                        && this.props.$drawing_mode.value != 'sam'
+                        && ( 
+                            this.props.$drawing_mode.value == 'brush'
+                            || this.props.$drawing_mode.value == 'erase'
+                        )
                 ) }
             > 
                 <div 
@@ -1091,8 +1147,9 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         if(this._drawing)
             return false;
 
-        // dont draw if in SAM mode
-        if(this.props.$drawing_mode.value == 'sam')
+        // draw only in brush and erase modes
+        if(!(this.props.$drawing_mode.value == 'brush'
+           || this.props.$drawing_mode.value == 'erase'))
             return false;
         
         const erase:boolean    = this.props.$drawing_mode.value == 'erase';

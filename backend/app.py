@@ -247,10 +247,15 @@ class App(BaseApp):
         if displaywidth is None or displayheight is None:
             flask.abort(400)
 
+        full = args.get('full', type=json.loads)
+        if full is None:
+            flask.abort(400)
+
         output = sam3_encode_decode(
             full_path, 
             box = tuple(box), 
-            worksize = ImageSize(width=displaywidth, height=displayheight)
+            worksize = ImageSize(width=displaywidth, height=displayheight),
+            process_full_image = full,
         )
         assert output.dtype.itemsize == 1
 

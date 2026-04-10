@@ -1154,7 +1154,10 @@ extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Sett
     /** Process an image with the segment-anything v3 model */
     abstract sam3_encode_decode(
         image:File, 
-        box:  base.boxes.Box
+        box:  base.boxes.Box,
+        /** Full image patchwise or a single local patch around the box */
+        full: boolean,
+        on_progress?: (progress:number) => void,
     ): Promise<Sam3Output|Error>;
 }
 
@@ -1193,7 +1196,6 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
             const t0 = performance.now()
             const module:CARROT_Postprocessing = await wasm_postprocessing_initialize();
-            console.log('postprocess_combined: ', ('cellmap' in data)? data.cellmap : null, ('treeringmap' in data)? data.treeringmap : null, sizes.display_size, sizes.og_size, ('aoi' in data)? aoi_points_to_tuples(data.aoi) : undefined)
             const output:CombinedPostprocessingResult
                 |CellsPostprocessingResult
                 |TreeringPostprocessingResult
@@ -1451,8 +1453,21 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
     override async sam3_encode_decode(
         image: File, 
-        box:   base.boxes.Box
+        box:   base.boxes.Box,
+        full:  boolean,
+        on_progress?: (progress:number) => void,
     ): Promise<Sam3Output|Error> {
+        this.#event_source?.close()
+        this.#event_source = new EventSource('stream');
+        this.#event_source.onmessage = (event:MessageEvent) => {
+            const data:ProgressMessage = JSON.parse(event.data)
+            if(data.image != image.name)
+                return;
+
+            on_progress?.(data.progress);
+        }
+
+
         const upload_ok:Response|Error = 
             await base.util.upload_file_no_throw(image)
         if(upload_ok instanceof Error)
@@ -1466,6 +1481,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         const boxtuple_str:string = JSON.stringify(boxtuple)
         const GET_params:string = new URLSearchParams({
             box:           boxtuple_str,
+            full:          full.toString(),
             displaywidth:  sizes.display_size.width.toFixed(0),
             displayheight: sizes.display_size.height.toFixed(0),
         }).toString()

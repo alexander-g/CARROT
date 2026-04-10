@@ -48,6 +48,22 @@ def test_sam3_basics0(subprocess_fixture:subprocess.Popen):
         'box':[1570,811, 2180,1400],
         'displaywidth': 3000,
         'displayheight':4200,
+        'full': 'false'
+    })
+    with urllib.request.urlopen(f'http://localhost:5000/sam3/{imagename}'+args) as response:
+        assert response.status == 200
+
+        flatmask = np.frombuffer(response.read(), dtype='uint8')
+        assert len(flatmask) == 3000*4200
+
+    
+    args = "?" + urllib.parse.urlencode({
+        #'box':[1570,811, 2180,1400],
+        # bug:
+        'box':[765.7696258253852,1523.5486831171647,931.8033749082906,1650.5174319881498],
+        'displaywidth': 3000,
+        'displayheight':4200,
+        'full': 'true'
     })
     with urllib.request.urlopen(f'http://localhost:5000/sam3/{imagename}'+args) as response:
         assert response.status == 200
@@ -61,7 +77,7 @@ def test_sam3_basics0(subprocess_fixture:subprocess.Popen):
 import sys
 sys.path.append('./')
 
-from backend.sam import find_suitable_cropbox
+from backend.sam import find_suitable_cropbox, find_suitable_grid
 from base.backend.processing import ImageSize
 
 import numpy as np
@@ -88,5 +104,28 @@ def test_suitable_cropbox():
     assert 0.1 <= 100/(cropbox1[2] - cropbox1[0]) <= 0.2
     assert 0.1 <= 100/(cropbox1[3] - cropbox1[1]) <= 0.2
 
+
+def test_suitable_grid():
+    grid0, best_cell0, slack = find_suitable_grid(
+        imagesize = ImageSize(width=1600, height=1200),
+        objectbox = (100,100,260,260),
+        acceptable_fraction = (0.1, 0.2),
+    )
+    # full image
+    assert grid0.shape == (1,1,4)
+    #assert np.all(grid0[0,0] == (0,0,1600,1200))
+    assert np.all(grid0[0,0] == (0,0,1200,1600))
+
+
+    grid1, best_cell1, slack = find_suitable_grid(
+        imagesize = ImageSize(width=1600, height=1200),
+        objectbox = (100,100,200,200),
+        acceptable_fraction = (0.1, 0.2),
+    )
+    assert (np.array(best_cell1) >= 0).all()
+    assert best_cell1[2] > best_cell1[0]
+    assert best_cell1[3] > best_cell1[1]
+    assert 0.1 <= 100/(best_cell1[2] - best_cell1[0]) <= 0.2
+    assert 0.1 <= 100/(best_cell1[3] - best_cell1[1]) <= 0.2
 
 
