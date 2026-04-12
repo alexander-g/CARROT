@@ -412,6 +412,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         this.#sam_orig_im_size = imsize;
         
 
+        // TODO: do this now below on new box; send box + receive cropbox
         // send input file to flask via CARROT_Backend
         const embedding:Float32Array|Error = 
             await backend.sam_encode(this.props.input)
@@ -532,6 +533,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     }
 
     on_sam1_new_box = async (box:Box) => {
+        // TODO: no embeddings is acceptable now, need to check if we have embeddings for this box, if not compute new ones
+
         // send embeddings + box to onnx
         if(!this.#sam_embeddings 
         || !sam_onnx_session 
@@ -1254,13 +1257,21 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
     }
 
 
-    sam_paste_result(mask:Uint8Array, size:ImageSize) {
+    sam_paste_result(mask:Uint8Array, size:ImageSize, box?:Box) {
         const ctx:CanvasRenderingContext2D|null = this.ref.current!.getContext('2d')
         if(ctx == null)
             return;
-        
-        const canvasdata:ImageData = ctx.getImageData(0, 0, size.width, size.height)
-        const rgba:Uint8ClampedArray = canvasdata.data;
+
+        const x0: number = box?.x0 ?? 0
+        const y0: number = box?.y0 ?? 0
+        const x1: number = box?.x1 ?? size.width
+        const y1: number = box?.y1 ?? size.height
+        const w: number = x1 - x0
+        const h: number = y1 - y0
+    
+        const canvasdata: ImageData = ctx.getImageData(x0, y0, w, h)
+        const rgba: Uint8ClampedArray = canvasdata.data;
+    
 
         //alpha blending
         for (let i:number = 0, p:number = 0; i < mask.length; i++, p += 4) {
@@ -1272,7 +1283,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
             }
             // else transparent
         }
-        ctx.putImageData(canvasdata, 0, 0)
+        ctx.putImageData(canvasdata, x0, y0)
     }
 
     _paste_cursor(

@@ -28,9 +28,8 @@ from backend.processing import (
     get_cellsmap_og_name,
     get_treeringsmap_name,
     get_treeringsmap_og_name,
-    sam_encode,
 )
-from backend.sam import sam3_encode_decode, ImageSize
+from backend.sam import sam3_encode_decode, sam_encode, sam_local_encode, ImageSize
 
 
 

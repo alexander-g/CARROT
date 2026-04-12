@@ -203,12 +203,3 @@ def accepts_argument(func:tp.Callable, arg_name:str) -> bool:
         return False
 
 
-HARDCODED_SAM_ENCODER_PATH = 'models/sam/sam_encoder_vit_b.torchscript'
-
-def sam_encode(imagepath:str) -> np.ndarray:
-    sam_encoder = torch.jit.load(HARDCODED_SAM_ENCODER_PATH)
-    imagedata   = torch.as_tensor(
-        np.array(PIL.Image.open(imagepath).convert('RGB'))
-    )
-    output = sam_encoder(imagedata).detach()
-    return output.numpy()
