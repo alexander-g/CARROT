@@ -1134,6 +1134,11 @@ export type UnfinishedCARROT_Result = {
 }
 
 
+export type Sam3Output = {
+    maskdata: Uint8Array;
+    masksize: base.util.ImageSize;
+}
+
 
 export abstract class CARROT_Backend
 extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Settings> {
@@ -1146,7 +1151,14 @@ extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Sett
     /** Process an image with the segment-anything encoder */
     abstract sam_encode(image:File): Promise<Float32Array|Error>;
 
-    // abstract add_aoi()
+    /** Process an image with the segment-anything v3 model */
+    abstract sam3_encode_decode(
+        image:File, 
+        box:  base.boxes.Box,
+        /** Full image patchwise or a single local patch around the box */
+        full: boolean,
+        on_progress?: (progress:number) => void,
+    ): Promise<Sam3Output|Error>;
 }
 
 export function validate_CARROT_Backend(x:unknown): CARROT_Backend|null {
@@ -1184,7 +1196,6 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
             const t0 = performance.now()
             const module:CARROT_Postprocessing = await wasm_postprocessing_initialize();
-            console.log('postprocess_combined: ', ('cellmap' in data)? data.cellmap : null, ('treeringmap' in data)? data.treeringmap : null, sizes.display_size, sizes.og_size, ('aoi' in data)? aoi_points_to_tuples(data.aoi) : undefined)
             const output:CombinedPostprocessingResult
                 |CellsPostprocessingResult
                 |TreeringPostprocessingResult
@@ -1432,13 +1443,63 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             return upload_ok as Error
         
         const url:string = `sam_encode/${image.name}`                           // TODO: px/um
-        const sam_response:Response|Error = 
-            await base.util.fetch_no_throw(url)
+        const sam_response:Response|Error = await base.util.fetch_no_throw(url)
         if(sam_response instanceof Error)
             return sam_response as Error
         
+        // TODO: verify size of the buffer
         return new Float32Array(await sam_response.arrayBuffer())
     }
+
+    override async sam3_encode_decode(
+        image: File, 
+        box:   base.boxes.Box,
+        full:  boolean,
+        on_progress?: (progress:number) => void,
+    ): Promise<Sam3Output|Error> {
+        this.#event_source?.close()
+        this.#event_source = new EventSource('stream');
+        this.#event_source.onmessage = (event:MessageEvent) => {
+            const data:ProgressMessage = JSON.parse(event.data)
+            if(data.image != image.name)
+                return;
+
+            on_progress?.(data.progress);
+        }
+
+
+        const upload_ok:Response|Error = 
+            await base.util.upload_file_no_throw(image)
+        if(upload_ok instanceof Error)
+            return upload_ok as Error
+
+        const sizes:OGandDisplaySizes|Error = await get_og_and_display_sizes(image)
+        if(sizes instanceof Error)
+            return sizes as Error;
+        
+        const boxtuple:[number,number,number,number] = [box.x0, box.y0, box.x1, box.y1]
+        const boxtuple_str:string = JSON.stringify(boxtuple)
+        const GET_params:string = new URLSearchParams({
+            box:           boxtuple_str,
+            full:          full.toString(),
+            displaywidth:  sizes.display_size.width.toFixed(0),
+            displayheight: sizes.display_size.height.toFixed(0),
+        }).toString()
+        const url:string = `sam3/${image.name}?${GET_params}`                           // TODO: px/um
+        const sam3_response:Response|Error = await base.util.fetch_no_throw(url)
+        if(sam3_response instanceof Error)
+            return sam3_response as Error
+        
+        // TODO: verify size of the buffer
+        const result = new Uint8Array(await sam3_response.arrayBuffer())
+
+        let sum:number = 0;
+        for(const i of result)
+            sum += i;
+        console.log('sam3 result:', result.length, sum)
+        return {maskdata:result, masksize:sizes.display_size};
+    }
+
 
     /** Mask is not resized to og shape in the wasm function.
         Instead launching a manual resize operation in the background. */

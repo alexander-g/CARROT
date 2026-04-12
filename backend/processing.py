@@ -1,16 +1,18 @@
 import inspect
 import json
+import time
 import typing as tp
 
 from base.backend.pubsub import PubSub
 from base.backend import GLOBALS
 # needed
-from base.backend.processing import resize_image
+from base.backend.processing import resize_image, ImageSize
 
 from carrot_ml.src import cc_postprocessing, treerings_clustering_legacy
 
 import threading, pickle, os
 import numpy as np
+import onnxruntime as ort
 import PIL.Image
 PIL.Image.MAX_IMAGE_PIXELS = None
 import tifffile
@@ -18,6 +20,9 @@ import torch
 
 # NOTE: np.bool got removed in numpy v 1.20, but used by some older models
 np.bool = np.bool_          # type: ignore
+
+# x0,y0,x1,y0
+Box = tp.Tuple[float, float, float, float]
 
 
 def write_image(path:str, x:np.ndarray):

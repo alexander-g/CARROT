@@ -30,6 +30,7 @@ from backend.processing import (
     get_treeringsmap_og_name,
     sam_encode,
 )
+from backend.sam import sam3_encode_decode, ImageSize
 
 
 
@@ -51,6 +52,7 @@ class App(BaseApp):
             return
         
         self.route('/sam_encode/<imagename>')(self.sam_encode)
+        self.route('/sam3/<imagename>')(self.sam3)
         self.route('/upload_model/<path:path>', methods=['POST'])(self.upload_model)
         self.route('/process/<imagename>')(self.process)
 
@@ -231,6 +233,43 @@ class App(BaseApp):
             os.makedirs(os.path.dirname(fullpath), exist_ok=True)
             f.save(fullpath)
         return 'OK'
+    
+    def sam3(self, imagename:str):
+        full_path = self.path_in_cache(imagename, abort_404=True)
+
+        args = flask.request.args
+        box  = args.get('box', type=json.loads)
+        if not isinstance(box, list) or not len(box) == 4:
+            flask.abort(400)
+        
+        displaywidth  = args.get('displaywidth',  type=int)
+        displayheight = args.get('displayheight', type=int)
+        if displaywidth is None or displayheight is None:
+            flask.abort(400)
+
+        full = args.get('full', type=json.loads)
+        if full is None:
+            flask.abort(400)
+
+        output = sam3_encode_decode(
+            full_path, 
+            box = tuple(box), 
+            worksize = ImageSize(width=displaywidth, height=displayheight),
+            process_full_image = full,
+        )
+        assert output.dtype.itemsize == 1
+
+        return flask.Response(
+            output.tobytes(), 
+            mimetype = 'application/octet-stream',
+            headers  = {
+                'X-DTYPE': 'uint8', 
+                'X-SHAPE': ','.join(map(str, output.shape))
+            }
+        )
+
+        
+
 
 
 
