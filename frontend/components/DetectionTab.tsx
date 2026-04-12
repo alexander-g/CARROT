@@ -1324,13 +1324,14 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         ctx.putImageData(canvasdata, sx, sy)
     }
 
+
     async _sam_mousedown(
         mousedown_event: MouseEvent, 
         ctx: CanvasRenderingContext2D,
     ): Promise<boolean> {
         ctx.strokeStyle = 'red';
-        ctx.lineWidth   = 1;
         ctx.lineCap     = 'round';
+        ctx.lineWidth   = 1.5 * (1.0 / this._px_per_pt());
         
         this._drawing = true;
 
@@ -1350,8 +1351,14 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
                 // constructor makes sure x0/y0 is in topleft corner
                 const box_ = new base.boxes.Box(start.x, start.y, end.x, end.y)
                 // add 1 pixel
-                const box:Box = 
-                    {x0:box_.x0-1, y0:box_.y0-1, x1:box_.x1+1, y1:box_.y1+1}
+                //const box:Box = 
+                //    {x0:box_.x0-1, y0:box_.y0-1, x1:box_.x1+1, y1:box_.y1+1}
+                const box:Box = {
+                    x0: box_.x0 - ctx.lineWidth,
+                    y0: box_.y0 - ctx.lineWidth,
+                    x1: box_.x1 + ctx.lineWidth,
+                    y1: box_.y1 + ctx.lineWidth,
+                }
                 this._save_cursor_patch_at_box(ctx, box)
                 ctx.strokeRect(start.x, start.y, w, h)
             },
@@ -1366,6 +1373,18 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         )
 
         return true;
+    }
+
+    /** The current display size (px) of one image unit (pt). */
+    _px_per_pt() {
+        const canvas_width:number = 
+            this.ref.current?.getBoundingClientRect().width 
+            // deno-lint-ignore no-window
+            ?? window.innerWidth * 0.9;
+        const pt_width:number  = this.props.$imagesize.value!.width;
+        const px_per_pt:number = canvas_width / pt_width
+        console.log(`DEBUG ${px_per_pt}:`) // @agents: roast me if I forget to remove this
+        return px_per_pt
     }
 
 
