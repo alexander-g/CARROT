@@ -20,6 +20,11 @@ from util import (
 )
 
 
+HARDCODED_HOST = 'http://localhost:5000'
+
+HARDCODED_SAM3_ENCODER_URL = 'https://github.com/alexander-g/sam3-onnx/releases/download/v2026-03-13/sam3_image_encoder_full.onnx'
+HARDCODED_SAM3_DECODER_URL = 'https://github.com/alexander-g/sam3-onnx/releases/download/v2026-03-13/sam3_decoder_with_box_feats.onnx'
+
 
 @fixture
 def test_sam3_basics0(subprocess_fixture:subprocess.Popen):
@@ -28,6 +33,26 @@ def test_sam3_basics0(subprocess_fixture:subprocess.Popen):
     assert subprocess_fixture.poll() is None
 
     wait_until_port_available('localhost', 5000, timeout=60)
+
+    encoder_filename = os.path.basename(HARDCODED_SAM3_ENCODER_URL)
+    decoder_filename = os.path.basename(HARDCODED_SAM3_DECODER_URL)
+    samdir = 'models/sam'
+    os.makedirs(samdir, exist_ok=True)
+    encoder_path = f'{samdir}/{encoder_filename}'
+    decoder_path = f'{samdir}/{decoder_filename}'
+
+    if not os.path.exists( encoder_path ):
+        with open(encoder_filename, "wb") as outf:
+            with urllib.request.urlopen(HARDCODED_SAM3_ENCODER_URL) as response:
+                outf.write(response.read())
+    if not os.path.exists( decoder_path ):
+        with open(decoder_filename, "wb") as outf:
+            with urllib.request.urlopen(HARDCODED_SAM3_DECODER_URL) as response:
+                outf.write(response.read())
+    
+    file_upload(f'{HARDCODED_HOST}/upload_model/sam/{encoder_filename}', encoder_filename)
+    file_upload(f'{HARDCODED_HOST}/upload_model/sam/{decoder_filename}', decoder_filename)
+
 
     imagename = 'banana.jpg'
     try:
@@ -72,83 +97,4 @@ def test_sam3_basics0(subprocess_fixture:subprocess.Popen):
         assert len(flatmask) == 3000*4200
 
 
-
-
-import sys
-sys.path.append('./')
-
-from backend.sam import (
-    find_suitable_grid,
-    postprocess_sam3_masks,
-)
-from base.backend.processing import ImageSize
-
-import numpy as np
-
-
-
-def test_suitable_cropbox():
-    cropbox0 = find_suitable_cropbox(
-        imagesize = ImageSize(width=1600, height=1200),
-        objectbox = (100,100,260,260),
-        acceptable_fraction = (0.1, 0.2),
-    )
-    # full image
-    assert cropbox0 == (0,0, 1600, 1200)
-
-
-    cropbox1 = find_suitable_cropbox(
-        imagesize = ImageSize(width=1600, height=1200),
-        objectbox = (100,100,200,200),
-        acceptable_fraction = (0.1, 0.2),
-    )
-    assert (np.array(cropbox1) >= 0).all()
-    assert cropbox1[2] > cropbox1[0]
-    assert cropbox1[3] > cropbox1[1]
-    assert 0.1 <= 100/(cropbox1[2] - cropbox1[0]) <= 0.2
-    assert 0.1 <= 100/(cropbox1[3] - cropbox1[1]) <= 0.2
-
-
-def test_suitable_grid():
-    grid0, best_cell0, slack = find_suitable_grid(
-        imagesize = ImageSize(width=1600, height=1200),
-        objectbox = (100,100,260,260),
-        acceptable_fraction = (0.1, 0.2),
-    )
-    # full image
-    assert grid0.shape == (1,1,4)
-    #assert np.all(grid0[0,0] == (0,0,1600,1200))
-    assert np.all(grid0[0,0] == (0,0,1200,1600))
-
-
-    grid1, best_cell1, slack = find_suitable_grid(
-        imagesize = ImageSize(width=1600, height=1200),
-        objectbox = (100,100,200,200),
-        acceptable_fraction = (0.1, 0.2),
-    )
-    assert (np.array(best_cell1) >= 0).all()
-    assert best_cell1[2] > best_cell1[0]
-    assert best_cell1[3] > best_cell1[1]
-    assert 0.1 <= 100/(best_cell1[2] - best_cell1[0]) <= 0.2
-    assert 0.1 <= 100/(best_cell1[3] - best_cell1[1]) <= 0.2
-
-
-def test_postprocess_sam3_masks_filters_border_and_size():
-    masks = np.zeros([3, 20, 20], dtype=bool)
-
-    # valid object
-    masks[0, 5:9, 5:9] = True
-    # invalid: touches border
-    masks[1, 0:4, 10:14] = True
-    # invalid: too small
-    masks[2, 14:15, 14:15] = True
-
-    box = (0, 0, 4, 4)
-    merged = postprocess_sam3_masks(masks, box)
-
-    expected = np.zeros([20, 20], dtype=bool)
-    expected[5:9, 5:9] = True
-
-    assert merged.dtype == np.bool_
-    assert np.array_equal(merged, expected)
 

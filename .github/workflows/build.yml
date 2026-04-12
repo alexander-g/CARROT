@@ -73,7 +73,7 @@ jobs:
         with:
           python-version: '3.13'
       
-      - run: pip install pytest
+      - run: pip install pytest numpy
 
       - name: Run integration tests
         shell: bash
