@@ -1142,7 +1142,6 @@ export type Sam3Output = {
 
 export abstract class CARROT_Backend
 extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Settings> {
-    //abstract process_cell_association(r:UnfinishedCARROT_Result): Promise<CARROT_Result>;
 
     /** Finalize a result, e.g. cell association etc. */
     abstract postprocess_result(r:UnfinishedCARROT_Result, input:File):
@@ -1177,6 +1176,20 @@ export function is_CARROT_Backend(x:unknown): x is CARROT_Backend {
 /** Backend that sends HTTP processing requests to flask, 
  *  including some CARROT-specific ones. */
 export class CARROT_RemoteBackend extends CARROT_Backend {
+
+    constructor(
+        ...args: [
+            ...baseargs: ConstructorParameters<typeof CARROT_Backend>,
+            base_url?: string
+        ]
+    ){
+        super(args[0], args[1])
+        const base_url: string|undefined = args[2]
+        if(base_url)
+            this.#base_url = base_url.endsWith('/')? base_url : `${base_url}/`
+    }
+
+
     
     /** Keeping workers in here to terminate them manually */
     #unfinished_files:UnfinishedFileInWASM[] = []
@@ -1296,7 +1309,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
         // TODO: refactor
         this.#event_source?.close()
-        this.#event_source = new EventSource('stream');
+        this.#event_source = new EventSource(`${this.#base_url}stream`);
         this.#event_source.onmessage = (event:MessageEvent) => {
             const data:ProgressMessage = JSON.parse(event.data)
             if(data.image != input.name)
@@ -1316,9 +1329,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         if(sizes instanceof Error)
             return new CARROT_Result('failed')
 
-        const upload_ok:Response|Error = await base.util.upload_file_no_throw(input)
+        const upload_ok:Response|Error = 
+            await base.util.upload_file_no_throw(input, `${this.#base_url}/file_upload`)
         if(upload_ok instanceof Error)
             return new CARROT_Result('failed')
+        await upload_ok.body?.cancel()
 
         const cells:boolean     = this.settings.cells_enabled;
         const treerings:boolean = this.settings.treerings_enabled;
@@ -1335,7 +1350,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             og_width:      sizes.og_size.width.toFixed(),
             og_height:     sizes.og_size.height.toFixed(),
         })
-        const url = `process/${filename}?${params}`
+        const url = `${this.#base_url}process/${filename}?${params}`
         const response:Response|Error = await base.util.fetch_no_throw(url)
 
         if(response instanceof Error)
@@ -1349,6 +1364,9 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         && isNaN(result.data.px_per_um) )
             result.data.px_per_um = this.settings.micrometer_factor
         
+        // TODO: refactor
+        this.#event_source?.close()
+
         if(result != null)
             return result as CARROT_Result
         else 
@@ -1359,11 +1377,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
     override async sam_encode(image:File): Promise<Float32Array|Error> {
         const upload_ok:Response|Error = 
-            await base.util.upload_file_no_throw(image)
+            await base.util.upload_file_no_throw(image, `${this.#base_url}/file_upload`)
         if(upload_ok instanceof Error)
             return upload_ok as Error
         
-        const url:string = `sam_encode/${image.name}`                           // TODO: px/um
+        const url:string = `${this.#base_url}sam_encode/${image.name}`                           // TODO: px/um
         const sam_response:Response|Error = await base.util.fetch_no_throw(url)
         if(sam_response instanceof Error)
             return sam_response as Error
@@ -1390,7 +1408,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
 
         const upload_ok:Response|Error = 
-            await base.util.upload_file_no_throw(image)
+            await base.util.upload_file_no_throw(image, `${this.#base_url}/file_upload`)
         if(upload_ok instanceof Error)
             return upload_ok as Error
 
@@ -1406,7 +1424,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             displaywidth:  sizes.display_size.width.toFixed(0),
             displayheight: sizes.display_size.height.toFixed(0),
         }).toString()
-        const url:string = `sam3/${image.name}?${GET_params}`                           // TODO: px/um
+        const url:string = `${this.#base_url}sam3/${image.name}?${GET_params}`                           // TODO: px/um
         const sam3_response:Response|Error = await base.util.fetch_no_throw(url)
         if(sam3_response instanceof Error)
             return sam3_response as Error
@@ -1462,6 +1480,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             worker_abort_command(unfinishedfile)
         this.#unfinished_files = []
     }
+
+
+
+    /** Host used for fetch. Only modified for tests. */
+    #base_url: string = ''
 }
 
 
