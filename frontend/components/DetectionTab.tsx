@@ -519,6 +519,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
         // TODO: need to reload settings, otherwise will download again
 
+        // finally: await this.sam_modal_ref.current!.close()
+
         return true
     }
 

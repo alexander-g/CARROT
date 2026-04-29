@@ -1187,7 +1187,6 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
         const data:CARROT_Data = r.data
         if( 'cellmap' in data || 'treeringmap' in data ){
-            console.log('DBG: postprocessing via wasm')
             const sizes:OGandDisplaySizes|Error = await get_og_and_display_sizes(input)
             if(sizes instanceof Error)
                 return new CARROT_Result('failed')
@@ -1285,84 +1284,6 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         // should not happen
         return new CARROT_Result('failed', data, input.name)
     }
-    
-    async _postprocess_result(r:UnfinishedCARROT_Result, input:File): 
-    Promise<CARROT_Result>{
-        const data:CARROT_Data = r.data
-        
-        if(!('cellmap' in data) && !('treeringmap' in data))
-            return new CARROT_Result('failed')
-        
-        const sizes:OGandDisplaySizes|Error = await get_og_and_display_sizes(input)
-        if(sizes instanceof Error)
-            return new CARROT_Result('failed')
-        
-        // TODO: combine file upload and postprocessing in one fetch()
-        if('cellmap' in data){
-            const response:Response|Error = await base.util.upload_file_no_throw(
-                new File([data.cellmap], `${r.inputname}.cells.png`)
-            )
-            if(response instanceof Error)
-                return new CARROT_Result('failed')
-        }
-        if('treeringmap' in data){
-            const response:Response|Error = await base.util.upload_file_no_throw(
-                new File([data.treeringmap], `${r.inputname}.treerings.png`)
-            )
-            if(response instanceof Error)
-                return new CARROT_Result('failed')
-        }
-        
-        const postprocess_cells:boolean = ('cellmap' in data);
-        const postprocess_rings:boolean = ('treeringmap' in data);
-        
-        const current_rings:TreeringInfo[] = 
-            ('treerings' in data)? data.treerings : []
-        const current_years:number[] = current_rings.map(
-            (ring:TreeringInfo) => ring.year
-        )
-        
-        const params = new URLSearchParams({
-            cells:     false.toString(),  // do not detect cells
-            treerings: false.toString(),  // do not detect tree rings
-            postprocess_cells:     postprocess_cells.toString(),
-            postprocess_treerings: postprocess_rings.toString(),
-            //px_per_um: px_per_um.toFixed(5),  // not needed (for now?)
-            displaywidth:  sizes.display_size.width.toFixed(),
-            displayheight: sizes.display_size.height.toFixed(),
-            og_width:      sizes.og_size.width.toFixed(),
-            og_height:     sizes.og_size.height.toFixed(),
-        })
-        const t0 = performance.now()
-        const response:Error|Response = 
-            await base.util.fetch_no_throw(
-                `process/${r.inputname}?${params}`
-            )
-        if(response instanceof Error)
-            return new CARROT_Result('failed')
-        const t1 = performance.now()
-        console.log(t1-t0)
-
-        const full_result = 
-            (await CARROT_Result.validate(response) as CARROT_Result|null)
-        if(!full_result)
-            return new CARROT_Result('failed')
-        
-        if(full_result && full_result.data && 'px_per_um' in full_result.data)
-            full_result.data.px_per_um = this.settings.micrometer_factor
-
-        // re-apply potentially edited years
-        const edited_ring_points:PointPair[][] = 
-            full_result.get_treering_coordinates_if_loaded() ?? []
-        const finished_rings:TreeringInfo[] = 
-            _zip_into_treerings(edited_ring_points, current_years)
-        if('treerings' in full_result.data)
-            full_result.data.treerings = finished_rings;
-
-        return full_result
-    }
-
-
 
 
     #event_source?:EventSource;
