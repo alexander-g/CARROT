@@ -4,6 +4,9 @@
 import { wait } from "../../base/tests/testcases_deno/util.ts";
 export { wait };
 
+export * as baseutil from "../../base/tests/testcases_deno/util.ts"
+
+
 
 const DEFAULT_CMD: string[] = ["python", "-u", "main.py"];
 const CMD: string[] = (Deno.env.get("CMD")?.split(" ")) ?? DEFAULT_CMD;
