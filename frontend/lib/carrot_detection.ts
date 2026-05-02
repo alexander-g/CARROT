@@ -10,6 +10,7 @@ import {
     type PairedPaths,
     type AreaOfInterest
 } from "../dep.ts"
+import { estimate_years_for_new_treerings_from_old_ones } from "./treering_utils.ts";
 
 import type { 
     WorkerResizeMaskCommand,
@@ -1228,9 +1229,10 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
             const current_rings:TreeringInfo[] = 
                 ('treerings' in data)? data.treerings : []
-            const current_years:number[] = current_rings.map(
-                (ring:TreeringInfo) => ring.year
-            )
+            const current_reversed_growth_direction: boolean = 
+                ('reversed_growth_direction' in data)
+                ? data.reversed_growth_direction 
+                : false;
 
             let treeringmap_og_shape:File|UnfinishedFileInWASM|Error|undefined;
             let cellmap_og_shape:File|UnfinishedFileInWASM|Error|undefined;
@@ -1244,7 +1246,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             if(treeringmap_og_shape instanceof Error
             || cellmap_og_shape instanceof Error)
                 return new CARROT_Result('failed', data, input.name);
-                        
+            
 
             if('ringmap_workshape_png' in output){
                 const combineddata:CellsAndTreeringsData = {
@@ -1257,10 +1259,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                     px_per_um:       this.settings.micrometer_factor,                                   // TODO: is this correct??
                     imagesize:       sizes.og_size,
                     aoi:             aoi_tuples_to_points(output.aoi),
-                    reversed_growth_direction: false,                                                   // TODO: ??
+                    reversed_growth_direction: current_reversed_growth_direction,
                     treerings:  convert_pairedpaths_to_treeringinfos(
                         output.ring_points_xy, 
-                        current_years
+                        current_rings,
+                        current_reversed_growth_direction,
                     ),
     
                     cells: output.cell_info,
@@ -1283,10 +1286,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                     px_per_um:       this.settings.micrometer_factor,                                   // TODO: is this correct??
                     imagesize:       sizes.og_size,
                     aoi:             aoi_tuples_to_points(output.aoi),
-                    reversed_growth_direction: false,                                                   // TODO: ??
+                    reversed_growth_direction: current_reversed_growth_direction,
                     treerings:  convert_pairedpaths_to_treeringinfos(
                         output.ring_points_xy, 
-                        current_years
+                        current_rings,
+                        current_reversed_growth_direction,
                     ),
                 }
                 return new CARROT_Result('processed', output, input.name, treeringdata)
@@ -1490,19 +1494,33 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
 function convert_pairedpaths_to_treeringinfos(
     pairs:  PairedPaths, 
-    years?: number[]
+    previous_treerings: TreeringInfo[],
+    reversed_growth_direction: boolean,
 ): TreeringInfo[] {
-    if(!years || pairs.length != years?.length){
-        // unequal number of pairs and years because user edited 
-        // or none at all because fresh from flask
-        const year_0:number = years?.length? years[0]! : 0;
-        years = base.util.arange(year_0, year_0 + pairs.length)
-    }
+
+    const coordinates: PointPair[][] = convert_pairedpaths_to_pointpairs(pairs)
+    const years: number[] = 
+        estimate_years_for_new_treerings_from_old_ones(
+            coordinates, 
+            previous_treerings, 
+            reversed_growth_direction? 'descending' : 'ascending'
+        )
 
 
     const output:TreeringInfo[] = []
-    for(const i in pairs){
-        const pathpair:PairedPaths[number] = pairs[i]!
+    for(const i in coordinates){
+        output.push({
+            coordinates: coordinates[i]!, 
+            year: years[Number(i)]!,
+        })
+    }
+    return output;
+}
+
+function convert_pairedpaths_to_pointpairs(pairs:PairedPaths): PointPair[][] {
+    const output: PointPair[][] = []
+    for(const i in pairs) {
+        const pathpair: PairedPaths[number] = pairs[i]!
         const coordinates:PointPair[] = [];
         for(let i:number = 0; i < pathpair[0].length; i++){
             const p0:[number,number] = pathpair[0][i]!
@@ -1513,13 +1531,11 @@ function convert_pairedpaths_to_treeringinfos(
                 {x:p1[0]!, y:p1[1]!} 
             ] )
         }
-        output.push({
-            coordinates, 
-            year: years[Number(i)]!,
-        })
+        output.push(coordinates)
     }
     return output;
 }
+
 
 
 type OGandDisplaySizes = {
