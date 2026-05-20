@@ -279,7 +279,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         let new_data:CARROT_Data = {...current_data}
         
         if(mode == 'aoi') {
-            console.trace('TODO: apply AoI changes')
             const aoi_points:AoIRect|null = this.svg_overlay_ref.current!.get_aoi();
 
             // for type safety
@@ -486,40 +485,35 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
         const {encoder:encoderurl, decoder:decoderurl} = HARDCODED_SAM_URLS[samversion];
 
+        const encoderfilename:string = base.util.file_basename(encoderurl);
+        const decoderfilename:string = base.util.file_basename(decoderurl)
+
+        const decoder_savepath = `models/sam/${decoderfilename}`
+        const encoder_savepath = `models/sam/${encoderfilename}`
+
         // NOTE: starting encoder download first, because smaller, no await here
-        const onnxfilepromise:Promise<Error|Response> = 
-            base.util.fetch_no_throw(`proxy?url=${decoderurl}`)
+        const decoderfilepromise:Promise<Error|Response> = 
+            base.util.fetch_no_throw(`proxy?url=${decoderurl}&savepath=${decoder_savepath}`)
         const encoderfile:File|Error = await base.util.fetch_with_progress(
-            new URL(`proxy?url=${encoderurl}`, self.location.origin),
+            new URL(`proxy?url=${encoderurl}&savepath=${encoder_savepath}`, self.location.origin),
             (progress:{total:number|null, received:number}) => {
                 const percent:number = 100 * progress.received / progress.total!;
                 this.sam_modal_ref.current!.show_downloading(percent)
             }
         )
-        const onnxfileresponse:Response|Error = await onnxfilepromise;
-        if(encoderfile instanceof Error || onnxfileresponse instanceof Error)
+        const decoderfileresponse:Response|Error = await decoderfilepromise;
+        if(encoderfile instanceof Error || decoderfileresponse instanceof Error)
             return false;
 
-        const encoderfilename:string = base.util.file_basename(encoderurl);
-        const decoderfilename:string = base.util.file_basename(decoderurl)
-        
-        const response0:Response|Error = await base.util.upload_file_no_throw(
-            encoderfile, 
-            `upload_model/sam/${encoderfilename}`
-        )
-        const onnxfile = 
-            new File([await onnxfileresponse.blob()], decoderfilename)
-        const response1:Response|Error = await base.util.upload_file_no_throw(
-            onnxfile, 
-            `upload_model/sam/${decoderfilename}`
-        )
-        
-        if(response0 instanceof Error || response1 instanceof Error)
+        const decoderfile: Blob|Error = 
+            await decoderfileresponse.blob().catch( () => new Error() );
+        if(decoderfile instanceof Error)
             return false;
+        
 
         // TODO: need to reload settings, otherwise will download again
 
-        // finally: await this.sam_modal_ref.current!.close()
+        // dont close modal automatically
 
         return true
     }
