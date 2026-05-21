@@ -55,6 +55,8 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
 
       - uses: actions/download-artifact@v4
         with:
@@ -75,6 +77,9 @@ jobs:
       
       - run: pip install pytest numpy
 
+      - name: Download deno
+        run: ./deno.bat task cache_libraries
+
       - name: Run integration tests
         shell: bash
         run: |
@@ -87,7 +92,7 @@ jobs:
           MAINBATWINPATH="${MAINBAT//\//\\}"
           CMD="cmd.exe /c ${MAINBATWINPATH}"
           echo "CMD=${CMD}"
-          CMD=$CMD ./run_tests_integration.sh
+          CMD=$CMD NO_WEBBROWSER=1 ./run_tests_integration.sh
 
   release:
     if: ${{ github.event.inputs.release == 'true' }}

@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-explicit-any
 import { asserts } from "./dep.ts"
 import { base }    from "../../frontend/dep.ts"
 import { 
@@ -484,6 +485,76 @@ Deno.test('import.cells-and-treerings-png', async (t:Deno.TestContext) => {
         }
         asserts.assertEquals([-1,0,1,2,3], [...years].sort())
     })
+})
+
+
+Deno.test('correct-years-after-postprocessing-with-aoi', async () => {
+    const inputname = 'ELD_QURO_637A_4.jpg'
+    const rawdata_rings:Uint8Array<ArrayBuffer> = Deno.readFileSync(TREERINGFILE0)
+    const maskfile_rings:File = 
+        new File([rawdata_rings], `${inputname}.treerings.png`)
+    const unfinished:UnfinishedCARROT_Result = {
+        status:    'processing',
+        inputname: inputname,
+        data : {
+            treeringmap:    maskfile_rings,
+            treeringmap_og: maskfile_rings, 
+            reversed_growth_direction: true,
+            imagesize:      {width: 936, height:2476},
+            px_per_um:      1.0,
+            treerings: [],
+            aoi: null,
+
+        } as TreeringsOnlyData
+    }
+    const settings = {
+        micrometer_factor: 1.0
+    }
+    const backend = new CARROT_RemoteBackend(CARROT_Result, settings as any)
+    const postprocessed_result = await backend.postprocess_result(
+        unfinished as UnfinishedCARROT_Result, 
+        maskfile_rings // using png as input file for image size
+    )
+    asserts.assertEquals(postprocessed_result.status, 'processed')
+    asserts.assert('reversed_growth_direction' in postprocessed_result.data)
+
+    // same reversed direction as before
+    asserts.assert(postprocessed_result.data.reversed_growth_direction == true)
+
+    
+    const modified_result = CARROT_Result.modify_year(postprocessed_result, 0, 2010)
+    asserts.assertExists(modified_result)
+    asserts.assert('reversed_growth_direction' in modified_result.data)
+    asserts.assert(modified_result.data.reversed_growth_direction == true)
+    asserts.assertEquals(modified_result.data.treerings.map( t => t.year ), [2010, 2009, 2008, 2007])
+
+
+    // add AoI, removing the first ring
+    const with_aoi:UnfinishedCARROT_Result = {
+        status:    'processing',
+        inputname: inputname,
+        data : {
+            ...modified_result.data,
+            aoi: [
+                {x: 100, y:300},
+                {x: 700, y:300},
+                {x: 100, y:2000},
+                {x: 700, y:2000},
+            ],
+
+        } as TreeringsOnlyData
+    }
+
+    const postprocessed_with_aoi = await backend.postprocess_result(
+        with_aoi as UnfinishedCARROT_Result, 
+        maskfile_rings // using png as input file for image size
+    )
+    asserts.assertEquals(postprocessed_with_aoi.status, 'processed')
+    asserts.assert('reversed_growth_direction' in postprocessed_with_aoi.data)
+    // same reversed direction as before
+    asserts.assert(postprocessed_with_aoi.data.reversed_growth_direction == true)
+    // one less ring, same years
+    asserts.assertEquals(postprocessed_with_aoi.data.treerings.map( t => t.year ), [2009, 2008, 2007])
 })
 
 

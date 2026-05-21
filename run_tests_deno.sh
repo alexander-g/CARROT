@@ -13,7 +13,7 @@ IMPORTMAP_ARG=${IMPORTMAP:+--import-map="$IMPORTMAP"}
     --cached-only               \
     --coverage=$COVERAGE_DIR/raw    \
     $IMPORTMAP_ARG              \
-    ${@-tests/}
+    ${@:-tests/testcases_deno}
 
 NO_COLOR=1 ./deno.sh coverage \
     --exclude=./tests \

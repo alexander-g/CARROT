@@ -10,6 +10,7 @@ import {
     type PairedPaths,
     type AreaOfInterest
 } from "../dep.ts"
+import { estimate_years_for_new_treerings_from_old_ones } from "./treering_utils.ts";
 
 import type { 
     WorkerResizeMaskCommand,
@@ -1142,7 +1143,6 @@ export type Sam3Output = {
 
 export abstract class CARROT_Backend
 extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Settings> {
-    //abstract process_cell_association(r:UnfinishedCARROT_Result): Promise<CARROT_Result>;
 
     /** Finalize a result, e.g. cell association etc. */
     abstract postprocess_result(r:UnfinishedCARROT_Result, input:File):
@@ -1177,6 +1177,20 @@ export function is_CARROT_Backend(x:unknown): x is CARROT_Backend {
 /** Backend that sends HTTP processing requests to flask, 
  *  including some CARROT-specific ones. */
 export class CARROT_RemoteBackend extends CARROT_Backend {
+
+    constructor(
+        ...args: [
+            ...baseargs: ConstructorParameters<typeof CARROT_Backend>,
+            base_url?: string
+        ]
+    ){
+        super(args[0], args[1])
+        const base_url: string|undefined = args[2]
+        if(base_url)
+            this.#base_url = base_url.endsWith('/')? base_url : `${base_url}/`
+    }
+
+
     
     /** Keeping workers in here to terminate them manually */
     #unfinished_files:UnfinishedFileInWASM[] = []
@@ -1187,7 +1201,6 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
         const data:CARROT_Data = r.data
         if( 'cellmap' in data || 'treeringmap' in data ){
-            console.log('DBG: postprocessing via wasm')
             const sizes:OGandDisplaySizes|Error = await get_og_and_display_sizes(input)
             if(sizes instanceof Error)
                 return new CARROT_Result('failed')
@@ -1216,9 +1229,10 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
             const current_rings:TreeringInfo[] = 
                 ('treerings' in data)? data.treerings : []
-            const current_years:number[] = current_rings.map(
-                (ring:TreeringInfo) => ring.year
-            )
+            const current_reversed_growth_direction: boolean = 
+                ('reversed_growth_direction' in data)
+                ? data.reversed_growth_direction 
+                : false;
 
             let treeringmap_og_shape:File|UnfinishedFileInWASM|Error|undefined;
             let cellmap_og_shape:File|UnfinishedFileInWASM|Error|undefined;
@@ -1232,7 +1246,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             if(treeringmap_og_shape instanceof Error
             || cellmap_og_shape instanceof Error)
                 return new CARROT_Result('failed', data, input.name);
-                        
+            
 
             if('ringmap_workshape_png' in output){
                 const combineddata:CellsAndTreeringsData = {
@@ -1245,10 +1259,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                     px_per_um:       this.settings.micrometer_factor,                                   // TODO: is this correct??
                     imagesize:       sizes.og_size,
                     aoi:             aoi_tuples_to_points(output.aoi),
-                    reversed_growth_direction: false,                                                   // TODO: ??
+                    reversed_growth_direction: current_reversed_growth_direction,
                     treerings:  convert_pairedpaths_to_treeringinfos(
                         output.ring_points_xy, 
-                        current_years
+                        current_rings,
+                        current_reversed_growth_direction,
                     ),
     
                     cells: output.cell_info,
@@ -1271,10 +1286,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
                     px_per_um:       this.settings.micrometer_factor,                                   // TODO: is this correct??
                     imagesize:       sizes.og_size,
                     aoi:             aoi_tuples_to_points(output.aoi),
-                    reversed_growth_direction: false,                                                   // TODO: ??
+                    reversed_growth_direction: current_reversed_growth_direction,
                     treerings:  convert_pairedpaths_to_treeringinfos(
                         output.ring_points_xy, 
-                        current_years
+                        current_rings,
+                        current_reversed_growth_direction,
                     ),
                 }
                 return new CARROT_Result('processed', output, input.name, treeringdata)
@@ -1285,84 +1301,6 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         // should not happen
         return new CARROT_Result('failed', data, input.name)
     }
-    
-    async _postprocess_result(r:UnfinishedCARROT_Result, input:File): 
-    Promise<CARROT_Result>{
-        const data:CARROT_Data = r.data
-        
-        if(!('cellmap' in data) && !('treeringmap' in data))
-            return new CARROT_Result('failed')
-        
-        const sizes:OGandDisplaySizes|Error = await get_og_and_display_sizes(input)
-        if(sizes instanceof Error)
-            return new CARROT_Result('failed')
-        
-        // TODO: combine file upload and postprocessing in one fetch()
-        if('cellmap' in data){
-            const response:Response|Error = await base.util.upload_file_no_throw(
-                new File([data.cellmap], `${r.inputname}.cells.png`)
-            )
-            if(response instanceof Error)
-                return new CARROT_Result('failed')
-        }
-        if('treeringmap' in data){
-            const response:Response|Error = await base.util.upload_file_no_throw(
-                new File([data.treeringmap], `${r.inputname}.treerings.png`)
-            )
-            if(response instanceof Error)
-                return new CARROT_Result('failed')
-        }
-        
-        const postprocess_cells:boolean = ('cellmap' in data);
-        const postprocess_rings:boolean = ('treeringmap' in data);
-        
-        const current_rings:TreeringInfo[] = 
-            ('treerings' in data)? data.treerings : []
-        const current_years:number[] = current_rings.map(
-            (ring:TreeringInfo) => ring.year
-        )
-        
-        const params = new URLSearchParams({
-            cells:     false.toString(),  // do not detect cells
-            treerings: false.toString(),  // do not detect tree rings
-            postprocess_cells:     postprocess_cells.toString(),
-            postprocess_treerings: postprocess_rings.toString(),
-            //px_per_um: px_per_um.toFixed(5),  // not needed (for now?)
-            displaywidth:  sizes.display_size.width.toFixed(),
-            displayheight: sizes.display_size.height.toFixed(),
-            og_width:      sizes.og_size.width.toFixed(),
-            og_height:     sizes.og_size.height.toFixed(),
-        })
-        const t0 = performance.now()
-        const response:Error|Response = 
-            await base.util.fetch_no_throw(
-                `process/${r.inputname}?${params}`
-            )
-        if(response instanceof Error)
-            return new CARROT_Result('failed')
-        const t1 = performance.now()
-        console.log(t1-t0)
-
-        const full_result = 
-            (await CARROT_Result.validate(response) as CARROT_Result|null)
-        if(!full_result)
-            return new CARROT_Result('failed')
-        
-        if(full_result && full_result.data && 'px_per_um' in full_result.data)
-            full_result.data.px_per_um = this.settings.micrometer_factor
-
-        // re-apply potentially edited years
-        const edited_ring_points:PointPair[][] = 
-            full_result.get_treering_coordinates_if_loaded() ?? []
-        const finished_rings:TreeringInfo[] = 
-            _zip_into_treerings(edited_ring_points, current_years)
-        if('treerings' in full_result.data)
-            full_result.data.treerings = finished_rings;
-
-        return full_result
-    }
-
-
 
 
     #event_source?:EventSource;
@@ -1375,7 +1313,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
         // TODO: refactor
         this.#event_source?.close()
-        this.#event_source = new EventSource('stream');
+        this.#event_source = new EventSource(`${this.#base_url}stream`);
         this.#event_source.onmessage = (event:MessageEvent) => {
             const data:ProgressMessage = JSON.parse(event.data)
             if(data.image != input.name)
@@ -1395,9 +1333,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         if(sizes instanceof Error)
             return new CARROT_Result('failed')
 
-        const upload_ok:Response|Error = await base.util.upload_file_no_throw(input)
+        const upload_ok:Response|Error = 
+            await base.util.upload_file_no_throw(input, `${this.#base_url}/file_upload`)
         if(upload_ok instanceof Error)
             return new CARROT_Result('failed')
+        await upload_ok.body?.cancel()
 
         const cells:boolean     = this.settings.cells_enabled;
         const treerings:boolean = this.settings.treerings_enabled;
@@ -1414,7 +1354,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             og_width:      sizes.og_size.width.toFixed(),
             og_height:     sizes.og_size.height.toFixed(),
         })
-        const url = `process/${filename}?${params}`
+        const url = `${this.#base_url}process/${filename}?${params}`
         const response:Response|Error = await base.util.fetch_no_throw(url)
 
         if(response instanceof Error)
@@ -1428,6 +1368,9 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         && isNaN(result.data.px_per_um) )
             result.data.px_per_um = this.settings.micrometer_factor
         
+        // TODO: refactor
+        this.#event_source?.close()
+
         if(result != null)
             return result as CARROT_Result
         else 
@@ -1438,11 +1381,11 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
     override async sam_encode(image:File): Promise<Float32Array|Error> {
         const upload_ok:Response|Error = 
-            await base.util.upload_file_no_throw(image)
+            await base.util.upload_file_no_throw(image, `${this.#base_url}/file_upload`)
         if(upload_ok instanceof Error)
             return upload_ok as Error
         
-        const url:string = `sam_encode/${image.name}`                           // TODO: px/um
+        const url:string = `${this.#base_url}sam_encode/${image.name}`                           // TODO: px/um
         const sam_response:Response|Error = await base.util.fetch_no_throw(url)
         if(sam_response instanceof Error)
             return sam_response as Error
@@ -1469,7 +1412,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
 
         const upload_ok:Response|Error = 
-            await base.util.upload_file_no_throw(image)
+            await base.util.upload_file_no_throw(image, `${this.#base_url}/file_upload`)
         if(upload_ok instanceof Error)
             return upload_ok as Error
 
@@ -1485,7 +1428,7 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             displaywidth:  sizes.display_size.width.toFixed(0),
             displayheight: sizes.display_size.height.toFixed(0),
         }).toString()
-        const url:string = `sam3/${image.name}?${GET_params}`                           // TODO: px/um
+        const url:string = `${this.#base_url}sam3/${image.name}?${GET_params}`                           // TODO: px/um
         const sam3_response:Response|Error = await base.util.fetch_no_throw(url)
         if(sam3_response instanceof Error)
             return sam3_response as Error
@@ -1541,24 +1484,43 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
             worker_abort_command(unfinishedfile)
         this.#unfinished_files = []
     }
+
+
+
+    /** Host used for fetch. Only modified for tests. */
+    #base_url: string = ''
 }
 
 
 function convert_pairedpaths_to_treeringinfos(
     pairs:  PairedPaths, 
-    years?: number[]
+    previous_treerings: TreeringInfo[],
+    reversed_growth_direction: boolean,
 ): TreeringInfo[] {
-    if(!years || pairs.length != years?.length){
-        // unequal number of pairs and years because user edited 
-        // or none at all because fresh from flask
-        const year_0:number = years?.length? years[0]! : 0;
-        years = base.util.arange(year_0, year_0 + pairs.length)
-    }
+
+    const coordinates: PointPair[][] = convert_pairedpaths_to_pointpairs(pairs)
+    const years: number[] = 
+        estimate_years_for_new_treerings_from_old_ones(
+            coordinates, 
+            previous_treerings, 
+            reversed_growth_direction? 'descending' : 'ascending'
+        )
 
 
     const output:TreeringInfo[] = []
-    for(const i in pairs){
-        const pathpair:PairedPaths[number] = pairs[i]!
+    for(const i in coordinates){
+        output.push({
+            coordinates: coordinates[i]!, 
+            year: years[Number(i)]!,
+        })
+    }
+    return output;
+}
+
+function convert_pairedpaths_to_pointpairs(pairs:PairedPaths): PointPair[][] {
+    const output: PointPair[][] = []
+    for(const i in pairs) {
+        const pathpair: PairedPaths[number] = pairs[i]!
         const coordinates:PointPair[] = [];
         for(let i:number = 0; i < pathpair[0].length; i++){
             const p0:[number,number] = pathpair[0][i]!
@@ -1569,13 +1531,11 @@ function convert_pairedpaths_to_treeringinfos(
                 {x:p1[0]!, y:p1[1]!} 
             ] )
         }
-        output.push({
-            coordinates, 
-            year: years[Number(i)]!,
-        })
+        output.push(coordinates)
     }
     return output;
 }
+
 
 
 type OGandDisplaySizes = {

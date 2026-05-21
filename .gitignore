@@ -8,5 +8,5 @@ static
 cache
 ./settings.json
 venv
-tests/coverage
+tests/coverage*
 import_map*.json
