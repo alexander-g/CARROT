@@ -3,15 +3,16 @@ import { fetch_no_throw, upload_file_no_throw  } from "../../base/frontend/ts/ut
 import { CARROT_Result, CARROT_RemoteBackend } from "../../frontend/lib/carrot_detection.ts"
 import { CARROT_SettingsHandler, CARROT_Settings } from "../../frontend/lib/carrot_settings.ts";
 
-import { asserts } from "../testcases_deno/dep.ts"
+import { asserts, path } from "../testcases_deno/dep.ts"
 
 
-const HARDCODED_HOST = 'localhost'
+const HARDCODED_HOST = '127.0.0.1'
 const HARDCODED_PORT = 5000
 const HARDCODED_URL  = `http://${HARDCODED_HOST}:${HARDCODED_PORT}`
 
 
-const IMAGEPATH0 = Deno.realPathSync( import.meta.resolve('../testcases/assets/ELD_QURO_635A_3_crop.jpg').replace('file://', '') )
+const IMAGEPATH0: string = path.fromFileUrl(import.meta.resolve('../testcases/assets/ELD_QURO_635A_3_crop.jpg'))
+
 
 
 Deno.test('index-basics', async () => {

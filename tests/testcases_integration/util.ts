@@ -5,10 +5,13 @@ import { wait } from "../../base/tests/testcases_deno/util.ts";
 export { wait };
 
 
-const DEFAULT_CMD: string[] = ["python", "-u", "main.py"];
-const CMD: string[] = (Deno.env.get("CMD")?.split(" ")) ?? DEFAULT_CMD;
+const DEFAULT_CMD: string[] = ['python', '-u', 'main.py']
+const CMD: string[] = resolve_cmd(
+    Deno.env.get('CMD'),
+    DEFAULT_CMD,
+)
 
-const IS_WINDOWS: boolean = (Deno.build.os === "windows");
+const IS_WINDOWS: boolean = (Deno.build.os === 'windows')
 
 
 type SubprocessOptions = {
@@ -20,52 +23,132 @@ type SubprocessOptions = {
 export async function run_backend_as_subprocess(
     fn:    (p: Deno.ChildProcess) => Promise<void> | void,
     opts?: SubprocessOptions,
-) {
-    const cmd: string[] = opts?.cmd ?? CMD;
+): Promise<void> {
+    const cmd: string[] = opts?.cmd ?? CMD
 
-    const p: Deno.ChildProcess = 
+    const p: Deno.ChildProcess =
         new Deno.Command(
-            cmd[0]!, 
+            cmd[0]!,
             {
                 args: cmd.slice(1),
                 cwd: opts?.cwd,
-                env: opts?.env,
-                stdin: "null",
-                stdout: "inherit",
-                stderr: "inherit",
-            }
-        ).spawn();
+                env: opts?.env ?? {'LD_LIBRARY_PATH': ''},
+                stdin: 'null',
+                stdout: 'inherit',
+                stderr: 'inherit',
+            },
+        ).spawn()
 
     try {
-        await fn(p);
+        await fn(p)
     } finally {
-        await terminate(p);
+        await terminate(p)
     }
 }
 
-async function terminate(p: Deno.ChildProcess) {
-    const timeout_handle:number = setTimeout(
+async function terminate(p: Deno.ChildProcess): Promise<void> {
+    const timeout_handle: number = setTimeout(
         () => {
-            try {
-            p.kill("SIGKILL");
-            } catch {}
-        }, 
-        3000
-    );
+            void kill_process_forcefully(p)
+        },
+        3000,
+    )
 
     try {
         if (IS_WINDOWS)
-            p.kill("SIGTERM");
+            await kill_process_tree(p.pid)
         else
-            p.kill("SIGTERM");
-        
-        await p.status;
+            p.kill('SIGTERM')
+
+        await p.status
     } catch {
-        try {
-            p.kill("SIGKILL");
-        } catch {}
+        await kill_process_forcefully(p)
     } finally {
-        clearTimeout(timeout_handle);
+        clearTimeout(timeout_handle)
+    }
+}
+
+function resolve_cmd(
+    value:       string | undefined,
+    default_cmd: string[],
+): string[] {
+    if (!value)
+        return default_cmd
+
+    const parsed_cmd: string[] = split_command_line(value)
+
+    if (parsed_cmd.length === 0)
+        return default_cmd
+
+    return parsed_cmd
+}
+
+/** Parse a command line into arguments. */
+function split_command_line(value: string): string[] {
+    const args: string[] = []
+    let current: string = ''
+    let in_quotes: boolean = false
+
+    for (const ch of value) {
+        if (ch === '"') {
+            in_quotes = !in_quotes
+            continue
+        }
+
+        if (ch === ' ' && !in_quotes) {
+            if (current.length > 0) {
+                args.push(current)
+                current = ''
+            }
+            continue
+        }
+
+        current += ch
+    }
+
+    if (current.length > 0)
+        args.push(current)
+
+    return args
+}
+
+/** Terminate a process tree on Windows. */
+async function kill_process_tree(pid: number): Promise<Error | null> {
+    try {
+        const process: Deno.ChildProcess = new Deno.Command(
+            'taskkill',
+            {
+                args: ['/PID', String(pid), '/T', '/F'],
+                stdout: 'null',
+                stderr: 'null',
+            },
+        ).spawn()
+
+        await process.status
+        return null
+    } catch (error) {
+        console.log(error)
+        if (error instanceof Error)
+            return error
+
+        return new Error('taskkill failed')
+    }
+}
+
+async function kill_process_forcefully(
+    p: Deno.ChildProcess,
+): Promise<Error | null> {
+    if (IS_WINDOWS)
+        return await kill_process_tree(p.pid)
+
+    try {
+        p.kill('SIGKILL')
+        return null
+    } catch (error) {
+        if (error instanceof Error)
+            return error
+
+        return new Error('SIGKILL failed')
     }
 }
 
@@ -139,4 +222,3 @@ export async function file_upload(url: string, path: string) {
     if(res.status !== 200)
         throw new Error(`Upload failed with status ${res.status}`);
 }
-
