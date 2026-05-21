@@ -10,9 +10,12 @@ import {
     type Sam3Output,
 } from "../lib/carrot_detection.ts"
 import { TreeringsSVGOverlay, PointPair } from "./TreeringsSVGOverlay.tsx"
-import { CARROT_ModelTypes }              from "../lib/carrot_settings.ts";
 import * as onnx_sam                      from "../lib/onnx_sam.ts"
 import { CURSORS_B64, base64_to_uint8 }   from "./cursors.ts"
+import { 
+    CARROT_ModelTypes, 
+    CARROT_AvailableModels, 
+} from "../lib/carrot_settings.ts";
 
 
 export 
@@ -22,39 +25,8 @@ class CARROT_DetectionTab extends base.detectiontab.DetectionTab<CARROT_State> {
     }
 
     override file_table_content() {
-        return CARROT_Content;
+        return create_CARROT_Content(this.props.appstate.$available_models);
     }
-
-    // ugly
-    #_ = this.props.appstate.$available_models.subscribe(
-        (avmodels:Record<string, base.settings.ModelInfo[]>|undefined) => {
-            let sam_downloaded:boolean = false;
-            if(avmodels && 'sam' in avmodels){
-                const modelnames:string[] = avmodels['sam'].map( 
-                    (info:base.settings.ModelInfo) => info.name 
-                )
-                const encoder_ok:boolean = 
-                    modelnames.includes('sam_encoder_vit_b')
-                const decoder_ok:boolean = 
-                    modelnames.includes('sam_decoder_vit_b')
-                sam_downloaded = (encoder_ok && decoder_ok)
-            }
-            CARROT_Content.sam_downloaded = sam_downloaded;
-
-            let sam3_downloaded:boolean = false;
-            if(avmodels && 'sam' in avmodels){
-                const modelnames:string[] = avmodels['sam'].map( 
-                    (info:base.settings.ModelInfo) => info.name 
-                )
-                const encoder_ok:boolean = 
-                    modelnames.includes('sam3_image_encoder_full')
-                const decoder_ok:boolean = 
-                    modelnames.includes('sam3_decoder_with_box_feats')
-                    sam3_downloaded = (encoder_ok && decoder_ok)
-            }
-            CARROT_Content.sam3_downloaded = sam3_downloaded;
-        }
-    )
 }
 
 
@@ -91,7 +63,13 @@ const HARDCODED_SAM_URLS = {
 
 
 
-export 
+/** Factory function to pass additional props to CARROT_Content, 
+ *  as it's instantiated in a different part which is not aware of them. */
+function create_CARROT_Content(
+    $available_models: Readonly< Signal<CARROT_AvailableModels|undefined> >,
+) {
+
+
 class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     canvas_ref: preact.RefObject<EditCanvas> = preact.createRef()
     edit_menu_ref: preact.RefObject<EditMenu> = preact.createRef()
@@ -136,11 +114,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             document.removeEventListener('keydown', this.handle_ctrl_z);
         }
     } )
-
-    // TODO: ugly
-    /** Indicates if sam is alread downloaded. NOTE: set from outside.*/
-    static sam_downloaded: boolean = false;
-    static sam3_downloaded:boolean = false;
 
     $image_too_large_for_sam:Signal<boolean> = new Signal(false)
     $aoi_disabled:Readonly<Signal<boolean>>  = signals.computed(
@@ -354,6 +327,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     } )
     
 
+    #sam_downloaded: boolean  = is_sam_downloaded($available_models.value).sam
+    #sam3_downloaded: boolean = is_sam_downloaded($available_models.value).sam3
 
     #sam_embeddings?:Float32Array;
     #sam_orig_im_size?:base.util.ImageSize;
@@ -376,7 +351,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         
         // TODO: check if image not too large, incl px/um
 
-        if(!CARROT_Content.sam_downloaded){
+        if(!this.#sam_downloaded){
             const proceed:boolean = 
                 await this.sam_modal_ref.current!.show_download_required('sam')
             if(!proceed) {
@@ -394,6 +369,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 this.$drawing_mode.value = prev_mode;
                 return;
             }
+            this.#sam_downloaded = ok;
         }
 
 
@@ -456,7 +432,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         // clear last box if still there
         this.#$last_sam3_box.value = null;
 
-        if(!CARROT_Content.sam3_downloaded) {
+        if(!this.#sam3_downloaded) {
             const proceed:boolean = 
                 await this.sam_modal_ref.current!.show_download_required('sam3')
             if(!proceed) {
@@ -474,6 +450,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 this.$drawing_mode.value = prev_mode;
                 return;
             }
+            this.#sam3_downloaded = ok;
         }
 
         await this.sam_modal_ref.current!.close()
@@ -496,9 +473,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             base.util.fetch_no_throw(`proxy?url=${decoderurl}&savepath=${decoder_savepath}`)
         const encoderfile:File|Error = await base.util.fetch_with_progress(
             new URL(`proxy?url=${encoderurl}&savepath=${encoder_savepath}`, self.location.origin),
-            (progress:{total:number|null, received:number}) => {
+            async (progress:{total:number|null, received:number}) => {
                 const percent:number = 100 * progress.received / progress.total!;
-                this.sam_modal_ref.current!.show_downloading(percent)
+                await this.sam_modal_ref.current!.show_downloading(percent)
             }
         )
         const decoderfileresponse:Response|Error = await decoderfilepromise;
@@ -509,11 +486,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             await decoderfileresponse.blob().catch( () => new Error() );
         if(decoderfile instanceof Error)
             return false;
-        
 
-        // TODO: need to reload settings, otherwise will download again
-
-        // dont close modal automatically
+        // modal not closed here, closed by caller
 
         return true
     }
@@ -593,6 +567,43 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         this.#$last_sam3_box.value = full? null : box;
     }
 }
+
+return CARROT_Content;
+} // end create_CARROT_Content
+
+
+function is_sam_downloaded(
+    available_models: Record<string, base.settings.ModelInfo[]>|undefined
+): {sam:boolean, sam3:boolean} {
+    let sam_downloaded:boolean = false;
+    if(available_models && 'sam' in available_models){
+        const modelnames:string[] = available_models['sam'].map( 
+            (info:base.settings.ModelInfo) => info.name 
+        )
+        const encoder_ok:boolean = 
+            modelnames.includes('sam_encoder_vit_b')
+        const decoder_ok:boolean = 
+            modelnames.includes('sam_decoder_vit_b')
+        sam_downloaded = (encoder_ok && decoder_ok)
+    }
+
+    let sam3_downloaded:boolean = false;
+    if(available_models && 'sam' in available_models){
+        const modelnames:string[] = available_models['sam'].map( 
+            (info:base.settings.ModelInfo) => info.name 
+        )
+        const encoder_ok:boolean = 
+            modelnames.includes('sam3_image_encoder_full')
+        const decoder_ok:boolean = 
+            modelnames.includes('sam3_decoder_with_box_feats')
+            sam3_downloaded = (encoder_ok && decoder_ok)
+    }
+    
+    return {sam:sam_downloaded, sam3:sam3_downloaded}
+}
+
+
+
 
 
 function _get_map_for_editmode(
@@ -1551,6 +1562,10 @@ class SAM_Modal extends preact.Component {
                 </button>
             </div>
         </div>
+    }
+
+    override componentWillUnmount(): void {
+        this.close()
     }
 
 
