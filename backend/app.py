@@ -42,7 +42,7 @@ class App(BaseApp):
                 static    = get_static_path(),
                 index_tsx = 'frontend/index.tsx',
                 srcdirs   = 'frontend/,base/frontend/',
-                copy_globs= 'frontend/css/treerings.css,frontend/favicon.ico',
+                copy_globs= 'frontend/css/treerings.css,frontend/favicon.ico,frontend/logo.svg',
                 extra_bundle = 'frontend/lib/carrot_worker.ts',
             )
             kw['deno_cfg'] = deno
