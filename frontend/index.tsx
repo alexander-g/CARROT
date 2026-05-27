@@ -47,6 +47,18 @@ class CARROT_App extends base.create_App({
         
         return changed;
     }
+
+    override TopMenuClass = TopMenuWithLargerLogo;
+}
+
+
+class TopMenuWithLargerLogo extends base.TopMenu {
+    override render(): JSX.Element {
+        return <base.TopMenu 
+            {...this.props}
+            logo_width = {150}
+        />
+    }
 }
 
 
