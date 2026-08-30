@@ -1,9 +1,13 @@
 import os
 import shutil
+import sys
 import typing as tp
+import urllib
 import zipfile
 
 import PIL.Image
+
+from .settings import download_file
 
 from base.backend import GLOBALS, pubsub
 from base.backend.processing import resize_image
@@ -11,6 +15,16 @@ from base.backend.app import get_models_path
 
 from carrot_ml.src import treeringmodel as treerings
 from carrot_ml.src import maskrcnn_celldetection as cells
+
+sys.path.append('./carrot_ml/ultralytics/')
+from carrot_ml.src import treerings_yolo
+
+
+
+
+HARDCODED_PRETRAINED_YOLO_MODELDIR = 'models/yolo-pretrained/'
+
+
 
 
 def start_training(
@@ -31,42 +45,44 @@ def start_training(
     with GLOBALS.processing_lock:
         GLOBALS.processing_lock.release()  #decrement recursion level bc acquired twice
     
-        
-        # ok = model.start_training(imagefiles, targetfiles, epochs='auto', num_workers=0, callback=training_progress_callback)
-        # return 'OK' if ok in [True, None] else 'INTERRUPTED'
 
         px_per_mm = settings.micrometer_factor * 1000
+        os.makedirs(cachedir, exist_ok=True)
         outputfile = _get_temporary_modelname(cachedir, trainingtype)
 
         if trainingtype == 'treerings':
-            steps = 500
-            newmodel = treerings.start_training_from_carrot(
+            yolo_pretrained = find_or_download_yolo_pretrained(
+                treerings_yolo.YOLO26S_SEMANTIC_PRETRAINED_WEIGHTS_URL
+            )
+            steps = 1000
+            newmodel = treerings_yolo.start_training_from_carrot(
                 filepairs,
                 cachedir,
                 px_per_mm,
                 epochs = None,
                 steps  = steps,
                 progress_callback = training_progress_callback,
-                finetunemodule=settings.models[trainingtype].module.module,
+                weightsfile       = yolo_pretrained,
             )
         elif trainingtype == 'cells':
-            steps = 100
-            newmodel = cells.start_training_from_carrot(
-                filepairs,
-                cachedir,
-                px_per_mm,
-                epochs = None,
-                steps  = steps,
-                progress_callback = training_progress_callback,
-                #finetunemodule=settings.models[trainingtype].module.module,
-            )
+            assert 0, 'TODO'
+            # steps = 100
+            # newmodel = cells.start_training_from_carrot(
+            #     filepairs,
+            #     cachedir,
+            #     px_per_mm,
+            #     epochs = None,
+            #     steps  = steps,
+            #     progress_callback = training_progress_callback,
+            #     #finetunemodule=settings.models[trainingtype].module.module,
+            # )
         else:
             raise NotImplementedError(trainingtype)
         
         # NOTE: not saving newmodel because of errors
         # instead saving previous with new state dict
-        # newmodel.save(outputfile)
-        _save_new_model_TEMPORARY_WORKAROUND(newmodel, settings, trainingtype, outputfile)
+        newmodel.save(outputfile)
+        # _save_new_model_TEMPORARY_WORKAROUND(newmodel, settings, trainingtype, outputfile)
 
         #indicate that the current model is unsaved
         settings.active_models[trainingtype] = ''
@@ -184,4 +200,15 @@ def resize_targets_to_inputs(
             new_tgfile = tgfile
         new_targetfiles.append(new_tgfile)
     return new_targetfiles
+
+
+def find_or_download_yolo_pretrained(url:str) -> str:
+    parse_result   = urllib.parse.urlparse(url)
+    modelbasename  = os.path.basename(parse_result.path)
+    yolo_modelpath = \
+        os.path.join(HARDCODED_PRETRAINED_YOLO_MODELDIR, modelbasename)
+    if not os.path.exists(yolo_modelpath):
+        download_file(url, yolo_modelpath)
+
+    return yolo_modelpath
 
