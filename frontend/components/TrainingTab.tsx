@@ -64,9 +64,14 @@ export class TrainingTab extends base.TrainingTab<state.CARROT_State> {
             }
             const response0:Response|Error = 
                 await base.util.upload_file_no_throw(pair.input)
-            const response1:Response|Error = 
+            
+            // making sure the input and annotation file have the same name
+            const annotationname = `${pair.input.name}.${training_type}.png`
+            const annotationfile: File = 
                 // @ts-ignore too tired to fight typescript
-                await base.util.upload_file_no_throw(pair.$result.value.data[mapname])
+                new File([pair.$result.value.data[mapname]], annotationname)
+            const response1:Response|Error = 
+                await base.util.upload_file_no_throw(annotationfile)
             if(response0 instanceof Error || response1 instanceof Error){
                 this.trainingmodal.current!.failed('Copying files failed.')
                 return;

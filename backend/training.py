@@ -18,7 +18,7 @@ from carrot_ml.src import maskrcnn_celldetection as cells
 
 sys.path.append('./carrot_ml/ultralytics/')
 from carrot_ml.src import treerings_yolo
-
+from carrot_ml.src import cells_yolo
 
 
 
@@ -65,17 +65,19 @@ def start_training(
                 weightsfile       = yolo_pretrained,
             )
         elif trainingtype == 'cells':
-            assert 0, 'TODO'
-            # steps = 100
-            # newmodel = cells.start_training_from_carrot(
-            #     filepairs,
-            #     cachedir,
-            #     px_per_mm,
-            #     epochs = None,
-            #     steps  = steps,
-            #     progress_callback = training_progress_callback,
-            #     #finetunemodule=settings.models[trainingtype].module.module,
-            # )
+            yolo_pretrained = find_or_download_yolo_pretrained(
+                cells_yolo.YOLO26S_SEGMENT_PRETRAINED_WEIGHTS_URL
+            )
+            steps = 100
+            newmodel = cells_yolo.start_training_from_carrot(
+                filepairs,
+                cachedir,
+                px_per_mm,
+                epochs = None,
+                steps  = steps,
+                progress_callback = training_progress_callback,
+                weightsfile       = yolo_pretrained,
+            )
         else:
             raise NotImplementedError(trainingtype)
         
