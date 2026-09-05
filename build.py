@@ -1,5 +1,9 @@
 #!/bin/python
-import os, shutil, sys, subprocess
+import glob
+import os
+import shutil
+import subprocess
+import sys
 import datetime
 
 import argparse, glob, zipfile
@@ -30,6 +34,9 @@ rc = subprocess.call(' '.join([
     '--hidden-import=imagecodecs._imcd',
     '--hidden-import=traininglib',
     '--hidden-import=traininglib.unet',
+    '--exclude-module=tkinter',
+    '--hidden-import=ultralytics',
+    f'--paths={os.path.abspath("carrot_ml/ultralytics/")}',
     '--exclude-module=_bootlocale',
     '--additional-hooks-dir=./hooks',
     f'--distpath={build_dir} ',
@@ -51,7 +58,24 @@ else:
     shutil.copy('.github/workflows/scripts/main.bat', build_dir+'/main.bat')
 shutil.rmtree('./build')
 #shutil.copyfile('settings.json', build_dir+'/settings.json')
+
+print()
+print(open('./main.spec').read())
+print()
 os.remove('./main.spec')
+
+# cleanup
+for folder in (
+    glob.glob( os.path.join(build_dir, 'static', '*-*-*', '**', 'frontend'), recursive=True )
+    + glob.glob( os.path.join(build_dir, '**', '__pycache__'), recursive=True )
+):
+    print('Cleaning up: ', folder)
+    shutil.rmtree(folder)
+
+
+# ultralytics/docs/
+# ultralytics/examples/
+# build/extracted/main/_internal/_tcl_data/
 
 
 if args.zip:

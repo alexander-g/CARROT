@@ -17,4 +17,12 @@ rem change working directory to bash script
 pushd "%~dp0"
 
 main\main.exe
-pause
+rem pause
+
+
+
+set "exitCode=%ERRORLEVEL%"
+
+if not defined GITHUB_ACTIONS pause
+
+exit /b %exitCode%
