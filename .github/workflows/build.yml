@@ -29,6 +29,8 @@ jobs:
         run: |
           pwd
           ls
+          ls carrot_ml
+          ls carrot_ml/ultralytics
           cp -r traininglib_/traininglib ./traininglib
           ls traininglib/datalib.py
       
@@ -55,6 +57,7 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+        # NOTE: recursive currently required
         with:
           submodules: 'recursive'
 
@@ -70,12 +73,6 @@ jobs:
           ls build/
           #unzip build/*.zip
           for f in build/*.zip; do unzip -o "$f" -d build/extracted/; done
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      
-      - run: pip install pytest numpy
 
       - name: Download deno
         run: ./deno.bat task cache_libraries

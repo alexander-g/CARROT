@@ -2,11 +2,6 @@
 
 set -ex
 
-export PYTHONUNBUFFERED=1
-# for debugging (no output capture + stop on fail), remove otherwise
-export PYTEST_ADDOPTS="-s -x"
-#pytest --disable-warnings $@ tests/testcases_integration/
-
 
 COVERAGE_DIR=./tests/coverage-integration
 rm -rf $COVERAGE_DIR

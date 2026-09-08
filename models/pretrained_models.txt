@@ -1,2 +1,4 @@
-cells/2025-09-18_vessels-deciduous.pt.zip : https://github.com/alexander-g/assets/releases/download/2025-09-18/2025-09-18_vessels-deciduous.pt.zip
-treerings/2025-09-18_treerings.pt.zip : https://github.com/alexander-g/assets/releases/download/2025-09-18/2025-09-18__treerings.pt.zip
+treerings/2026-09-06_treerings-deciduous-yolo26.pt.zip : https://github.com/alexander-g/assets/releases/download/2026-09-05/2026-09-06_treerings-deciduous-yolo26.pt.zip
+cells/2026-09-08_vessels-deciduous-yolo26.pt.zip : https://github.com/alexander-g/assets/releases/download/2026-09-05/2026-09-08_vessels-deciduous-yolo26.pt.zip
+treerings/2026-08-25_treerings-blackwhite-yolo26.pt.zip : https://github.com/alexander-g/assets/releases/download/2026-09-05/2026-08-25_treerings-blackwhite-yolo26.pt.zip
+cells/2026-08-24_vessels-blackwhite-yolo26.pt.zip : https://github.com/alexander-g/assets/releases/download/2026-09-05/2026-08-24_vessels-blackwhite-yolo26.pt.zip
