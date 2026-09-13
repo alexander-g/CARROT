@@ -75,7 +75,7 @@ Deno.test('process-basics-e2e',  async () => {
         const settings: CARROT_Settings = {
             cells_enabled: true,
             treerings_enabled: true,
-            micrometer_factor: 2,
+            micrometer_factor: 2.77,
             active_models: {cells:' ??', treerings: '??'}
         }
 
@@ -91,6 +91,8 @@ Deno.test('process-basics-e2e',  async () => {
 
         asserts.assertGreater(result.data.cells.length, 0)
         asserts.assertGreater(result.data.treerings.length, 0)
+
+        asserts.assertEquals(result.data.px_per_um, settings.micrometer_factor)
     } )
 })
 

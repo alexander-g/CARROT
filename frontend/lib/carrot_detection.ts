@@ -383,7 +383,8 @@ async function validate_zipped_result_full_or_partial<T extends BaseResult>(
 }
 
 
-/** Response sent from legacy flask backend for finalize loading a result */
+/** Response sent from still-not-legacy flask backend i.e a zipfile with one 
+ *  or two masks that still need to be postprocessed later on */
 async function validate_backend_response<T extends BaseResult>(
     raw:unknown, 
     ctor:base.util.ClassWithValidate<
@@ -397,12 +398,31 @@ async function validate_backend_response<T extends BaseResult>(
         if(inputname == null)
             return null;
         
-        const as_file:File = new File([await raw.blob()], `${inputname}.zip`)
-        const result:T|null = await validate_zipped_result_full_or_partial({
-            input: {name:inputname},
-            file:  as_file,
-        }, ctor)
-        return result;
+        const zipfile:File = new File([await raw.blob()], `${inputname}.zip`)
+        const zipcontents:base.zip.Files|Error = await base.zip.unzip(zipfile)
+        if(zipcontents instanceof Error)
+            return null;
+
+        const cellsfile: File|undefined = 
+            zipcontents[`${inputname}.cells.png`]
+        const treeringsfile: File|undefined = 
+            zipcontents[`${inputname}.treerings.png`]
+        
+        if(cellsfile == undefined && treeringsfile == undefined)
+            return null
+
+        // @ts-ignore typescript antics
+        const data: CellMapOnlyUnfinishedData | TreeringMapOnlyUnfinishedData = {
+            ...( cellsfile     ? { cellmap:     cellsfile }     : {} ),
+            ...( treeringsfile ? { treeringmap: treeringsfile } : {} ),
+        }
+
+        return new ctor(
+            'processing',
+            raw,
+            inputname,
+            data,
+        )
     }
     else return null;
 }
@@ -1345,10 +1365,10 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         const px_per_um:number  = this.settings.micrometer_factor;
         const filename:string   = input.name;
         const params = new URLSearchParams({
-            cells:     cells.toString(),
-            treerings: treerings.toString(),
-            recluster: recluster.toString(),
-            px_per_um: px_per_um.toFixed(5),
+            cells:         cells.toString(),
+            treerings:     treerings.toString(),
+            recluster:     recluster.toString(),
+            px_per_um:     px_per_um.toFixed(5),
             displaywidth:  sizes.display_size.width.toFixed(),
             displayheight: sizes.display_size.height.toFixed(),
             og_width:      sizes.og_size.width.toFixed(),
@@ -1356,25 +1376,36 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         })
         const url = `${this.#base_url}process/${filename}?${params}`
         const response:Response|Error = await base.util.fetch_no_throw(url)
+        // TODO: refactor: try/finally
+        this.#event_source?.close()
 
         if(response instanceof Error)
             return new CARROT_Result('failed')
         
-        const result: base.files.Result|null = 
-            await CARROT_Result.validate(response)
+        let result: CARROT_Result|null = 
+            await CARROT_Result.validate<CARROT_Result>(response)
+        if(result == null || result.status == 'failed')
+            return new CARROT_Result('failed')
+        
         if(result instanceof CARROT_Result 
         && result.data
         && ('px_per_um' in result.data)
         && isNaN(result.data.px_per_um) )
             result.data.px_per_um = this.settings.micrometer_factor
-        
-        // TODO: refactor
-        this.#event_source?.close()
 
-        if(result != null)
-            return result as CARROT_Result
-        else 
+        if(result.status == 'processing')
+            result = await this.postprocess_result(
+                // typescript did not let me simply pass `result`
+                {status:result.status, data:result.data, inputname:input.name}, 
+                input
+            )
+        if(result == null || result.status == 'failed')
             return new CARROT_Result('failed')
+        
+        if('px_per_um' in result.data && isNaN(result.data.px_per_um))
+            result.data.px_per_um = this.settings.micrometer_factor
+        
+        return result
     }
 
 
