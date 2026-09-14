@@ -21,9 +21,6 @@ import backend.settings  #important for some reason
 from backend.processing import (
     process_cells as process_cells_fn,
     process_treerings as process_treerings_fn,
-    postprocess_cells as postprocess_cells_fn,
-    postprocess_treerings as postprocess_treerings_fn,
-    postprocess_combined  as postprocess_combined_fn,
     get_cellsmap_name,
     get_cellsmap_og_name,
     get_treeringsmap_name,
@@ -66,18 +63,6 @@ class App(BaseApp):
         og_width      = args.get('og_width',  type=int, default=None)
         og_height     = args.get('og_height', type=int, default=None)
         px_per_um     = args.get('px_per_um', type=float)
-        postprocess_cells = process_cells or args.get(
-            'postprocess_cells', 
-            type    = json.loads, 
-            default = False,
-        )
-        postprocess_rings = process_treerings or args.get(
-            'postprocess_treerings', 
-            type    = json.loads, 
-            default = False,
-        )
-        # combine both results
-        postprocess_combined = postprocess_cells and postprocess_rings
         
         if og_height is None or og_width is None:
             # TODO: instead, read the size from input image file if available
@@ -88,10 +73,12 @@ class App(BaseApp):
             flask.abort(400)
         displayshape = (displayheight, displaywidth)
 
+        if px_per_um is None:
+            flask.abort(400)
+
         results:tp.Dict[str, bytes] = {}
         full_path = self.path_in_cache(imagename, abort_404=False)
         if process_cells:
-            
             _ignored = process_cells_fn(
                 full_path, 
                 self.settings, 
@@ -99,65 +86,21 @@ class App(BaseApp):
                 displayshape
             )
         if process_treerings:
-            output = process_treerings_fn(
+            _ignored = process_treerings_fn(
                 full_path, 
                 self.settings, 
                 px_per_um, 
                 displayshape
             )
         
-
-        if postprocess_cells:
-            output = postprocess_cells_fn(full_path, displayshape, og_shape)
-            results[f'{imagename}/internal/{imagename}.instancemap.png'] = \
-                open(output['instancemap_rgb'], 'rb').read()
-            instancemap = output['instancemap']
-            cell_points = output['cell_points']
-
-
-        if postprocess_rings:
-            output = postprocess_treerings_fn(full_path, displayshape, og_shape)
-            ringdata = {
-                'ring_points': output['ring_points_json'],
-                'imagesize':   [og_width, og_height],
-            }
-            results[f'{imagename}/treerings.json'] = \
-                json.dumps(ringdata).encode('utf8')
-            ring_points = output['ring_points']
-
-        if postprocess_combined:
-            output = postprocess_combined_fn(
-                full_path, 
-                cell_points, 
-                ring_points, 
-                instancemap
-            )
-            celldata = {
-                'cells': output['cells'],
-                'imagesize': [og_width, og_height],
-            }
-            results[f'{imagename}/cells.json'] = \
-                json.dumps(celldata).encode('utf8')
-            results[f'{imagename}/internal/{imagename}.ring_map.png'] = \
-                open(output['ringmap_rgb'], 'rb').read()
-
-        
-        cellsmap = get_cellsmap_og_name(full_path)
-        if os.path.exists(cellsmap):
-            results[f'{imagename}/{imagename}.cells.png'] = \
-                open(cellsmap, 'rb').read()
         cellsmap_resized = get_cellsmap_name(full_path)
         if os.path.exists(cellsmap_resized):
-            results[f'{imagename}/internal/{imagename}.cells.png'] = \
+            results[f'{imagename}.cells.png'] = \
                 open(cellsmap_resized, 'rb').read()
         
-        treeringsmap = get_treeringsmap_og_name(full_path)
-        if os.path.exists(treeringsmap):
-            results[f'{imagename}/{imagename}.treerings.png'] = \
-                open(treeringsmap, 'rb').read()
         treeringsmap_resized = get_treeringsmap_name(full_path)
         if os.path.exists(treeringsmap_resized):
-            results[f'{imagename}/internal/{imagename}.treerings.png'] = \
+            results[f'{imagename}.treerings.png'] = \
                 open(treeringsmap_resized, 'rb').read()
 
         path = zip_results(results, full_path)

@@ -8,7 +8,6 @@ from base.backend import GLOBALS
 # needed
 from base.backend.processing import resize_image, ImageSize
 
-from carrot_ml.src import cc_postprocessing, treerings_clustering_legacy
 
 import threading, pickle, os
 import numpy as np
@@ -107,81 +106,6 @@ def cache_treerings(result, image_path:str):
     open(cachefile, 'w').write(json.dumps(jsondata))
     return jsondata
 
-
-
-def postprocess_cells(
-    image_path:   str, 
-    displayshape: tp.Tuple[int,int],
-    og_shape:     tp.Tuple[int,int],
-):
-    HARDCODED_MIN_OBJECT_SIZE = 10
-
-    cellmap_path = get_cellsmap_name(image_path)
-    output:cc_postprocessing.CellPostprocessingResult = \
-        cc_postprocessing.postprocess_cellmapfile(
-            cellmap_path, 
-            displayshape,
-            og_shape, 
-            min_object_size_px=HARDCODED_MIN_OBJECT_SIZE
-        )
-    
-    instancemap_path = get_instancemap_name(image_path)
-    write_image(instancemap_path, output.instancemap_rgb)
-    replace_image_if_size_changed(cellmap_path, output.classmap)
-    cellmap_og_path = get_cellsmap_og_name(image_path)
-    write_image(cellmap_og_path, output.classmap_og)
-
-
-    return {
-        'cell_points':     output.cell_points,
-        'instancemap_rgb': instancemap_path,
-        'instancemap':     output.instancemap,
-    }
-
-
-def postprocess_treerings(
-    image_path:   str, 
-    displayshape: tp.Tuple[int,int],
-    og_shape:     tp.Tuple[int,int],
-):
-    treeringmap_path = get_treeringsmap_name(image_path)
-    output:treerings_clustering_legacy.TreeringPostprocessingResult = \
-        treerings_clustering_legacy.postprocess_treeringmapfile(
-            treeringmap_path, 
-            displayshape,
-            og_shape,
-        )
-    ring_points_json = \
-        [np.stack([a, b], axis=1).tolist() for a,b in output.ring_points_yx]
-    replace_image_if_size_changed(treeringmap_path, output.treeringmap)
-    treeringmap_og_path = get_treeringsmap_og_name(image_path)
-    write_image(treeringmap_og_path, output.treeringmap_og)
-    
-    return {
-        'ring_points_json': ring_points_json,
-        'ring_points': output.ring_points_yx,
-    }
-
-
-def postprocess_combined(
-    image_path:  str,
-    cell_points: tp.List[np.ndarray], 
-    ring_points: tp.List[tp.Tuple[np.ndarray, np.ndarray]],
-    instancemap: np.ndarray,
-):
-    output:cc_postprocessing.CombinedPostprocessingResult = \
-        cc_postprocessing.postprocess_cells_and_rings_combined(
-            cell_points,
-            ring_points,
-            instancemap,
-        )
-    
-    ringmap_path = image_path+'.ring_map.png'
-    write_image(ringmap_path, output.ringmap_rgb)
-    return {
-        'cells': output.cell_info,
-        'ringmap_rgb': ringmap_path
-    }
 
 
 def replace_image_if_size_changed(path:str, newdata:np.ndarray):

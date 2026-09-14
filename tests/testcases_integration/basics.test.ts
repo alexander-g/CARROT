@@ -68,29 +68,50 @@ Deno.test('settings-basics-e2e', async () => {
 })
 
 
-Deno.test('process-basics-e2e',  async () => {
-    await run_backend_as_subprocess( async () => {
-        await wait_until_port_available(HARDCODED_HOST, HARDCODED_PORT, 60*1000)
+Deno.test('process-basics-e2e',  async (t:Deno.TestContext) => {
 
-        const settings: CARROT_Settings = {
-            cells_enabled: true,
-            treerings_enabled: true,
-            micrometer_factor: 2,
-            active_models: {cells:' ??', treerings: '??'}
-        }
+    for(const combo of [
+        {cells_enabled: true,  treerings_enabled: false},
+        {cells_enabled: false, treerings_enabled: true},
+        {cells_enabled: true,  treerings_enabled: true},
+    ]) {
+        await t.step(
+            `cells-${combo.cells_enabled}-rings-${combo.treerings_enabled}`,
+            async () => {
+            
+            await run_backend_as_subprocess( async () => {
+                await wait_until_port_available(HARDCODED_HOST, HARDCODED_PORT, 60*1000)
+        
+                const settings: CARROT_Settings = {
+                    cells_enabled: combo.cells_enabled,
+                    treerings_enabled: combo.treerings_enabled,
+                    micrometer_factor: 2.77,
+                    active_models: {cells:' ??', treerings: '??'}
+                }
+        
+                const filebytes = Deno.readFileSync(IMAGEPATH0)
+                const file = new File([filebytes], 'file.jpg')
+        
+                const backend = new CARROT_RemoteBackend(CARROT_Result, settings, HARDCODED_URL)
+                const result = await backend.process(file)
+                asserts.assertEquals(result.status, 'processed')
+        
+                if(combo.cells_enabled && combo.treerings_enabled) {
+                    asserts.assert('cells' in result.data)
+                    asserts.assertGreater(result.data.cells.length, 0)
+                    asserts.assertEquals(result.data.px_per_um, settings.micrometer_factor)
+                }
+                if(combo.treerings_enabled) {
+                    asserts.assert('treerings' in result.data)
+                    asserts.assertGreater(result.data.treerings.length, 0)
+                    asserts.assertEquals(result.data.px_per_um, settings.micrometer_factor)
+                }
+                if(combo.cells_enabled)
+                    asserts.assert('cellmap' in result.data)
+            } )
+        })
+    }
 
-        const filebytes = Deno.readFileSync(IMAGEPATH0)
-        const file = new File([filebytes], 'file.jpg')
-
-        const backend = new CARROT_RemoteBackend(CARROT_Result, settings, HARDCODED_URL)
-        const result = await backend.process(file)
-        asserts.assertEquals(result.status, 'processed')
-
-        asserts.assert('cells' in result.data)
-        asserts.assert('treerings' in result.data)
-
-        asserts.assertGreater(result.data.cells.length, 0)
-        asserts.assertGreater(result.data.treerings.length, 0)
-    } )
+    
 })
 

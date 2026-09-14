@@ -8,10 +8,12 @@ from base.backend.settings import Settings as BaseSettings
 
 
 MODEL_FILE_ENDINGS = ['.pt.zip', '.pt', '.torchscript', '.onnx']
+MODEL_TYPES = ['cells', 'treerings']
 
 
 class Settings(BaseSettings):
-    def get_defaults(self):
+    @classmethod
+    def get_defaults(cls):
         d = super().get_defaults()
         d.update({
             'cells_enabled'     : True,
@@ -23,12 +25,18 @@ class Settings(BaseSettings):
     
     #override
     @classmethod
-    def get_available_models(cls, with_properties=False, **kw) -> tp.Dict[str, tp.List]:
+    def get_available_models(
+        cls, 
+        with_properties = False, 
+        endings         = '_ignored'  # here only for mypy
+    ) -> tp.Dict[str, tp.List]:
         downloaded_models = super().get_available_models(
             with_properties, 
-            endings=MODEL_FILE_ENDINGS, 
-            **kw
+            endings=MODEL_FILE_ENDINGS
         )
+        downloaded_models = {
+            k:v for k,v in downloaded_models.items() if k in MODEL_TYPES
+        }
         downloaded_modelnames = [
             info_or_name if isinstance(info_or_name, str) else info_or_name['name'] 
                 for _, modelslist in downloaded_models.items() 
