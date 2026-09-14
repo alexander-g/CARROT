@@ -82,10 +82,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     /** Whether to draw, erase or use SAM */
     $drawing_mode: Signal<DrawingMode> = new Signal('brush')
 
-    $treering_points: Readonly<Signal<PointPair[][]>> = signals.computed( () => { 
-        return this.props.$result.value.get_treering_coordinates_if_loaded() ?? [] 
-    })
-
     /** Whether to show overlays */
     $overlays_visible:Readonly<Signal<boolean>> = signals.computed(() => {
         return this.$result_visible.value 
@@ -123,9 +119,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
     override result_overlays(): JSX.Element {
         return <>
-            <base.imageoverlay.ImageOverlay 
-                image     = { this.get_overlayimage() }
-                $visible  = { this.$overlays_visible }
+            <SignalAwareImageOverlay 
+                $image   = { this.$overlayimage }
+                $visible = { this.$overlays_visible }
             />
             <TreeringsSVGOverlay 
                 ref  = { this.svg_overlay_ref }
@@ -156,7 +152,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         </>
     }
 
-    get_overlayimage(): File|null {
+    $overlayimage: Readonly<Signal<File|null>> = signals.computed( () => {
+        //subscription
         const resultdata_:CARROT_Data = this.props.$result.value.data;
         if(is_unfinished(resultdata_))
             return null;
@@ -173,7 +170,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             return resultdata.treeringmap
         else
             return null;
-    }
+    } )
 
 
     // NOTE: adding <SAM_Modal /> in result_overlays() caused issues
@@ -261,7 +258,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         }
 
 
-        
+        // TODO: editing destroy cellmap_og / treeringmap_og !        ?? or maybe not
         if(mode == 'cells' || mode == 'treerings'){
             const blob:Blob|null = await this.canvas_ref.current!.to_blob()
             if(blob == null)
@@ -538,6 +535,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             this.process_sam3(this.#$last_sam3_box.value, /*full=*/true)
     }
 
+
     async process_sam3(box:Box, full:boolean) {
         const backend:GenericBackend|CARROT_Backend|null = 
             this.props.$processingmodule.value
@@ -615,6 +613,21 @@ function _get_map_for_editmode(
     if(mode == 'treerings' && 'treeringmap' in result.data)
         return result.data.treeringmap;
     return null;
+}
+
+
+/** Simple wrapper around ImageOverlay that accepts a signal instead of directly
+ *  a value, to avoid re-rendering of the top component. */
+class SignalAwareImageOverlay extends preact.Component<{
+    $image:   Readonly<Signal<File|null>>
+    $visible: Readonly<Signal<boolean>>,
+}> {
+    override render(): JSX.Element {
+        return <base.imageoverlay.ImageOverlay
+            image    = {this.props.$image.value}
+            $visible = {this.props.$visible}
+        />
+    }
 }
 
 
