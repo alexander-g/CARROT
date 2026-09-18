@@ -74,8 +74,7 @@ if rc!=0:
 shutil.copytree('static', build_dir+'/static')
 os.makedirs(build_dir+'/models/')
 shutil.copy('models/pretrained_models.txt', build_dir+'/models/')
-shutil.copy(build_dir+'/wrapper/wrapper.exe', build_dir+'/CARROT.exe')
-shutil.rmtree(build_dir+'/wrapper')
+shutil.move(build_dir+'/wrapper.exe', build_dir+'/CARROT.exe')
 
 
 shutil.rmtree('./build')
