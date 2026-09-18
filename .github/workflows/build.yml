@@ -80,14 +80,14 @@ jobs:
       - name: Run integration tests
         shell: bash
         run: |
-          MAINBAT=$(find build/extracted -name main.bat)
-          if [ -z "$MAINBAT" ]; then
-            echo "main.bat not found in artifact" >&2
+          MAINEXE=$(find build/extracted -name CARROT.exe)
+          if [ -z "$MAINEXE" ]; then
+            echo "CARROT.exe not found in artifact" >&2
             exit 1
           fi
           # forward slashes to backward slashes
-          MAINBATWINPATH="${MAINBAT//\//\\}"
-          CMD="cmd.exe /c ${MAINBATWINPATH}"
+          MAINEXEWINPATH="${MAINEXE//\//\\}"
+          CMD="cmd.exe /c ${MAINEXEWINPATH}"
           echo "CMD=${CMD}"
           CMD=$CMD NO_WEBBROWSER=1 ./run_tests_integration.sh
 
