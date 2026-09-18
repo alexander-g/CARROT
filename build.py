@@ -1,12 +1,19 @@
 #!/bin/python
+import argparse
+import datetime
 import glob
 import os
 import shutil
 import subprocess
 import sys
-import datetime
+import zipfile
 
-import argparse, glob, zipfile
+
+if not 'win32' in sys.platform:
+    print('ERROR: This build script currently only supports Windows')
+    sys.exit(1)
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--zip', action='store_true')
 args = parser.parse_args()
@@ -18,7 +25,6 @@ App().recompile_static(force=True)        #make sure the static/ folder is up to
 
 build_name = f'{datetime.datetime.now().strftime("%Y-%m-%d_%Hh%Mm%Ss")}_CARROT'
 build_dir  = f'builds/{build_name}'
-
 
 rc = subprocess.call(' '.join([
     #'pyi-makespec',
@@ -39,25 +45,40 @@ rc = subprocess.call(' '.join([
     f'--paths={os.path.abspath("carrot_ml/ultralytics/")}',
     '--exclude-module=_bootlocale',
     '--additional-hooks-dir=./hooks',
+    '--icon=frontend/favicon.ico',
     f'--distpath={build_dir} ',
     'main.py',
 ]), shell=True)
 
+if rc!=0:
+    print(f'PyInstaller (main.py) exited with code {rc}')
+    sys.exit(rc)
+
+rc = subprocess.call(' '.join([
+    #'pyi-makespec',
+    'pyinstaller',
+    '--exclude-module=_bootlocale',
+    '--icon=frontend/favicon.ico',
+    '--onefile',
+    f'--distpath={build_dir} ',
+    'wrapper.py',
+]), shell=True)
 
 if rc!=0:
-    print(f'PyInstaller exited with code {rc}')
+    print(f'PyInstaller (wrapper.py) exited with code {rc}')
     sys.exit(rc)
+
+
+
 
 shutil.copytree('static', build_dir+'/static')
 os.makedirs(build_dir+'/models/')
 shutil.copy('models/pretrained_models.txt', build_dir+'/models/')
+shutil.copy(build_dir+'/wrapper/wrapper.exe', build_dir+'/CARROT.exe')
+shutil.rmtree(build_dir+'/wrapper')
 
-if 'linux' in sys.platform:
-    os.symlink('/main/main', build_dir+'/main.run')
-else:
-    shutil.copy('.github/workflows/scripts/main.bat', build_dir+'/main.bat')
+
 shutil.rmtree('./build')
-#shutil.copyfile('settings.json', build_dir+'/settings.json')
 
 print()
 print(open('./main.spec').read())
@@ -68,12 +89,15 @@ os.remove('./main.spec')
 for folder in (
     glob.glob( os.path.join(build_dir, 'static', '*-*-*', '**', 'frontend'), recursive=True )
     + glob.glob( os.path.join(build_dir, '**', '__pycache__'), recursive=True )
+    + glob.glob( os.path.join(build_dir, '**', 'ultralytics', 'assets'), recursive=True )
+    + glob.glob( os.path.join(build_dir, '**', 'ultralytics', 'solutions'), recursive=True )
 ):
     print('Cleaning up: ', folder)
     shutil.rmtree(folder)
 
 
 # ultralytics/docs/
+# ultralytics/assets/
 # ultralytics/examples/
 # build/extracted/main/_internal/_tcl_data/
 
