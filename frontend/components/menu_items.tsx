@@ -10,6 +10,7 @@ export function MenuButton(props:{
     tooltip?:      string,
     children?:     preact.ComponentChildren,
     on_click?:     () => void,
+    on_icon_click?:() => void,
 }): JSX.Element {
     const active:string   = props.$highlighted?.value ? "active" : "";
     const disabled:string = props.$disabled?.value ? "disabled" : "";
@@ -23,7 +24,7 @@ export function MenuButton(props:{
         data-tooltip  = { props.tooltip }
         data-position = "right center"
     >
-        <i class={`${props.icon} icon`}></i>
+        <i class={`${props.icon} icon`} onClick={props.on_icon_click}></i>
         { props.label }
         { props.children }
     </div>
@@ -61,6 +62,7 @@ export class MenuSlider extends preact.Component<{
             $disabled = { 
                 signals.computed( () => !(this.props.$active?.value ?? true) ) 
             }
+            on_icon_click  = { this.on_button_click }
         > 
             <div 
                 class = "ui slider brush-size-slider" 
@@ -85,4 +87,17 @@ export class MenuSlider extends preact.Component<{
     #_1 = this.props.$value.subscribe((newvalue:number) => {
         $(this.ref.current).slider('set value', newvalue)
     })
+
+    on_button_click = () => {
+        const old_value:unknown = $(this.ref.current).slider('get value')
+        if(typeof old_value != 'number') {
+            console.warn('MenuSlider:get value is not a number', old_value)
+            return
+        }
+        
+        this.props.$value.value = 
+            (old_value > this.props.minimum) 
+            ? this.props.minimum 
+            : this.props.maximum
+    }
 }
