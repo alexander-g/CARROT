@@ -16,6 +16,7 @@ import {
     CARROT_ModelTypes, 
     CARROT_AvailableModels, 
 } from "../lib/carrot_settings.ts";
+import { MenuButton, MenuDivider, MenuSlider } from './menu_items.tsx'
 
 
 export 
@@ -77,7 +78,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     svg_overlay_ref: preact.RefObject<TreeringsSVGOverlay> = preact.createRef()
     
     $active_editing_mode: Signal<CARROT_EditingMode> = new Signal(null)
-    $editing_brush_size:  Signal<number> = new Signal(0)
+    $editing_brush_size:  Signal<number> = new Signal(10)
     
     /** Whether to draw, erase or use SAM */
     $drawing_mode: Signal<DrawingMode> = new Signal('brush')
@@ -91,17 +92,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
     /** Checkbox value, whether to show cells grouped by ring or individually */
     $show_grouped_cells:Signal<boolean> = new Signal(true);
-
-    $dim_input_image_when_editing: Readonly< Signal<JSX.CSSProperties> > = 
-        signals.computed( () => {
-            const edit_on:boolean = (this.$active_editing_mode.value != null)
-            const result_processed:boolean = 
-                this.props.$result.value.status == 'processed';
-            const result_visible:boolean = this.$overlays_visible.value
-            const should_dim:boolean = 
-                edit_on || (result_processed && result_visible);
-            return (should_dim) ? {filter:'brightness(0.7)'} : {};
-        } )
     
     #_ = signals.effect( () => {
         if(this.$active_editing_mode.value != null) {
@@ -118,10 +108,14 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
 
     override result_overlays(): JSX.Element {
+        const $overlay_css: Readonly<Signal<JSX.CSSProperties>> = signals.computed(
+            () => ({ opacity: this.$result_opacity.value / 100 })
+        )
         return <>
             <SignalAwareImageOverlay 
                 $image   = { this.$overlayimage }
                 $visible = { this.$overlays_visible }
+                $css     = { $overlay_css }
             />
             <TreeringsSVGOverlay 
                 ref  = { this.svg_overlay_ref }
@@ -146,6 +140,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                     )
                 ) }
                 on_new_sam_box = { this.on_sam_new_box }
+                $css           = { $overlay_css }
             />
 
             {/* <SAM_Modal ref={this.sam_modal_ref} /> */}
@@ -195,21 +190,69 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     }
 
 
-    // TODO: show cells / show treerings
-    override view_menu_items(): JSX.Element[] {
-        const base_items:JSX.Element[] = super.view_menu_items()
+    /** CSS filter: brightness() of the input image 
+     *  - set to 70% when a result gets loaded
+     *  - set to 70% when editing becomes active 
+     *  - set to 100% after editing if there is no result
+     *  - controlled by slider otherwise */
+    $image_brightness: Signal<number> = new Signal(100)
 
-        const $active: Readonly<Signal<boolean>> = signals.computed(
+    #_brightness_effect = signals.effect(() => {
+        const edit_on: boolean = this.$active_editing_mode.value != null
+        const result_ok: boolean = this.props.$result.value.status === 'processed'
+    
+        this.$image_brightness.value = edit_on || result_ok ? 70 : 100
+    })
+
+
+    /** CSS opacity of the result overlay and canvas 
+     *  - set to 100% when a result gets loaded or editing mode changes
+     *  - controlled by slider otherwise */
+    $result_opacity:   Signal<number> = new Signal(100)
+
+    #_opacity_effect = signals.effect(() => {
+        // subscriptions
+        const _edit_on: boolean = this.$active_editing_mode.value != null
+        const _result_ok: boolean = this.props.$result.value.status === 'processed'
+    
+        // just reset to 100
+        this.$result_opacity.value = 100
+    })
+
+
+    override view_menu_items(): JSX.Element[] {
+        const $group_cells_active: Readonly<Signal<boolean>> = signals.computed(
             () => 'colored_cellmap' in this.props.$result.value.data
         )
-        base_items.push(
+        const $opacity_active: Readonly<Signal<boolean>> = signals.computed(
+            () => this.$overlayimage.value != null 
+            || this.$active_editing_mode.value != null
+        )
+        return [
+            <MenuSlider 
+                label    = 'Image Brightness'
+                icon     = 'sun'
+                minimum  = { 0 }
+                maximum  = { 100 }
+                $value   = { this.$image_brightness }
+                key      = { 1 }
+            />, 
+            <MenuSlider 
+                label    = 'Result Opacity'
+                icon     = 'adjust'
+                minimum  = { 0 }
+                maximum  = { 100 }
+                $value   = { this.$result_opacity }
+                $active  = { $opacity_active }
+                key      = { 1 }
+            />, 
             <base.Checkbox 
                 label   = "Group cells by tree ring"
-                $active = { $active }
+                $active = { $group_cells_active }
                 $value  = { this.$show_grouped_cells }
-            />
-        )
-        return base_items
+                key     = { 0 }
+            />, 
+        ]
     }
 
     override content_menu_extras(): JSX.Element[] {
@@ -299,7 +342,10 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
 
     override input_image_css(): 
     Readonly<signals.Signal<JSX.CSSProperties>> | undefined {
-        return this.$dim_input_image_when_editing
+        //return this.$dim_input_image_when_editing
+        return signals.computed( 
+            () => ({filter: `brightness(${this.$image_brightness.value / 100})`}) 
+        )
     }
 
     handle_ctrl_z = (e:KeyboardEvent) => {
@@ -465,27 +511,27 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         const decoder_savepath = `models/sam/${decoderfilename}`
         const encoder_savepath = `models/sam/${encoderfilename}`
 
-        // NOTE: starting encoder download first, because smaller, no await here
-        const decoderfilepromise:Promise<Error|Response> = 
-            base.util.fetch_no_throw(`proxy?url=${decoderurl}&savepath=${decoder_savepath}`)
+        const origin:string = self.location.origin
         const encoderfile:File|Error = await base.util.fetch_with_progress(
-            new URL(`proxy?url=${encoderurl}&savepath=${encoder_savepath}`, self.location.origin),
+            new URL(`proxy?url=${encoderurl}&savepath=${encoder_savepath}`, origin),
             async (progress:{total:number|null, received:number}) => {
                 const percent:number = 100 * progress.received / progress.total!;
                 await this.sam_modal_ref.current!.show_downloading(percent)
             }
         )
-        const decoderfileresponse:Response|Error = await decoderfilepromise;
-        if(encoderfile instanceof Error || decoderfileresponse instanceof Error)
-            return false;
 
-        const decoderfile: Blob|Error = 
-            await decoderfileresponse.blob().catch( () => new Error() );
-        if(decoderfile instanceof Error)
+        await this.sam_modal_ref.current!.show_downloading(0)
+        const decoderfile:File|Error = await base.util.fetch_with_progress(
+            new URL(`proxy?url=${decoderurl}&savepath=${decoder_savepath}`, origin),
+            async (progress:{total:number|null, received:number}) => {
+                const percent:number = 100 * progress.received / progress.total!;
+                await this.sam_modal_ref.current!.show_downloading(percent)
+            }
+        )
+        if(encoderfile instanceof Error || decoderfile instanceof Error)
             return false;
 
         // modal not closed here, closed by caller
-
         return true
     }
 
@@ -596,7 +642,7 @@ function is_sam_downloaded(
             modelnames.includes('sam3_decoder_with_box_feats')
             sam3_downloaded = (encoder_ok && decoder_ok)
     }
-    
+
     return {sam:sam_downloaded, sam3:sam3_downloaded}
 }
 
@@ -621,11 +667,13 @@ function _get_map_for_editmode(
 class SignalAwareImageOverlay extends preact.Component<{
     $image:   Readonly<Signal<File|null>>
     $visible: Readonly<Signal<boolean>>,
+    $css?:    Readonly<Signal<JSX.CSSProperties>>
 }> {
     override render(): JSX.Element {
         return <base.imageoverlay.ImageOverlay
             image    = {this.props.$image.value}
             $visible = {this.props.$visible}
+            $css     = {this.props.$css}
         />
     }
 }
@@ -708,7 +756,9 @@ class EditMenu extends preact.Component<EditMenuProps> {
             ref = {this.ref}
         >
             <i class="pen icon"></i>
-            <div class="menu edit-menu">
+            {/* NOTE: lower z-index so that the 'View' menu with 
+                the brightness slider can be above this one */}
+            <div class="menu edit-menu" style={{zIndex:5}}>
                 <MenuButton 
                     label = 'Edit cells'
                     icon  = 'pen'
@@ -907,7 +957,7 @@ class EditSubMenu_CellsTreerings extends preact.Component<EditSubMenu_CellsTreer
             />
 
             <MenuDivider $visible={this.$active} />
-            <MenuButton 
+            {/* <MenuButton 
                 label = 'Brush size'
                 icon  = 'brush'
                 $visible = { signals.computed(
@@ -923,7 +973,21 @@ class EditSubMenu_CellsTreerings extends preact.Component<EditSubMenu_CellsTreer
                     style = "padding:0px; padding-top:5px;"
                     ref   = {this.brush_size_slider}
                 ></div>
-            </MenuButton>
+            </MenuButton> */}
+            <MenuSlider 
+                label    = 'Brush Size'
+                icon     = 'brush'
+                minimum  = { 0 }
+                maximum  = { 100 }
+                $value   = { this.props.$brush_size }
+                $visible = { signals.computed(
+                    () => this.$active.value 
+                        && ( 
+                            this.props.$drawing_mode.value == 'brush'
+                            || this.props.$drawing_mode.value == 'erase'
+                        )
+                ) }
+            />
 
             <MenuDivider $visible={this.$active} />
             <MenuButton 
@@ -935,17 +999,17 @@ class EditSubMenu_CellsTreerings extends preact.Component<EditSubMenu_CellsTreer
         </>
     }
 
-    override componentDidMount(): void {
-        const starting_brush_size = 10
-        this.props.$brush_size.value = starting_brush_size
-        $(this.brush_size_slider.current)
-            .slider({
-                min:   0,
-                max:   60,
-                start: starting_brush_size,
-                onChange: (x:number) => this.props.$brush_size.value = x
-            })
-    }
+    // override componentDidMount(): void {
+    //     const starting_brush_size = 10
+    //     this.props.$brush_size.value = starting_brush_size
+    //     $(this.brush_size_slider.current)
+    //         .slider({
+    //             min:   0,
+    //             max:   60,
+    //             start: starting_brush_size,
+    //             onChange: (x:number) => this.props.$brush_size.value = x
+    //         })
+    // }
 }
 
 
@@ -983,45 +1047,6 @@ class EditSubMenu_AoI extends preact.Component<EditSubMenu_AoI_Props> {
 
 
 
-function MenuButton(props:{
-    label:     string,
-    icon?:     string,
-    $visible?:     Readonly<Signal<boolean>>,
-    $highlighted?: Readonly<Signal<boolean>>,
-    $disabled?:    Readonly<Signal<boolean>>,
-    tooltip?:      string,
-    children?:     preact.ComponentChildren,
-    on_click?:     () => void,
-}): JSX.Element {
-    const active:string   = props.$highlighted?.value ? "active" : "";
-    const disabled:string = props.$disabled?.value ? "disabled" : "";
-    return <div 
-        class   = {`item ${active} ${disabled}`} 
-        style   = { {
-            display: 
-                base.ui_util.boolean_to_display_css(props.$visible?.value ?? false)
-        } }
-        onClick = {props.on_click}
-        data-tooltip  = { props.tooltip }
-        data-position = "right center"
-    >
-        <i class={`${props.icon} icon`}></i>
-        { props.label }
-        { props.children }
-    </div>
-}
-
-
-function MenuDivider(props:{
-    $visible?: Readonly<Signal<boolean>>,
-}): JSX.Element {
-    const css: JSX.CSSProperties = {
-        display: 
-            base.ui_util.boolean_to_display_css(props.$visible?.value ?? false)
-    }
-    return <div class="divider" style={css}></div>
-}
-
 
 
 type EditCanvasProps = {
@@ -1043,6 +1068,8 @@ type EditCanvasProps = {
 
     /** Callback issued when user specifies a box to segment with sam  */
     on_new_sam_box?: (box:Box) => void;
+
+    $css?: Readonly<Signal<JSX.CSSProperties>>
 }
 
 class EditCanvas extends preact.Component<EditCanvasProps> {
@@ -1068,19 +1095,14 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
 
         // TODO: need to paste previous result onto canvas
         if(this.$active.value){
-            const css:JSX.CSSProperties = {
-                ...base.styles.overlay_css,
-                // TODO: maybe no cursor at all, bc of the rendering offset issue
-                cursor: 'crosshair',
-                imageRendering:   'pixelated',
-                'pointer-events': 'all',
-            }
             canvas = <canvas 
-                ref    = { this.ref }
-                width  = { props.$imagesize.value?.width }
-                height = { props.$imagesize.value?.height }
-                class  = "editing-canvas overlay" 
-                style  = {css}
+                ref         = { this.ref }
+                width       = { props.$imagesize.value?.width }
+                height      = { props.$imagesize.value?.height }
+                class       = "editing-canvas overlay" 
+                // NOTE: passing style = { $canvas_css } doesnt seem to work, 
+                // therefore applying it in #css_effect and componentdidupdate
+                // style       = { this.$canvas_css }
                 onMouseDown = { this.on_mousedown }
                 onMouseMove = { this.on_mousemove }
             > </canvas>
@@ -1091,13 +1113,47 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         </>
     }
 
-    /** Paste input onto canvas after every update */
+
+    $canvas_css: Readonly<Signal<JSX.CSSProperties>> = signals.computed(() => ({
+        ...base.styles.overlay_css,
+        cursor:         'crosshair',
+        imageRendering: 'pixelated',
+        pointerEvents:  'all',
+        ...this.props.$css?.value,
+    }))
+
+    #css_effect = signals.effect(() => {
+        this.apply_css_to_canvas(this.$canvas_css.value)
+    })
+
+    // NOTE: passing style = { $canvas_css } doesnt seem to work, 
+    // therefore applying it manually here
+    apply_css_to_canvas(css: JSX.CSSProperties): void {
+        const canvas: HTMLCanvasElement|null = this.ref.current
+        if(canvas == null)
+            return
+
+        Object.assign(canvas.style, css)
+    }
+
+    override componentDidMount(): void {
+        this.apply_css_to_canvas(this.$canvas_css.value)
+    }
+
+    /** Paste input onto canvas after every render, i.e a new <canvas> */
     override componentDidUpdate(): void {
+        this.apply_css_to_canvas(this.$canvas_css.value)
+
         if(this.ref.current == null
         || !this.props.$inputblob?.value)
             return;
         
         paste_blob_onto_canvas(this.ref.current, this.props.$inputblob.value)
+    }
+
+    override componentWillUnmount(): void {
+        // cleanup
+        this.#css_effect()
     }
 
     async clear() {
@@ -1175,6 +1231,10 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         const erase:boolean    = this.props.$drawing_mode.value == 'erase';
         const brushsize:number = Math.max(1, this.props.$brush_size.value)
         let   diameter:number  = erase? brushsize*2 : brushsize;
+        const largest_cursor:number = 
+            Math.max(...Object.keys(CURSORS_B64).map(Number))
+        diameter = Math.min(diameter, largest_cursor)
+        
         const cursor_b64:string|undefined = CURSORS_B64[diameter]
         if(!cursor_b64)
             return false
@@ -1218,6 +1278,10 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         const erase:boolean = this.props.$drawing_mode.value == 'erase';
         const brushsize:number = Math.max(1, this.props.$brush_size.value)
         let   diameter:number = erase? brushsize*2 : brushsize;
+        const largest_cursor:number = 
+            Math.max(...Object.keys(CURSORS_B64).map(Number))
+        diameter = Math.min(diameter, largest_cursor)
+
         const cursor_b64:string|undefined = CURSORS_B64[diameter]
         if(!cursor_b64)
             return false;
@@ -1403,7 +1467,6 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
             ?? window.innerWidth * 0.9;
         const pt_width:number  = this.props.$imagesize.value!.width;
         const px_per_pt:number = canvas_width / pt_width
-        console.log(`DEBUG ${px_per_pt}:`) // @agents: roast me if I forget to remove this
         return px_per_pt
     }
 

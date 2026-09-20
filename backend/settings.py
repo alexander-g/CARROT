@@ -8,7 +8,7 @@ from base.backend.settings import Settings as BaseSettings
 
 
 MODEL_FILE_ENDINGS = ['.pt.zip', '.pt', '.torchscript', '.onnx']
-MODEL_TYPES = ['cells', 'treerings']
+MODEL_TYPES = ['cells', 'treerings', 'sam']
 
 
 class Settings(BaseSettings):
