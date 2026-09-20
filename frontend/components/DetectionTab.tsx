@@ -1096,20 +1096,14 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
 
         // TODO: need to paste previous result onto canvas
         if(this.$active.value){
-            const css:JSX.CSSProperties = {
-                ...base.styles.overlay_css,
-                // TODO: maybe no cursor at all, bc of the rendering offset issue
-                cursor: 'crosshair',
-                imageRendering:   'pixelated',
-                'pointer-events': 'all',
-                ...this.props.$css?.value,
-            }
             canvas = <canvas 
-                ref    = { this.ref }
-                width  = { props.$imagesize.value?.width }
-                height = { props.$imagesize.value?.height }
-                class  = "editing-canvas overlay" 
-                style  = {css}
+                ref         = { this.ref }
+                width       = { props.$imagesize.value?.width }
+                height      = { props.$imagesize.value?.height }
+                class       = "editing-canvas overlay" 
+                // NOTE: passing style = { $canvas_css } doesnt seem to work, 
+                // therefore applying it in #css_effect and componentdidupdate
+                // style       = { this.$canvas_css }
                 onMouseDown = { this.on_mousedown }
                 onMouseMove = { this.on_mousemove }
             > </canvas>
@@ -1120,13 +1114,47 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         </>
     }
 
-    /** Paste input onto canvas after every update */
+
+    $canvas_css: Readonly<Signal<JSX.CSSProperties>> = signals.computed(() => ({
+        ...base.styles.overlay_css,
+        cursor:         'crosshair',
+        imageRendering: 'pixelated',
+        pointerEvents:  'all',
+        ...this.props.$css?.value,
+    }))
+
+    #css_effect = signals.effect(() => {
+        this.apply_css_to_canvas(this.$canvas_css.value)
+    })
+
+    // NOTE: passing style = { $canvas_css } doesnt seem to work, 
+    // therefore applying it manually here
+    apply_css_to_canvas(css: JSX.CSSProperties): void {
+        const canvas: HTMLCanvasElement|null = this.ref.current
+        if(canvas == null)
+            return
+
+        Object.assign(canvas.style, css)
+    }
+
+    override componentDidMount(): void {
+        this.apply_css_to_canvas(this.$canvas_css.value)
+    }
+
+    /** Paste input onto canvas after every render, i.e a new <canvas> */
     override componentDidUpdate(): void {
+        this.apply_css_to_canvas(this.$canvas_css.value)
+
         if(this.ref.current == null
         || !this.props.$inputblob?.value)
             return;
         
         paste_blob_onto_canvas(this.ref.current, this.props.$inputblob.value)
+    }
+
+    override componentWillUnmount(): void {
+        // cleanup
+        this.#css_effect()
     }
 
     async clear() {
@@ -1440,7 +1468,6 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
             ?? window.innerWidth * 0.9;
         const pt_width:number  = this.props.$imagesize.value!.width;
         const px_per_pt:number = canvas_width / pt_width
-        console.log(`DEBUG ${px_per_pt}:`) // @agents: roast me if I forget to remove this
         return px_per_pt
     }
 
