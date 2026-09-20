@@ -17,7 +17,7 @@ Screenshot:
 
 Usage:
 
-- Start `main.bat`, pretrained models for Alnus, Conifer, Fagus and Quercus should get automatically downloaded.
+- Start `CARROT.exe`, pretrained models should get downloaded automatically.
 - A browser should automatically open, if not manually navigate to [http://localhost:5000](http://localhost:5000)
 - Drag & drop one of the sample images ([Fagus](https://www.dropbox.com/s/v8j3kegh361c24e/000_fagus.jpg?dl=1), [Quercus](https://www.dropbox.com/s/jsx5cyi8bg1zfa3/000_oak.jpg?dl=1)) into the browser
 - Make sure that the correct models are selected in the settings

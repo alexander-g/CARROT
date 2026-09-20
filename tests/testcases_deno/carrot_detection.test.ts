@@ -85,7 +85,7 @@ Deno.test('CARROT_Result.full.export-import', async () => {
         ]
     )
 
-    const zipped: File|Error = await base.zip.zip_files(exported, r0.inputname+'.zip')
+    const zipped: File|Error = await base.zip.zip_files(exported, r0.inputname+'.results.zip')
     asserts.assertInstanceOf(zipped, File)
     
     const input_file_pair = {input:{name:inputname}, file:zipped}
@@ -201,7 +201,7 @@ Deno.test('CARROT_Result.rings-only.export-import', async () => {
         ]
     )
 
-    const zipped: File|Error = await base.zip.zip_files(exported, r0.inputname+'.zip')
+    const zipped: File|Error = await base.zip.zip_files(exported, r0.inputname+'.results.zip')
     asserts.assertInstanceOf(zipped, File)
 
     const input_file_pair = {input:{name:inputname}, file:zipped}
