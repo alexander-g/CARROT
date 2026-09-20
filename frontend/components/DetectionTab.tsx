@@ -58,8 +58,7 @@ const HARDCODED_SAM_URLS = {
     },
     'sam3': {
         'encoder': `https://github.com/alexander-g/sam3-onnx/releases/download/v2026-03-13/sam3_image_encoder_full.onnx`,
-        //'decoder': `https://github.com/alexander-g/sam3-onnx/releases/download/v2026-03-13/sam3_decoder_with_box_feats.onnx`,
-        'decoder': `http://localhost:8111/alexander-g/sam3-onnx/releases/download/v2026-03-13/sam3_decoder_with_box_feats.onnx`,
+        'decoder': `https://github.com/alexander-g/sam3-onnx/releases/download/v2026-03-13/sam3_decoder_with_box_feats.onnx`,
     }
 }
 
@@ -512,27 +511,27 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         const decoder_savepath = `models/sam/${decoderfilename}`
         const encoder_savepath = `models/sam/${encoderfilename}`
 
-        // NOTE: starting encoder download first, because smaller, no await here
-        const decoderfilepromise:Promise<Error|Response> = 
-            base.util.fetch_no_throw(`proxy?url=${decoderurl}&savepath=${decoder_savepath}`)
+        const origin:string = self.location.origin
         const encoderfile:File|Error = await base.util.fetch_with_progress(
-            new URL(`proxy?url=${encoderurl}&savepath=${encoder_savepath}`, self.location.origin),
+            new URL(`proxy?url=${encoderurl}&savepath=${encoder_savepath}`, origin),
             async (progress:{total:number|null, received:number}) => {
                 const percent:number = 100 * progress.received / progress.total!;
                 await this.sam_modal_ref.current!.show_downloading(percent)
             }
         )
-        const decoderfileresponse:Response|Error = await decoderfilepromise;
-        if(encoderfile instanceof Error || decoderfileresponse instanceof Error)
-            return false;
 
-        const decoderfile: Blob|Error = 
-            await decoderfileresponse.blob().catch( () => new Error() );
-        if(decoderfile instanceof Error)
+        await this.sam_modal_ref.current!.show_downloading(0)
+        const decoderfile:File|Error = await base.util.fetch_with_progress(
+            new URL(`proxy?url=${decoderurl}&savepath=${decoder_savepath}`, origin),
+            async (progress:{total:number|null, received:number}) => {
+                const percent:number = 100 * progress.received / progress.total!;
+                await this.sam_modal_ref.current!.show_downloading(percent)
+            }
+        )
+        if(encoderfile instanceof Error || decoderfile instanceof Error)
             return false;
 
         // modal not closed here, closed by caller
-
         return true
     }
 
@@ -643,7 +642,7 @@ function is_sam_downloaded(
             modelnames.includes('sam3_decoder_with_box_feats')
             sam3_downloaded = (encoder_ok && decoder_ok)
     }
-    
+
     return {sam:sam_downloaded, sam3:sam3_downloaded}
 }
 
