@@ -1,7 +1,8 @@
 import { 
     crop_image,
+    paste_patch,
     grid_for_overlapping_patches,
-    patches_for_stepwise_inference_loading as patches_for_stepwise_inference,
+    coordinates_for_patchwise_inference,
     patchwise_inference,
     type InferenceEngine,
 } from "../../frontend/lib/image_grid.ts"
@@ -53,11 +54,27 @@ Deno.test('patchwise_inference', async (t:Deno.TestContext) => {
         mock.assertSpyCalls(engine.process_patch, 1)
         asserts.assertEquals( engine.process_patch.calls[0]!.args[0].length, patchsize*patchsize*4 )
     })
+
+    await t.step('error-case: stop early on process error', async () => {
+        class FaultyInferenceEngineMock implements InferenceEngine<Uint8Array> {
+            finalize = mock.spy( async () => dummyresult)
+            process_patch = mock.spy( async (x:Uint8Array) => {return new Error('!')} )
+        }
+
+        const engine = new FaultyInferenceEngineMock()
+        const patchsize = 250
+        const output: Uint8Array|Error = 
+            await patchwise_inference(imagefile, {height:500, width:500}, patchsize, 64, engine)
+        asserts.assertInstanceOf(output, Error)
+        mock.assertSpyCalls(engine.finalize, 0)
+        mock.assertSpyCalls(engine.process_patch, 1)
+        asserts.assertEquals(output.message, '!')
+    })
 })
 
 
 
-Deno.test('patches_for_stepwise_inference: basics', () => {
+Deno.test('coordinates_for_patchwise_inference: basics', () => {
     const imagesize = {width: 120000, height:15000}
     const targetsize = {width: 12000, height:1500}
     const patchsize = 640
@@ -65,7 +82,7 @@ Deno.test('patches_for_stepwise_inference: basics', () => {
     const memory_mb = 1024    // 1 GB
 
     const output0 = 
-        patches_for_stepwise_inference(imagesize, targetsize, patchsize, slack, memory_mb)
+        coordinates_for_patchwise_inference(imagesize, targetsize, patchsize, slack, memory_mb)
     asserts.assertNotInstanceOf(output0, Error)
     asserts.assertGreater(output0.length, 0)
 
@@ -88,23 +105,43 @@ Deno.test('patches_for_stepwise_inference: basics', () => {
 
 
         for(const patch of item.inference_patches) {
-            asserts.assertGreaterOrEqual(patch[0], 0)
-            asserts.assertGreaterOrEqual(patch[1], 0)
-            asserts.assertGreaterOrEqual(patch[2], 0)
-            asserts.assertGreaterOrEqual(patch[3], 0)
+            const inputcropbox = patch.inputcropbox
+            asserts.assertGreaterOrEqual(inputcropbox[0], 0)
+            asserts.assertGreaterOrEqual(inputcropbox[1], 0)
+            asserts.assertGreaterOrEqual(inputcropbox[2], 0)
+            asserts.assertGreaterOrEqual(inputcropbox[3], 0)
 
-            asserts.assertLessOrEqual(patch[0], targetsize.height)
-            asserts.assertLessOrEqual(patch[1], targetsize.width)
-            asserts.assertLessOrEqual(patch[2], targetsize.height)
-            asserts.assertLessOrEqual(patch[3], targetsize.width)
+            asserts.assertLessOrEqual(inputcropbox[0], targetsize.height)
+            asserts.assertLessOrEqual(inputcropbox[1], targetsize.width)
+            asserts.assertLessOrEqual(inputcropbox[2], targetsize.height)
+            asserts.assertLessOrEqual(inputcropbox[3], targetsize.width)
 
-            asserts.assertEquals(patch[2] - patch[0], patchsize)
-            asserts.assertEquals(patch[3] - patch[1], patchsize)
+            asserts.assertEquals(inputcropbox[2] - inputcropbox[0], patchsize)
+            asserts.assertEquals(inputcropbox[3] - inputcropbox[1], patchsize)
 
             // integers
-            asserts.assertEquals(patch[0], Math.round(patch[0]))
-            asserts.assertEquals(patch[1], Math.round(patch[1]))
+            asserts.assertEquals(inputcropbox[0], Math.round(inputcropbox[0]))
+            asserts.assertEquals(inputcropbox[1], Math.round(inputcropbox[1]))
             // since patchsize is integer then 2 and 3 should be integers too
+
+
+            const outputcropbox = patch.outputcropbox
+            asserts.assertGreaterOrEqual(outputcropbox[0], 0)
+            asserts.assertGreaterOrEqual(outputcropbox[1], 0)
+            asserts.assertGreaterOrEqual(outputcropbox[2], 0)
+            asserts.assertGreaterOrEqual(outputcropbox[3], 0)
+
+            asserts.assertLessOrEqual(outputcropbox[0], patchsize)
+            asserts.assertLessOrEqual(outputcropbox[1], patchsize)
+            asserts.assertLessOrEqual(outputcropbox[2], patchsize)
+            asserts.assertLessOrEqual(outputcropbox[3], patchsize)
+
+            asserts.assertGreater(outputcropbox[2], outputcropbox[0])
+            asserts.assertGreater(outputcropbox[3], outputcropbox[1])
+
+
+            asserts.assertGreaterOrEqual(patch.pastecoordinates.x, 0)
+            asserts.assertGreaterOrEqual(patch.pastecoordinates.y, 0)
         }
     }
 
@@ -124,12 +161,12 @@ Deno.test('patches_for_stepwise_inference: edge-case: patch larger than image', 
     const memory_mb = 1024    // 1 GB
 
     const output0 = 
-        patches_for_stepwise_inference(imagesize, targetsize, patchsize, slack, memory_mb)
+        coordinates_for_patchwise_inference(imagesize, targetsize, patchsize, slack, memory_mb)
     asserts.assertNotInstanceOf(output0, Error)
     asserts.assertEquals(output0.length, 1)
 
     asserts.assertEquals(output0[0]?.targetsize, {width:patchsize, height:patchsize})
-    asserts.assertEquals(output0[0]?.inference_patches, [[0,0,patchsize,patchsize]])
+    asserts.assertEquals(output0[0]?.inference_patches[0]?.inputcropbox, [0,0,patchsize,patchsize])
     // x10 because targetsize is 10% of original size
     asserts.assertEquals(output0[0]?.source_coordinates, [0,0,patchsize*10,patchsize*10])
 })
@@ -292,3 +329,77 @@ Deno.test("grid_for_overlapping_patches: zero width", () => {
         Error,
     );
 });
+
+
+
+Deno.test('paste_patch', async (t:Deno.TestContext) => {
+    const pixels: Uint8Array = new Uint8Array([
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+    ])
+    const image = {
+        data: pixels,
+        width:  6,
+        height: 4,
+    }
+
+    const patchpixels = new Uint8Array([
+        1, 2, 3,
+        4, 5, 6,
+    ])
+    const patch = {
+        data: patchpixels,
+        width:  3,
+        height: 2,
+    }
+
+    await t.step('basics', () => {
+        const output0 = paste_patch(image, patch, {x:1, y:1})
+        asserts.assertNotInstanceOf(output0, Error)
+
+        asserts.assertEquals(output0.height, image.height)
+        asserts.assertEquals(output0.width,  image.width)
+        asserts.assertEquals(
+            Array.from(output0.data),
+            [
+                0, 0, 0, 0, 0, 0,
+                0, 1, 2, 3, 0, 0,
+                0, 4, 5, 6, 0, 0,
+                0, 0, 0, 0, 0, 0
+            ]
+        )
+    })
+    
+    await t.step('errors', () => {
+        // negative coordinates
+        const output0 = paste_patch(image, patch, {x:-1, y:-1})
+        asserts.assertInstanceOf(output0, Error)
+
+        // patch out of bounds
+        const output1 = paste_patch(image, patch, {x:5, y:3})
+        asserts.assertInstanceOf(output1, Error)
+
+        // decimal coordinates
+        const output2 = paste_patch(image, patch, {x:2.5, y:1.5})
+        asserts.assertInstanceOf(output2, Error)
+
+        //inconsistent images
+        const output3 = paste_patch(
+            {data:image.data, width:5, height:4}, 
+            patch, 
+            {x:1, y:1}
+        )
+        asserts.assertInstanceOf(output3, Error)
+
+        const output4 = paste_patch(
+            image,
+            {data:patch.data, width:5, height:2},
+            {x:1, y:1}
+        )
+        asserts.assertInstanceOf(output4, Error)
+    })
+})
+
+

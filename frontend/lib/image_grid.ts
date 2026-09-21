@@ -3,6 +3,7 @@ import { base } from '../dep.ts'
 
 export type PatchBox = [y0: number, x0: number, y1: number, x1: number]
 export type PatchGrid = PatchBox[][]
+type Image = base.imagetools.WasmImage
 
 
 /** Generate coordinates for a grid of overlapping image patches. */
@@ -61,23 +62,39 @@ type ItemForLoading = {
     source_coordinates: PatchBox
     
     /** Resize the loaded image data to this size */
-    targetsize:         base.util.Size
+    targetsize: base.util.Size
 
-    /** Coordinates within `target_size` to perform inference on */
-    inference_patches:  PatchBox[]
+    /** Coordinates of patches to perform inference on */
+    inference_patches:  {
+        /** Coordinates within `target_size` to crop input patches */
+        inputcropbox: PatchBox
+
+        /** Coordinates at which to crop the output, to remove overlap */
+        outputcropbox: PatchBox
+
+        /** Coordinates (top-left corner) within the full output 
+         *  at which to paste the cropped output patch into.  */
+        pastecoordinates: {x:number, y:number}
+    }[]
 }
 
 
-/** Generate coordinates for stepwise image loading that will then be used for
- *  inference on patches. (TODO: Load as much as possible in each load iteration
- *  making sure to stay below the specified maximum memory.) */
-export function patches_for_stepwise_inference_loading(
+
+
+/** Generate coordinates for image loading and inference on overlapping patches.
+ *  (TODO: Load as much as possible in each load iteration making sure to 
+ *  stay below the specified maximum memory.) */
+export function coordinates_for_patchwise_inference(
     imagesize:         base.util.Size, 
     targetsize:        base.util.Size,
     patchsize:         number, 
     slack:             number, 
-    maximum_memory_mb: number   // currently ignored
+    _maximum_memory_mb: number   // currently ignored
 ): ItemForLoading[]|Error {
+    if(slack % 2 != 0)
+        return new Error(`slack must be a multiple of 2. (got: ${slack})`)
+    const halfslack:number = slack / 2
+
     // patches should be strictly the specified size
     // if the image is smaller, pad/read out of bounds
     const loadsize: base.util.Size = {
@@ -110,38 +127,58 @@ export function patches_for_stepwise_inference_loading(
     const scale_y: number = targetsize.height / imagesize.height
 
     const items: ItemForLoading[] = []
-    for(const patch of grid.flat()) {
-        const [y0, x0, y1, x1] = patch
-        const source_coordinates: PatchBox = [
-            Math.round(y0 / scale_y),
-            Math.round(x0 / scale_x),
-            Math.round(y1 / scale_y),
-            Math.round(x1 / scale_x),
-        ]
-        const targetsize: base.util.Size = {
-            width:  x1 - x0,
-            height: y1 - y0,
+    for(const i in grid) {
+        const gridrow:PatchBox[] = grid[i]!
+        const is_first_row:boolean = (Number(i) == 0)
+        const is_last_row:boolean  = (Number(i) == grid.length-1)
+
+        for(const j in gridrow) {
+            const [y0, x0, y1, x1] = gridrow[j]!
+            const is_first_col:boolean = (Number(j) == 0)
+            const is_last_col:boolean  = (Number(j) == gridrow.length-1)
+
+            const source_coordinates: PatchBox = [
+                Math.round(y0 / scale_y),
+                Math.round(x0 / scale_x),
+                Math.round(y1 / scale_y),
+                Math.round(x1 / scale_x),
+            ]
+            const targetsize: base.util.Size = {
+                width:  x1 - x0,
+                height: y1 - y0,
+            }
+            // patch within targetsize: full patch
+            const inputcropbox: PatchBox = [0, 0, targetsize.height, targetsize.width];
+            // coordinates to remove overlap before pasting into full result
+            const outputcropbox: PatchBox = [
+                is_first_row? 0 : halfslack,
+                is_first_col? 0 : halfslack,
+                patchsize - (is_last_row?  0 : halfslack),
+                patchsize - (is_last_col?  0 : halfslack),
+            ]
+            // where to paste the inference patch within the full result
+            const pastecoordinates = {
+                x: inputcropbox[1] + outputcropbox[1],
+                y: inputcropbox[0] + outputcropbox[0],
+            }
+            items.push({
+                source_coordinates,
+                targetsize,
+                inference_patches: [{inputcropbox, outputcropbox, pastecoordinates}]
+            })
         }
-        // patch within targetsize: full patch
-        const inference_patch: PatchBox = [0, 0, targetsize.height, targetsize.width];
-        items.push({
-            source_coordinates,
-            targetsize,
-            inference_patches: [inference_patch]
-        })
     }
-    
     return items
 }
 
 
 
 export interface InferenceEngine<T> {
-    process_patch(x:Uint8Array): Promise<void>;
-    finalize(): Promise<T>
+    process_patch(x:Uint8Array): Promise<void|Error>;
+    finalize(): Promise<T|Error>
 }
 
-
+/** Load overlapping image patches, resize and forward to an inference engine */
 export async function patchwise_inference<T>(
     imagefile:  File, 
     targetsize: base.util.Size, 
@@ -154,7 +191,7 @@ export async function patchwise_inference<T>(
         return sizes as Error
 
     const inference_items: ItemForLoading[]|Error = 
-        patches_for_stepwise_inference_loading(
+        coordinates_for_patchwise_inference(
             sizes.og_size, 
             targetsize, 
             patchsize, 
@@ -167,7 +204,7 @@ export async function patchwise_inference<T>(
     const wasm:base.imagetools.BigImageWASM = 
         await base.imagetools.get_bigimage_wasm()
     for(const item of inference_items) {
-        const rgb: base.imagetools.WasmImage|Error = await wasm.image_read_patch(
+        const rgb: Image|Error = await wasm.image_read_patch(
             imagefile, 
             /*src_x      = */ item.source_coordinates[1],
             /*src_y      = */ item.source_coordinates[0],
@@ -179,11 +216,13 @@ export async function patchwise_inference<T>(
         if(rgb instanceof Error)
             return rgb as Error
 
-        for(const patchcoordinates of item.inference_patches) {
-            const patch: Uint8Array|Error = crop_image(rgb, patchcoordinates)
-            if(patch instanceof Error)
-                return patch as Error
-            await engine.process_patch(patch)
+        for(const patch of item.inference_patches) {
+            const crop: Uint8Array|Error = crop_image(rgb, patch.inputcropbox)
+            if(crop instanceof Error)
+                return crop as Error
+            const status: void|Error = await engine.process_patch(crop)
+            if(status instanceof Error)
+                return status as Error
         }
     }
     return engine.finalize()
@@ -191,9 +230,9 @@ export async function patchwise_inference<T>(
 
 
 
-/** Crop a rectangular patch from an interleaved RGBA image buffer. */
+/** Crop a rectangular patch from an interleaved RGB/A image buffer. */
 export function crop_image(
-    image:            base.imagetools.WasmImage,
+    image:            Image,
     patchcoordinates: PatchBox,
 ): Uint8Array|Error {
     const [y0, x0, y1, x1] = patchcoordinates
@@ -236,6 +275,35 @@ export function crop_image(
     return patch_data
 }
 
+
+/** Paste an image patch into another image (single channel for now) */
+export function paste_patch(
+    image:   Image,
+    patch:   Image,
+    topleft: {x:number, y:number},
+    copy:    boolean = false
+): Image|Error {
+    if(topleft.x < 0 || topleft.y < 0)
+        return new Error('negative paste coordinates')
+    if(topleft.x + patch.width > image.width || topleft.y + patch.height > image.height)
+        return new Error('paste beyond image size')
+    if(!Number.isInteger(topleft.x) || !Number.isInteger(topleft.y))
+        return new Error('paste coordinates not integers')
+    if(image.width * image.height != image.data.length)
+        return new Error('inconsistent image sizes')
+    if(patch.width * patch.height != patch.data.length)
+        return new Error('inconsistent patch sizes')
+
+    const imagedata: Uint8Array = copy?  new Uint8Array(image.data) : image.data;
+
+    for(let y:number = topleft.y, i:number = 0; i < patch.height; y++, i++) {
+        const src_start:number = i * patch.width
+        const src_end:number   = src_start + patch.width
+        const dst_start:number = y * image.width + topleft.x
+        imagedata.set( patch.data.subarray(src_start, src_end), dst_start )
+    }
+    return {data:imagedata, width:image.width, height:image.height}
+}
 
 
 
