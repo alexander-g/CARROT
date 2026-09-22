@@ -339,6 +339,11 @@ Deno.test('import.cells-png', async (t:Deno.TestContext) => {
         asserts.assertEquals(postprocessed_result.status, 'processed')
         asserts.assert('cellmap' in postprocessed_result.data)
         asserts.assert('instancemap' in postprocessed_result.data)
+
+        if(postprocessed_result.data.cellmap_og instanceof File)
+            // bug
+            // should actually not even be a File object but an UnfinishedFileInWASM
+            asserts.assertGreater(postprocessed_result.data.cellmap_og.size, 0)
     })
 })
 
