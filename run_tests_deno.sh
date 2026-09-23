@@ -8,6 +8,7 @@ IMPORTMAP_ARG=${IMPORTMAP:+--import-map="$IMPORTMAP"}
 ./deno.sh check $IMPORTMAP_ARG frontend/index.tsx
 ./deno.sh test                  \
     --allow-read=.,/tmp         \
+    --allow-read=./onnx         \
     --allow-write=/tmp          \
     --no-prompt                 \
     --cached-only               \
