@@ -6,8 +6,11 @@ import {
     patchwise_inference,
     type InferenceEngine,
 } from "../../frontend/lib/image_grid.ts"
+import { base } from '../../frontend/dep.ts'
 
 import { asserts, mock, path } from "./dep.ts"
+
+type Image = base.imagetools.WasmImage
 
 
 const IMAGEPATH0: string = 
@@ -18,7 +21,7 @@ Deno.test('patchwise_inference', async (t:Deno.TestContext) => {
     const dummyresult = new Uint8Array(77) 
     class InferenceEngineMock implements InferenceEngine<Uint8Array> {
         finalize = mock.spy( async () => dummyresult)
-        process_patch = mock.spy( async (x:Uint8Array) => {} )
+        process_patch = mock.spy( async (_x:Image) => {} )
     }
 
     const imagefile = new File([Deno.readFileSync(IMAGEPATH0)], 'file.jpg')
@@ -37,7 +40,9 @@ Deno.test('patchwise_inference', async (t:Deno.TestContext) => {
         for(const spycall of engine.process_patch.calls) {
             const arg0 = spycall.args[0]
             
-            asserts.assertEquals(arg0.length, patchsize*patchsize*4)
+            asserts.assertEquals(arg0.data.length, patchsize*patchsize*4)
+            asserts.assertEquals(arg0.height, patchsize)
+            asserts.assertEquals(arg0.width,  patchsize)
         }
     })
 
@@ -52,13 +57,16 @@ Deno.test('patchwise_inference', async (t:Deno.TestContext) => {
 
         mock.assertSpyCalls(engine.finalize, 1)
         mock.assertSpyCalls(engine.process_patch, 1)
-        asserts.assertEquals( engine.process_patch.calls[0]!.args[0].length, patchsize*patchsize*4 )
+        const arg0 = engine.process_patch.calls[0]!.args[0]
+        asserts.assertEquals(arg0.data.length, patchsize*patchsize*4 )
+        asserts.assertEquals(arg0.height, patchsize)
+        asserts.assertEquals(arg0.width,  patchsize)
     })
 
     await t.step('error-case: stop early on process error', async () => {
         class FaultyInferenceEngineMock implements InferenceEngine<Uint8Array> {
             finalize = mock.spy( async () => dummyresult)
-            process_patch = mock.spy( async (x:Uint8Array) => {return new Error('!')} )
+            process_patch = mock.spy( async (_x:Image) => {return new Error('!')} )
         }
 
         const engine = new FaultyInferenceEngineMock()
@@ -93,51 +101,51 @@ Deno.test('coordinates_for_patchwise_inference: basics', () => {
         const item_size_mb = item.targetsize.width * item.targetsize.height * 4
         asserts.assertLess(item_size_mb, memory_mb * 1024 * 1024)
 
-        asserts.assertGreaterOrEqual(item.source_coordinates[0], 0)
-        asserts.assertGreaterOrEqual(item.source_coordinates[1], 0)
-        asserts.assertGreaterOrEqual(item.source_coordinates[2], 0)
-        asserts.assertGreaterOrEqual(item.source_coordinates[3], 0)
+        asserts.assertGreaterOrEqual(item.source_coordinates.y0, 0)
+        asserts.assertGreaterOrEqual(item.source_coordinates.x0, 0)
+        asserts.assertGreaterOrEqual(item.source_coordinates.y1, 0)
+        asserts.assertGreaterOrEqual(item.source_coordinates.x1, 0)
 
-        asserts.assertLessOrEqual(item.source_coordinates[0], imagesize.height)
-        asserts.assertLessOrEqual(item.source_coordinates[1], imagesize.width)
-        asserts.assertLessOrEqual(item.source_coordinates[2], imagesize.height)
-        asserts.assertLessOrEqual(item.source_coordinates[3], imagesize.width)
+        asserts.assertLessOrEqual(item.source_coordinates.y0, imagesize.height)
+        asserts.assertLessOrEqual(item.source_coordinates.x0, imagesize.width)
+        asserts.assertLessOrEqual(item.source_coordinates.y1, imagesize.height)
+        asserts.assertLessOrEqual(item.source_coordinates.x1, imagesize.width)
 
 
         for(const patch of item.inference_patches) {
             const inputcropbox = patch.inputcropbox
-            asserts.assertGreaterOrEqual(inputcropbox[0], 0)
-            asserts.assertGreaterOrEqual(inputcropbox[1], 0)
-            asserts.assertGreaterOrEqual(inputcropbox[2], 0)
-            asserts.assertGreaterOrEqual(inputcropbox[3], 0)
+            asserts.assertGreaterOrEqual(inputcropbox.y0, 0)
+            asserts.assertGreaterOrEqual(inputcropbox.x0, 0)
+            asserts.assertGreaterOrEqual(inputcropbox.y1, 0)
+            asserts.assertGreaterOrEqual(inputcropbox.x1, 0)
 
-            asserts.assertLessOrEqual(inputcropbox[0], targetsize.height)
-            asserts.assertLessOrEqual(inputcropbox[1], targetsize.width)
-            asserts.assertLessOrEqual(inputcropbox[2], targetsize.height)
-            asserts.assertLessOrEqual(inputcropbox[3], targetsize.width)
+            asserts.assertLessOrEqual(inputcropbox.y0, targetsize.height)
+            asserts.assertLessOrEqual(inputcropbox.x0, targetsize.width)
+            asserts.assertLessOrEqual(inputcropbox.y1, targetsize.height)
+            asserts.assertLessOrEqual(inputcropbox.x1, targetsize.width)
 
-            asserts.assertEquals(inputcropbox[2] - inputcropbox[0], patchsize)
-            asserts.assertEquals(inputcropbox[3] - inputcropbox[1], patchsize)
+            asserts.assertEquals(inputcropbox.y1 - inputcropbox.y0, patchsize)
+            asserts.assertEquals(inputcropbox.x1 - inputcropbox.x0, patchsize)
 
             // integers
-            asserts.assertEquals(inputcropbox[0], Math.round(inputcropbox[0]))
-            asserts.assertEquals(inputcropbox[1], Math.round(inputcropbox[1]))
+            asserts.assertEquals(inputcropbox.y0, Math.round(inputcropbox.y0))
+            asserts.assertEquals(inputcropbox.x0, Math.round(inputcropbox.x0))
             // since patchsize is integer then 2 and 3 should be integers too
 
 
             const outputcropbox = patch.outputcropbox
-            asserts.assertGreaterOrEqual(outputcropbox[0], 0)
-            asserts.assertGreaterOrEqual(outputcropbox[1], 0)
-            asserts.assertGreaterOrEqual(outputcropbox[2], 0)
-            asserts.assertGreaterOrEqual(outputcropbox[3], 0)
+            asserts.assertGreaterOrEqual(outputcropbox.y0, 0)
+            asserts.assertGreaterOrEqual(outputcropbox.x0, 0)
+            asserts.assertGreaterOrEqual(outputcropbox.y1, 0)
+            asserts.assertGreaterOrEqual(outputcropbox.x1, 0)
 
-            asserts.assertLessOrEqual(outputcropbox[0], patchsize)
-            asserts.assertLessOrEqual(outputcropbox[1], patchsize)
-            asserts.assertLessOrEqual(outputcropbox[2], patchsize)
-            asserts.assertLessOrEqual(outputcropbox[3], patchsize)
+            asserts.assertLessOrEqual(outputcropbox.y0, patchsize)
+            asserts.assertLessOrEqual(outputcropbox.x0, patchsize)
+            asserts.assertLessOrEqual(outputcropbox.y1, patchsize)
+            asserts.assertLessOrEqual(outputcropbox.x1, patchsize)
 
-            asserts.assertGreater(outputcropbox[2], outputcropbox[0])
-            asserts.assertGreater(outputcropbox[3], outputcropbox[1])
+            asserts.assertGreater(outputcropbox.y1, outputcropbox.y0)
+            asserts.assertGreater(outputcropbox.x1, outputcropbox.x0)
 
 
             asserts.assertGreaterOrEqual(patch.pastecoordinates.x, 0)
@@ -146,10 +154,10 @@ Deno.test('coordinates_for_patchwise_inference: basics', () => {
     }
 
     // should contain first and last pixel
-    asserts.assertEquals(output0[0]!.source_coordinates[0], 0)
-    asserts.assertEquals(output0[0]!.source_coordinates[1], 0)
-    asserts.assertEquals(output0[output0.length-1]!.source_coordinates[2], imagesize.height)
-    asserts.assertEquals(output0[output0.length-1]!.source_coordinates[3], imagesize.width)
+    asserts.assertEquals(output0[0]!.source_coordinates.y0, 0)
+    asserts.assertEquals(output0[0]!.source_coordinates.x0, 0)
+    asserts.assertEquals(output0[output0.length-1]!.source_coordinates.y1, imagesize.height)
+    asserts.assertEquals(output0[output0.length-1]!.source_coordinates.x1, imagesize.width)
 })
 
 
@@ -166,9 +174,9 @@ Deno.test('patches_for_stepwise_inference: edge-case: patch larger than image', 
     asserts.assertEquals(output0.length, 1)
 
     asserts.assertEquals(output0[0]?.targetsize, {width:patchsize, height:patchsize})
-    asserts.assertEquals(output0[0]?.inference_patches[0]?.inputcropbox, [0,0,patchsize,patchsize])
+    asserts.assertEquals(output0[0]?.inference_patches[0]?.inputcropbox, {y0:0, x0:0, y1:patchsize,x1:patchsize})
     // x10 because targetsize is 10% of original size
-    asserts.assertEquals(output0[0]?.source_coordinates, [0,0,patchsize*10,patchsize*10])
+    asserts.assertEquals(output0[0]?.source_coordinates, {y0:0, x0:0, y1:patchsize*10,x1:patchsize*10})
 })
 
 
@@ -185,12 +193,14 @@ Deno.test('crop_image_expected_usage', () => {
         height: 2,
     }
 
-    const output: Uint8Array|Error = crop_image(image, [0, 1, 2, 2])
+    const output: Image|Error = crop_image(image, {y0:0, x0:1, y1:2, x1:2})
     asserts.assertNotInstanceOf(output, Error)
     asserts.assertEquals(
-        Array.from(output),
+        Array.from(output.data),
         [5, 6, 7, 8, 13, 14, 15, 16],
     )
+    asserts.assertEquals(output.height, 2)
+    asserts.assertEquals(output.width, 1)
 })
 
 
@@ -201,9 +211,11 @@ Deno.test('crop_image_edge_case_zero_area', () => {
         height: 1,
     }
 
-    const output: Uint8Array|Error = crop_image(image, [0, 0, 0, 1])
+    const output: Image|Error = crop_image(image, {y0:0, x0:0, y1:0, x1:1})
     asserts.assertNotInstanceOf(output, Error)
-    asserts.assertEquals(output.length, 0)
+    asserts.assertEquals(output.data.length, 0)
+    asserts.assertEquals(output.height, 0)
+    // asserts.assertEquals(output.width, 0) // dont care about width 
 })
 
 
@@ -219,7 +231,7 @@ Deno.test('crop_image_failure_invalid_coordinates', () => {
         height: 2,
     }
 
-    const output: Uint8Array|Error = crop_image(image, [0, -1, 2, 2])
+    const output: Image|Error = crop_image(image, {y0:0, x0:-1, y1:2, x1:2})
     asserts.assertInstanceOf(output, Error)
 })
 
@@ -239,7 +251,7 @@ Deno.test("grid_for_overlapping_patches: exactly one patchsized image", () => {
         grid_for_overlapping_patches({height:100, width:100}, 100, 33),
         [
             [
-                [0, 0, 100, 100],
+                {y0:0, x0:0, y1:100, x1:100},
             ],
         ],
     );
@@ -250,19 +262,19 @@ Deno.test("grid_for_overlapping_patches: image not divisible by patchsize", () =
         grid_for_overlapping_patches({height:250, width:250}, 100, 0),
         [
             [
-                [0, 0, 100, 100],
-                [0, 100, 100, 200],
-                [0, 150, 100, 250],
+                {y0:0, x0:0, y1:100, x1:100},
+                {y0:0, x0:100, y1:100, x1:200},
+                {y0:0, x0:150, y1:100, x1:250},
             ],
             [
-                [100, 0, 200, 100],
-                [100, 100, 200, 200],
-                [100, 150, 200, 250],
+                {y0:100, x0:0, y1:200, x1:100},
+                {y0:100, x0:100, y1:200, x1:200},
+                {y0:100, x0:150, y1:200, x1:250},
             ],
             [
-                [150, 0, 250, 100],
-                [150, 100, 250, 200],
-                [150, 150, 250, 250],
+                {y0:150, x0:0, y1:250, x1:100},
+                {y0:150, x0:100, y1:250, x1:200},
+                {y0:150, x0:150, y1:250, x1:250},
             ],
         ],
     );
@@ -275,19 +287,19 @@ Deno.test("grid_for_overlapping_patches: overlapping patches with slack", () => 
         grid_for_overlapping_patches({height:200, width:200}, 100, 20),
         [
             [
-                [0, 0, 100, 100],
-                [0, 80, 100, 180],
-                [0, 100, 100, 200],
+                {y0:0, x0:0, y1:100, x1:100},
+                {y0:0, x0:80, y1:100, x1:180},
+                {y0:0, x0:100, y1:100, x1:200},
             ],
             [
-                [80, 0, 180, 100],
-                [80, 80, 180, 180],
-                [80, 100, 180, 200],
+                {y0:80, x0:0, y1:180, x1:100},
+                {y0:80, x0:80, y1:180, x1:180},
+                {y0:80, x0:100, y1:180, x1:200},
             ],
             [
-                [100, 0, 200, 100],
-                [100, 80, 200, 180],
-                [100, 100, 200, 200],
+                {y0:100, x0:0, y1:200, x1:100},
+                {y0:100, x0:80, y1:200, x1:180},
+                {y0:100, x0:100, y1:200, x1:200},
             ],
         ],
     );
@@ -298,19 +310,19 @@ Deno.test("grid_for_overlapping_patches: large slack", () => {
         grid_for_overlapping_patches({height:120, width:120}, 100, 90),
         [
             [
-                [0, 0, 100, 100],
-                [0, 10, 100, 110],
-                [0, 20, 100, 120],
+                {y0:0, x0:0, y1:100, x1:100},
+                {y0:0, x0:10, y1:100, x1:110},
+                {y0:0, x0:20, y1:100, x1:120},
             ],
             [
-                [10, 0, 110, 100],
-                [10, 10, 110, 110],
-                [10, 20, 110, 120],
+                {y0:10, x0:0, y1:110, x1:100},
+                {y0:10, x0:10, y1:110, x1:110},
+                {y0:10, x0:20, y1:110, x1:120},
             ],
             [
-                [20, 0, 120, 100],
-                [20, 10, 120, 110],
-                [20, 20, 120, 120],
+                {y0:20, x0:0, y1:120, x1:100},
+                {y0:20, x0:10, y1:120, x1:110},
+                {y0:20, x0:20, y1:120, x1:120},
             ],
         ],
     );
