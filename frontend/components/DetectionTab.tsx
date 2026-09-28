@@ -88,6 +88,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         return this.$result_visible.value 
         && this.$active_editing_mode.value != 'cells'
         && this.$active_editing_mode.value != 'treerings'
+        && this.$result_opacity.value > 0
     })
 
     /** Checkbox value, whether to show cells grouped by ring or individually */
@@ -112,10 +113,10 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             () => ({ opacity: this.$result_opacity.value / 100 })
         )
         return <>
+        <SignalCSSDiv $css={$overlay_css}>
             <SignalAwareImageOverlay 
                 $image   = { this.$overlayimage }
                 $visible = { this.$overlays_visible }
-                $css     = { $overlay_css }
             />
             <TreeringsSVGOverlay 
                 ref  = { this.svg_overlay_ref }
@@ -140,10 +141,10 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                     )
                 ) }
                 on_new_sam_box = { this.on_sam_new_box }
-                $css           = { $overlay_css }
             />
 
             {/* <SAM_Modal ref={this.sam_modal_ref} /> */}
+        </SignalCSSDiv>
         </>
     }
 
@@ -679,6 +680,50 @@ class SignalAwareImageOverlay extends preact.Component<{
 }
 
 
+/** A `<div>` which acceps a signal with CSS properties */
+class SignalCSSDiv extends preact.Component<{
+    children: preact.ComponentChildren
+    $css?:    Readonly<Signal<JSX.CSSProperties>>
+}> {
+    ref:preact.RefObject<HTMLDivElement> = preact.createRef()
+
+    render(): JSX.Element {
+        return <div ref={this.ref}>
+            { this.props.children }
+        </div>
+    }
+
+    #css_effect = signals.effect(() => {
+        this.apply_css_to_canvas(this.props.$css?.value ?? {})
+    })
+
+
+    // NOTE: passing style = { $css } doesnt seem to work, 
+    // therefore applying it manually here
+    apply_css_to_canvas(css: JSX.CSSProperties): void {
+        const div: HTMLDivElement|null = this.ref.current
+        if(div == null)
+            return
+
+        Object.assign(div.style, css)
+    }
+
+    override componentDidMount(): void {
+        this.apply_css_to_canvas(this.props.$css?.value ?? {})
+    }
+
+    /** Paste input onto canvas after every render, i.e a new <canvas> */
+    override componentDidUpdate(): void {
+        this.apply_css_to_canvas(this.props.$css?.value ?? {})
+    }
+
+    override componentWillUnmount(): void {
+        // cleanup
+        this.#css_effect()
+    }
+}
+
+
 
 
 type EditMenuProps = {
@@ -1068,8 +1113,6 @@ type EditCanvasProps = {
 
     /** Callback issued when user specifies a box to segment with sam  */
     on_new_sam_box?: (box:Box) => void;
-
-    $css?: Readonly<Signal<JSX.CSSProperties>>
 }
 
 class EditCanvas extends preact.Component<EditCanvasProps> {
@@ -1114,36 +1157,8 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
     }
 
 
-    $canvas_css: Readonly<Signal<JSX.CSSProperties>> = signals.computed(() => ({
-        ...base.styles.overlay_css,
-        cursor:         'crosshair',
-        imageRendering: 'pixelated',
-        pointerEvents:  'all',
-        ...this.props.$css?.value,
-    }))
-
-    #css_effect = signals.effect(() => {
-        this.apply_css_to_canvas(this.$canvas_css.value)
-    })
-
-    // NOTE: passing style = { $canvas_css } doesnt seem to work, 
-    // therefore applying it manually here
-    apply_css_to_canvas(css: JSX.CSSProperties): void {
-        const canvas: HTMLCanvasElement|null = this.ref.current
-        if(canvas == null)
-            return
-
-        Object.assign(canvas.style, css)
-    }
-
-    override componentDidMount(): void {
-        this.apply_css_to_canvas(this.$canvas_css.value)
-    }
-
     /** Paste input onto canvas after every render, i.e a new <canvas> */
     override componentDidUpdate(): void {
-        this.apply_css_to_canvas(this.$canvas_css.value)
-
         if(this.ref.current == null
         || !this.props.$inputblob?.value)
             return;
@@ -1151,10 +1166,6 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
         paste_blob_onto_canvas(this.ref.current, this.props.$inputblob.value)
     }
 
-    override componentWillUnmount(): void {
-        // cleanup
-        this.#css_effect()
-    }
 
     async clear() {
         const canvas:HTMLCanvasElement|null = this.ref.current;
