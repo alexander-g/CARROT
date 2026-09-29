@@ -1143,11 +1143,14 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
                 width       = { props.$imagesize.value?.width }
                 height      = { props.$imagesize.value?.height }
                 class       = "editing-canvas overlay" 
-                // NOTE: passing style = { $canvas_css } doesnt seem to work, 
-                // therefore applying it in #css_effect and componentdidupdate
-                // style       = { this.$canvas_css }
                 onMouseDown = { this.on_mousedown }
                 onMouseMove = { this.on_mousemove }
+                style       = {{
+                    ...base.styles.overlay_css,
+                    cursor:         'crosshair',
+                    imageRendering: 'pixelated',
+                    pointerEvents:  'all',
+                }}
             > </canvas>
         }
 
