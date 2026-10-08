@@ -25,6 +25,7 @@ Deno.test('ONNX_TreeringsInference', {sanitizeResources:false}, async (t:Deno.Te
             fillvalue
         )
     asserts.assertNotInstanceOf(engine, Error)
+    asserts.assertEquals(engine.px_per_mm, 333)
 
     const w = 512
     const h = 512
@@ -71,7 +72,7 @@ Deno.test('ONNX_TreeringsInference', {sanitizeResources:false}, async (t:Deno.Te
     })
 
     // or maybe in .finalize()?
-    await engine.release()  // still causes an error, therefore sanitizeResources:false
+    // await engine.release()  // still causes an error, therefore sanitizeResources:false
 })
 
 
@@ -135,7 +136,7 @@ Deno.test(
             for(let i = 0; i < output.data.length; i++)
                 asserts.assertNotEquals(output.data[i], 255, `${i}`)
 
-            await engine.release() // still causes an error, therefore sanitizeResources:false
+            // await engine.release() // still causes an error, therefore sanitizeResources:false
         })
     }
 })

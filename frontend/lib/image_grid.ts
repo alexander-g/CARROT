@@ -196,7 +196,8 @@ export async function patchwise_inference<T>(
     targetsize: ImageSize, 
     patchsize:  number, 
     slack:      number, 
-    engine:     InferenceEngine<T>
+    engine:     InferenceEngine<T>,
+    progress_cb?: (percent:number) => void,
 ): Promise<T|Error> {
     const sizes: OGandDisplaySizes|Error = await get_og_and_display_sizes(imagefile)
     if(sizes instanceof Error)
@@ -215,7 +216,11 @@ export async function patchwise_inference<T>(
 
     const wasm:base.imagetools.BigImageWASM = 
         await base.imagetools.get_bigimage_wasm()
-    for(const item of inference_items) {
+    
+    const n_progress_steps:number = inference_items.length + 2
+    progress_cb?.(0.0)
+    for(const index in inference_items) {
+        const item:ItemForLoading = inference_items[index]!
         const rgb: Image|Error = await wasm.image_read_patch(
             imagefile, 
             /*src_x      = */ item.source_coordinates.x0,
@@ -240,8 +245,11 @@ export async function patchwise_inference<T>(
             if(status instanceof Error)
                 return status as Error
         }
+        progress_cb?.( (Number(index) + 1) / n_progress_steps )
     }
-    return engine.finalize()
+    const output = engine.finalize()
+    progress_cb?.(1.0)
+    return output
 }
 
 
@@ -331,8 +339,8 @@ export function paste_patch<T extends BufferData>(
 
 
 
-type OGandDisplaySizes = base.imagetools.OGandDisplaySizes
-const get_og_and_display_sizes: 
+export type OGandDisplaySizes = base.imagetools.OGandDisplaySizes
+export const get_og_and_display_sizes: 
     (image: File) => Promise<base.imagetools.OGandDisplaySizes | Error> = 
         base.imagetools.get_og_and_display_sizes
 

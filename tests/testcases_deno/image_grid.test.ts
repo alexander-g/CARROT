@@ -32,9 +32,17 @@ Deno.test('patchwise_inference', async (t:Deno.TestContext) => {
 
     await t.step('expected-usage', async () => {
         const engine = new InferenceEngineMock()
+        const progress_cb = mock.spy()
         const patchsize = 250
         const output: Uint8Array|Error = 
-            await patchwise_inference(imagefile, {height:500, width:500}, patchsize, 64, engine)
+            await patchwise_inference(
+                imagefile, 
+                {height:500, width:500}, 
+                patchsize, 
+                64, 
+                engine, 
+                progress_cb
+            )
         util.assert_not_error(output)
         asserts.assertEquals(output, dummyresult)
 
@@ -47,6 +55,12 @@ Deno.test('patchwise_inference', async (t:Deno.TestContext) => {
             asserts.assertEquals(arg0.height, patchsize)
             asserts.assertEquals(arg0.width,  patchsize)
         }
+        const expected_cb_calls = 1+3*3+1
+        mock.assertSpyCalls(progress_cb, expected_cb_calls) // once at start + 9 patches + end
+        asserts.assertEquals(progress_cb.calls[0]?.args[0], 0)
+        asserts.assertGreater(progress_cb.calls[1]?.args[0], 0)
+        asserts.assertLess(progress_cb.calls[expected_cb_calls-2]?.args[0], 1)
+        asserts.assertEquals(progress_cb.calls[expected_cb_calls-1]?.args[0], 1)
 
         // actual bug
         const paste_x_coordinates:number[] = 

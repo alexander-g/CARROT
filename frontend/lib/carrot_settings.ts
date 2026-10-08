@@ -1,6 +1,13 @@
 import { base } from "../dep.ts"
 
 
+
+export const HARDCODED_MIN_PX_PER_UM =  0.1
+export const HARDCODED_MAX_PX_PER_UM = 10.0
+
+
+
+
 export type CARROT_ModelTypes   = 'cells'|'treerings';
 export type CARROT_ActiveModels = base.settings.ActiveModels<CARROT_ModelTypes>;
 export type CARROT_Settings     = base.settings.Settings<CARROT_ModelTypes> & {

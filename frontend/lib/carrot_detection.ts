@@ -1327,8 +1327,8 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
     override async process(
         input: File, 
-        on_progress?: ((x: base.files.InputResultPair<File, CARROT_Result>
-    ) => void) | undefined): Promise<CARROT_Result> {
+        on_progress?: ((x: base.files.InputResultPair<File, CARROT_Result>) => void) | undefined
+    ): Promise<CARROT_Result> {
         on_progress?.({input, result:new this.ResultClass("processing")})
 
         // TODO: refactor
@@ -1569,6 +1569,20 @@ function convert_pairedpaths_to_pointpairs(pairs:PairedPaths): PointPair[][] {
 
 
 
+type OGandDisplaySizes = {
+    display_size: base.util.ImageSize;
+    og_size:      base.util.ImageSize;
+}
+
+async function get_og_and_display_sizes(image:File): Promise<OGandDisplaySizes|Error> {
+    const og_size: base.util.ImageSize|Error = 
+        await base.imagetools.read_image_size(image)
+    if(og_size instanceof Error)
+        return og_size as Error;
+    const display_size: base.util.ImageSize = 
+        base.imagetools.get_display_size(og_size)
+    return {og_size, display_size}
+}
 
 
 type ProgressMessage = {
@@ -1692,9 +1706,3 @@ function aoi_points_to_tuples(aoi:AoIRect|null): AreaOfInterest|undefined {
         [aoi[3].x, aoi[3].y],
     ] : undefined;
 }
-
-
-type OGandDisplaySizes = base.imagetools.OGandDisplaySizes
-const get_og_and_display_sizes: 
-    (image: File) => Promise<base.imagetools.OGandDisplaySizes | Error> = 
-        base.imagetools.get_og_and_display_sizes

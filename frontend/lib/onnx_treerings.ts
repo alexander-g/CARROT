@@ -1,4 +1,4 @@
-import { base } from '../dep.ts'
+import { base, onnxproto } from '../dep.ts'
 import { 
     paste_patch,
     crop_image,
@@ -7,6 +7,15 @@ import {
     type PatchBox,
     type Buffer2D,
 } from './image_grid.ts'
+import {
+    HARDCODED_MIN_PX_PER_UM,
+    HARDCODED_MAX_PX_PER_UM,
+} from "./carrot_settings.ts";
+import { SingleImageSession } from "../../base/frontend/ts/logic/onnxruntime.ts";
+
+
+
+
 
 
 
@@ -29,11 +38,25 @@ export class ONNX_TreeringsInference implements InferenceEngine<Image> {
         deno_wasmdir?: string,    // for tests, folder containing ort wasm file
         fillvalue?:    number,    // for tests, buffer initial fill value
     ): Promise<ONNX_TreeringsInference|Error> {
-        const session: ortSession|Error = 
-            await ort.SingleImageSession.initialize(onnxfile, deno_wasmdir)
-        if(session instanceof Error)
-            return session as Error;
+        const sessionstruct: SessionWithResolution|Error = 
+            await SessionCache.create_or_get_cached_onnx_session(onnxfile, deno_wasmdir)
+        if(sessionstruct instanceof Error)
+            return sessionstruct as Error
 
+        return this.create_from_session(
+            sessionstruct, 
+            inferencesize, 
+            outputsize, 
+            fillvalue
+        )
+    }
+
+    static async create_from_session(
+        sessionstruct: SessionWithResolution,
+        inferencesize: ImageSize,
+        outputsize:    ImageSize,
+        fillvalue?:    number,    // for tests, buffer initial fill value
+    ): Promise<ONNX_TreeringsInference|Error> {
         const resultbuffer:ResultBuffer = {
             data:   new Float32Array(inferencesize.height * inferencesize.width),
             width:  inferencesize.width,
@@ -42,8 +65,15 @@ export class ONNX_TreeringsInference implements InferenceEngine<Image> {
         if(fillvalue)
             resultbuffer.data.fill(fillvalue)
 
-        return new ONNX_TreeringsInference(session, resultbuffer, outputsize)
+        return new ONNX_TreeringsInference(
+            sessionstruct.session, 
+            resultbuffer, 
+            outputsize, 
+            sessionstruct.px_per_mm
+        )
+        await 0;
     }
+
 
     async process_patch(
         input_rgba:       Image, 
@@ -65,7 +95,7 @@ export class ONNX_TreeringsInference implements InferenceEngine<Image> {
             return input_x as Error;
 
         const output: ortSessionOutput|Error = 
-            await this.session.process_inputfeed({x: input_x})
+            await this.session.process_inputfeed({x: input_x}, /*force_mainthread = */ true)
         if(output instanceof Error)
             return output as Error
 
@@ -112,8 +142,54 @@ export class ONNX_TreeringsInference implements InferenceEngine<Image> {
         private session:      ortSession, 
         private resultbuffer: ResultBuffer,
         private outputsize:   ImageSize,
+        readonly px_per_mm:   number,
     ){}
 }
+
+
+export type SessionWithResolution = {
+    readonly session:   SingleImageSession
+    readonly px_per_mm: number
+}
+
+export class SessionCache {
+    static async create_or_get_cached_onnx_session(
+        modelpath:     string, 
+        deno_wasmdir?: string,
+    ): Promise<SessionWithResolution|Error> {
+        if(modelpath in this.#sessions)
+            return this.#sessions[modelpath]!
+
+        const session: SingleImageSession|Error = 
+            await SingleImageSession.initialize(modelpath, deno_wasmdir)
+        if(session instanceof Error)
+            return session as Error
+        
+        const meta:ONNX_TreeringsMeta|Error = 
+            validate_onnx_metadata(session.onnx_bytes)
+        if(meta instanceof Error)
+            return meta as Error
+        
+        if(HARDCODED_MIN_PX_PER_UM * 1000 > meta["px-per-mm"]
+        || HARDCODED_MAX_PX_PER_UM * 1000 < meta['px-per-mm'])
+            return new Error(`Unexpected model resolution: ${meta["px-per-mm"]}`)
+        
+        const output:SessionWithResolution = 
+            {session, px_per_mm:meta["px-per-mm"]}
+        this.#sessions[modelpath] = output
+        return output
+    }
+
+    static async release_all_sessions(): Promise<void> {
+        for(const key of Object.keys(this.#sessions)) {
+            await this.#sessions[key]!.session.release()
+            delete this.#sessions[key]
+        }
+    }
+
+    static #sessions:Record<string, SessionWithResolution> = {}
+}
+
 
 
 
@@ -146,5 +222,31 @@ function threshold(x: Float32Array, t:number): Uint8Array {
     for(let i:number = 0; i < x.length; i++)
         output[i] = Number(x[i]! > t)
     return output
+}
+
+
+type ONNX_TreeringsMeta = {
+    // modeltype:  'carrot-treerings'
+    'px-per-mm': number
+}
+
+function validate_onnx_metadata(onnxbytes:Uint8Array): ONNX_TreeringsMeta|Error {
+    const model: onnxproto.onnx.ModelProto = 
+        onnxproto.onnx.ModelProto.decode(onnxbytes);
+
+    const metadata: unknown = Object.fromEntries(
+        (model.metadataProps ?? []).map(({ key, value }) => [key, value])
+    )
+
+    if(base.util.is_object(metadata)
+    && base.util.has_string_property(metadata, 'modeltype')
+    && metadata.modeltype == 'carrot-treerings'
+    && base.util.has_string_property(metadata, 'px-per-mm')
+    && Number.isFinite(Number(metadata["px-per-mm"])) )
+        return {"px-per-mm": Number(metadata["px-per-mm"])}
+    
+    // else
+    const errormsg:string = JSON.stringify(metadata).slice(0,10000)
+    return new Error(`Invalid metadata: ${errormsg}`)
 }
 
