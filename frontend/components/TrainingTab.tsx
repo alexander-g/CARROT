@@ -212,3 +212,14 @@ type ProgressData = {
     progress:number,
     description:string,
 }
+
+
+
+
+export class TrainingNotAvailableTab extends base.TabContent<state.CARROT_State> {
+    render(): JSX.Element {
+        return <div data-tab={this.props.name} class="ui tab unselectable">
+            Training is not available in the web version.
+        </div>
+    }
+}

@@ -60,3 +60,27 @@ export function validate_available_models(x:unknown): CARROT_AvailableModels|nul
     }
     else return null;
 }
+
+
+
+export 
+class CARROT_WebSettingsHandler extends base.settings.SettingsHandler<CARROT_Settings> {
+    override async store(settings: CARROT_Settings): Promise<true | Error> {
+        return true
+    }
+
+    override async load(): Promise<Error | base.settings.SettingsResponse<CARROT_Settings>> {
+        return {
+            available_models: {
+                cells:     [{name:'angiosperm-cells'}],
+                treerings: [{name:'angiosperm-treerings'}],
+            },
+            settings: {
+                active_models: {cells:'angiosperm-cells', treerings:'angiosperm-treerings'},
+                cells_enabled:     true,
+                treerings_enabled: true,
+                micrometer_factor: 2.0,
+            }
+        }
+    }
+}

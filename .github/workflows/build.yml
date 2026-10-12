@@ -17,7 +17,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
       - uses: actions/setup-python@v5
@@ -43,11 +43,49 @@ jobs:
         run: python build.py --zip
       
       - name: Archive binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binaries
           path: builds/*.zip
           if-no-files-found: error
+  
+  
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+      
+      - name: deno
+        run: |
+          ./deno.sh task cache
+      
+      - name: build
+        run: |
+          ./deno.sh run                                    \
+            --config=./deno.jsonc                          \
+            --allow-read=./                                \
+            --allow-write=./static/                        \
+            --unstable-bundle                              \
+            --no-prompt                                    \
+            --cached-only                                  \
+            base/backend/ts/build.ts                       \
+            --mode=web                                     \
+            --static=./static/                             \
+            --srcdirs=frontend/,base/frontend/             \
+            --index_tsx=frontend/index.tsx                 \
+            --extra_bundle=frontend/lib/carrot_worker.ts   \
+            --copy_globs=frontend/css/treerings.css,frontend/favicon.ico,frontend/logo.svg
+      
+      - name: Archive Build
+        uses: actions/upload-artifact@v7
+        with:
+          name: pagebuild
+          path: |
+            static/*
+          if-no-files-found: error
+      
 
 
   integration_tests:
@@ -56,12 +94,12 @@ jobs:
     timeout-minutes: 60
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         # NOTE: recursive currently required
         with:
           submodules: 'recursive'
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binaries
           path: build/
@@ -98,7 +136,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binaries
           path: build/

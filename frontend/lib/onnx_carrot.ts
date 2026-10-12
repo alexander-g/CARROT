@@ -138,7 +138,7 @@ export class CARROT_ONNXBackend extends CARROT_Backend {
 // relative to this file
 const HARDCODED_MODEL_DIR_DENO = '../../models/'
 const HARDCODED_WASMDIR_DENO   = '../../onnx/'
-const HARDCODED_MODEL_BASE_URL = 'http://localhost:5000/'
+const HARDCODED_ANGIOSPERM_TREERINGS_ONNX = 'https://huggingface.co/carrot-qwa/angiosperm-treerings/resolve/main/angiosperm-treerings.onnx'
 
 function get_model_path_or_url(
     modelname:  string, 
@@ -151,9 +151,14 @@ function get_model_path_or_url(
             base.denolibs.path.join(modelsdir, modeltype, modelname)
         )
         return base.denolibs.path.fromFileUrl(fileurl)+'.onnx'
-    }
-    else {
-        //
+    } else {
+
+        // very very harcoded
+        if(modeltype == 'treerings' && modelname == 'angiosperm-treerings')
+            return HARDCODED_ANGIOSPERM_TREERINGS_ONNX
+        // else
+
+
         console.error('TODO: NOT IMPLEMENTED')
         throw new Error('TODO')
     }
