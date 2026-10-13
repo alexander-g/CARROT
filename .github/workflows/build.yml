@@ -12,6 +12,9 @@ on:
       deploy:
         type: boolean
         default: false
+      deploy-carrot-qwa:
+        type: boolean
+        default: false
 
 
 
@@ -179,3 +182,39 @@ jobs:
           git push --force origin --tags
 
 
+  deploy-to-carrot-qwa:
+    if: ${{ github.event.inputs.deploy-carrot-qwa == 'true' }}
+    needs: build-web
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: pagebuild
+          path: artifact/
+
+      - name: Release
+        env:
+          DEPLOY_TOKEN: ${{ secrets.CARROT_QWA_DEPLOY_TOKEN_0 }}
+        run: |
+          TAGNAME=v$(date +%F)
+          echo $TAGNAME
+
+          git clone --branch gh-pages "https://x-access-token:${DEPLOY_TOKEN}@github.com/CARROT-QWA/carrot-qwa.github.io.git"
+          cd carrot-qwa.github.io
+
+          cp -r ../artifact/* ./
+          rm -r ../artifact
+          ls -halt ./
+
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add ./*
+          git commit -m "$TAGNAME"
+          git tag --force $TAGNAME
+          git push origin gh-pages
+          git push --force origin --tags
