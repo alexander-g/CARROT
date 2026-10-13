@@ -74,4 +74,5 @@ Deno.test('onnx-carrot', {sanitizeResources:false}, async (t:Deno.TestContext) =
         console.log('\n')
         
     }
+})
 
