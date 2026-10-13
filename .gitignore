@@ -10,3 +10,4 @@ cache
 venv
 tests/coverage*
 import_map*.json
+*.wasm

@@ -3,7 +3,7 @@ import {
     CARROT_Result, 
     CARROT_Backend, 
     CARROT_Data,
-    LegacySavedMapOnlyUnfinishedData,
+    BinaryMapOnlyUnfinishedData,
 } from "../lib/carrot_detection.ts"
 import { CARROT_Settings } from "../lib/carrot_settings.ts"
 
@@ -110,7 +110,7 @@ class CARROT_State extends base.state.AppState<CARROT_Settings>{
 }
 
 
-export function is_unfinished(x:CARROT_Data): x is LegacySavedMapOnlyUnfinishedData {
+export function is_unfinished(x:CARROT_Data): x is BinaryMapOnlyUnfinishedData {
     if('cellmap' in x && !('instancemap' in x))
         return true;
     else if('treeringmap' in x && !('treerings' in x))

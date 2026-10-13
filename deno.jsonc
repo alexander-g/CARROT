@@ -11,8 +11,9 @@
   "tasks": {
     "compile_index": "./build.ts",
     "bundle_deps"  : "./backend/ts/esbuild.ts",
-    "cache":           "deno task cache_libraries && deno task cache_bundle",
+    "cache":           "deno task cache_libraries && deno task cache_bundle && deno task cache_ortwasm",
     "cache_libraries": "deno cache --allow-import ./base/backend/ts/build.ts ./frontend/dep.ts ./tests/testcases_deno/dep.ts",
     "cache_bundle":    "touch /tmp/blargh.js && deno bundle /tmp/blargh.js && rm /tmp/blargh.js",
+    "cache_ortwasm":   "deno run --allow-read=./onnx --allow-write=./onnx --allow-net=cdn.jsdelivr.net onnx/fetch-onnxruntime-wasm.ts"
   },
 }

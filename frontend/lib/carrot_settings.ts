@@ -1,6 +1,13 @@
 import { base } from "../dep.ts"
 
 
+
+export const HARDCODED_MIN_PX_PER_UM =  0.1
+export const HARDCODED_MAX_PX_PER_UM = 10.0
+
+
+
+
 export type CARROT_ModelTypes   = 'cells'|'treerings';
 export type CARROT_ActiveModels = base.settings.ActiveModels<CARROT_ModelTypes>;
 export type CARROT_Settings     = base.settings.Settings<CARROT_ModelTypes> & {
@@ -52,4 +59,28 @@ export function validate_available_models(x:unknown): CARROT_AvailableModels|nul
         return x;
     }
     else return null;
+}
+
+
+
+export 
+class CARROT_WebSettingsHandler extends base.settings.SettingsHandler<CARROT_Settings> {
+    override async store(settings: CARROT_Settings): Promise<true | Error> {
+        return true
+    }
+
+    override async load(): Promise<Error | base.settings.SettingsResponse<CARROT_Settings>> {
+        return {
+            available_models: {
+                cells:     [{name:'angiosperm-vessels'}],
+                treerings: [{name:'angiosperm-treerings'}],
+            },
+            settings: {
+                active_models: {cells:'angiosperm-vessels', treerings:'angiosperm-treerings'},
+                cells_enabled:     true,
+                treerings_enabled: true,
+                micrometer_factor: 2.0,
+            }
+        }
+    }
 }

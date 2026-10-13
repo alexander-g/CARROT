@@ -1,10 +1,12 @@
 import { base, Signal, JSX, preact, signals } from "../dep.ts"
-import { CARROT_Settings, CARROT_AvailableModels } from "../lib/carrot_settings.ts";
+import { 
+    CARROT_Settings, 
+    CARROT_AvailableModels,
+    HARDCODED_MIN_PX_PER_UM as HARDCODED_MIN_RESOLUTION,
+    HARDCODED_MAX_PX_PER_UM as HARDCODED_MAX_RESOLUTION,
+} from "../lib/carrot_settings.ts";
 
 
-
-const HARDCODED_MIN_RESOLUTION =  0.1
-const HARDCODED_MAX_RESOLUTION = 10.0
 
 
 
