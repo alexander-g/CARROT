@@ -72,11 +72,11 @@ class CARROT_WebSettingsHandler extends base.settings.SettingsHandler<CARROT_Set
     override async load(): Promise<Error | base.settings.SettingsResponse<CARROT_Settings>> {
         return {
             available_models: {
-                cells:     [{name:'angiosperm-cells'}],
+                cells:     [{name:'angiosperm-vessels'}],
                 treerings: [{name:'angiosperm-treerings'}],
             },
             settings: {
-                active_models: {cells:'angiosperm-cells', treerings:'angiosperm-treerings'},
+                active_models: {cells:'angiosperm-vessels', treerings:'angiosperm-treerings'},
                 cells_enabled:     true,
                 treerings_enabled: true,
                 micrometer_factor: 2.0,

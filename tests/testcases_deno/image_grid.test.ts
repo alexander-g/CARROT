@@ -100,6 +100,59 @@ Deno.test('patchwise_inference', async (t:Deno.TestContext) => {
         mock.assertSpyCalls(engine.process_patch, 1)
         asserts.assertEquals(output.message, '!')
     })
+
+
+    await t.step('bug: use width/height instead of x1/y1 to read patch', async () => {
+        const wasm = await base.imagetools.get_bigimage_wasm()
+        const og_fn = wasm.image_read_patch
+        try {
+            const read_patch_mock = 
+                mock.spy( async (
+                    _file:File, 
+                    src_x:number, 
+                    src_y:number, 
+                    src_w:number, 
+                    src_h:number, 
+                    dst_w:number, 
+                    dst_h:number
+                ) => {
+                return {
+                    data:   new Uint8Array(dst_w*dst_h*4),
+                    width:  dst_w,
+                    height: dst_h,
+                }
+            } )
+            wasm.image_read_patch = read_patch_mock
+
+            const imsize = await base.imagetools.read_image_size(imagefile)
+            asserts.assertNotInstanceOf(imsize, Error)
+
+            const engine = new InferenceEngineMock()
+            const patchsize = 250
+            const output: Uint8Array|Error = 
+                await patchwise_inference(
+                    imagefile, 
+                    {height:500, width:500}, 
+                    patchsize, 
+                    64, 
+                    engine, 
+                )
+            util.assert_not_error(output)
+
+            asserts.assertEquals(read_patch_mock.calls.length, 3*3)
+            for(const spycall of read_patch_mock.calls) {
+                const [_f, src_x, src_y, src_w, src_h, _w, _h] = spycall.args
+                
+                asserts.assertGreater(src_w, 0)
+                asserts.assertGreater(src_h, 0)
+                asserts.assertLessOrEqual(src_x + src_w, imsize.width)
+                asserts.assertLessOrEqual(src_y + src_h, imsize.height)
+            }
+
+        } finally {
+            wasm.image_read_patch = og_fn
+        }
+    })
 })
 
 

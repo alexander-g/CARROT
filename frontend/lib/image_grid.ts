@@ -225,8 +225,8 @@ export async function patchwise_inference<T>(
             imagefile, 
             /*src_x      = */ item.source_coordinates.x0,
             /*src_y      = */ item.source_coordinates.y0,
-            /*src_width  = */ item.source_coordinates.x1,
-            /*src_height = */ item.source_coordinates.y1,
+            /*src_width  = */ item.source_coordinates.x1 - item.source_coordinates.x0,
+            /*src_height = */ item.source_coordinates.y1 - item.source_coordinates.y0,
             /*dst_width  = */ item.targetsize.width,
             /*dst_height = */ item.targetsize.height,
         )
@@ -253,7 +253,7 @@ export async function patchwise_inference<T>(
 }
 
 
-export type BufferData = Uint8Array|Float32Array
+export type BufferData = Uint8Array|Float32Array|Int32Array
 export type Buffer2D<T extends BufferData> = {
     data:   T
     width:  number

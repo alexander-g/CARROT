@@ -31,6 +31,21 @@ class MockTreeringsModel(torch.nn.Module):
 
         return x.float()
 
+class MockCellsModel(torch.nn.Module):
+    def forward(self, x:torch.Tensor) -> torch.Tensor:
+        assert x.ndim == 4
+        assert x.shape[-1] == 3
+        assert x.dtype == torch.uint8
+        assert x.shape[1]  >= 512
+        assert x.shape[2]  >= 512
+
+        x = torch.zeros(x.shape[:-1], dtype=torch.int32)
+        x[:, 0:100, 0:100] = 1
+        x[:, -100:, -100:] = 2
+
+        return x
+
+
 
 def export(path:str, m:torch.nn.Module, x:torch.Tensor, meta:dict[str,str]):
     buffer = io.BytesIO()
@@ -69,15 +84,25 @@ def export(path:str, m:torch.nn.Module, x:torch.Tensor, meta:dict[str,str]):
 
 
 if __name__ == '__main__':
-    m = MockTreeringsModel().eval()
+    m_rings = MockTreeringsModel().eval()
     x = torch.ones([1,640,640,3], dtype=torch.uint8)
-    
     
     px_per_mm = 333
     meta = {
         "px-per-mm": f"{px_per_mm}",
         "modeltype": "carrot-treerings",
     }
-    export('tests/testcases_deno/assets/onnx/treerings/mockmodel.onnx', m, x, meta)
+    export('tests/testcases_deno/assets/onnx/treerings/mockmodel.onnx', m_rings, x, meta)
+
+
+
+    m_cells = MockCellsModel().eval()
+    x = torch.ones([1,800,800,3], dtype=torch.uint8)
+    px_per_mm = 650
+    meta = {
+        "px-per-mm": f"{px_per_mm}",
+        "modeltype": "carrot-cells",
+    }
+    export('tests/testcases_deno/assets/onnx/cells/mockmodel.onnx', m_cells, x, meta)
     
     print('done')

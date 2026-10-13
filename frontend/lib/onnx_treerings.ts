@@ -29,17 +29,24 @@ type ImageSize        = base.util.ImageSize
 type Point            = base.util.Point
 type Image            = base.imagetools.WasmImage
 
+type ONNXMetaModeltype = 'carrot-treerings'|'carrot-cells'
 
-export class ONNX_TreeringsInference implements InferenceEngine<Image> {
+
+export class ONNX_PatchwiseInference implements InferenceEngine<Image> {
     static async create(
         onnxfile:      string, 
         inferencesize: ImageSize,
         outputsize:    ImageSize,
+        modeltype:     ONNXMetaModeltype,
         deno_wasmdir?: string,    // for tests, folder containing ort wasm file
         fillvalue?:    number,    // for tests, buffer initial fill value
-    ): Promise<ONNX_TreeringsInference|Error> {
+    ): Promise<ONNX_PatchwiseInference|Error> {
         const sessionstruct: SessionWithResolution|Error = 
-            await SessionCache.create_or_get_cached_onnx_session(onnxfile, deno_wasmdir)
+            await SessionCache.create_or_get_cached_onnx_session(
+                onnxfile, 
+                modeltype, 
+                deno_wasmdir
+            )
         if(sessionstruct instanceof Error)
             return sessionstruct as Error
 
@@ -56,7 +63,7 @@ export class ONNX_TreeringsInference implements InferenceEngine<Image> {
         inferencesize: ImageSize,
         outputsize:    ImageSize,
         fillvalue?:    number,    // for tests, buffer initial fill value
-    ): Promise<ONNX_TreeringsInference|Error> {
+    ): Promise<ONNX_PatchwiseInference|Error> {
         const resultbuffer:ResultBuffer = {
             data:   new Float32Array(inferencesize.height * inferencesize.width),
             width:  inferencesize.width,
@@ -65,7 +72,7 @@ export class ONNX_TreeringsInference implements InferenceEngine<Image> {
         if(fillvalue)
             resultbuffer.data.fill(fillvalue)
 
-        return new ONNX_TreeringsInference(
+        return new ONNX_PatchwiseInference(
             sessionstruct.session, 
             resultbuffer, 
             outputsize, 
@@ -122,7 +129,7 @@ export class ONNX_TreeringsInference implements InferenceEngine<Image> {
     }
 
     async finalize(): Promise<Image|Error> {
-        const at_outputsize: Buffer2D<Float32Array>|Error = 
+        const at_outputsize: Buffer2D<Float32Array|Int32Array>|Error = 
             bilinear_interpolate(this.resultbuffer, this.outputsize)
         if(at_outputsize instanceof Error)
             return at_outputsize as Error
@@ -147,6 +154,41 @@ export class ONNX_TreeringsInference implements InferenceEngine<Image> {
 }
 
 
+export function create_onnx_treerings_inference(
+    onnxfile:      string, 
+    inferencesize: ImageSize,
+    outputsize:    ImageSize,
+    deno_wasmdir?: string,    // for tests, folder containing ort wasm file
+    fillvalue?:    number,    // for tests, buffer initial fill value
+): Promise<ONNX_PatchwiseInference|Error> {
+    return ONNX_PatchwiseInference.create(
+        onnxfile,
+        inferencesize,
+        outputsize,
+        'carrot-treerings',
+        deno_wasmdir,
+        fillvalue
+    )
+}
+
+export function create_onnx_cells_inference(
+    onnxfile:      string, 
+    inferencesize: ImageSize,
+    outputsize:    ImageSize,
+    deno_wasmdir?: string,    // for tests, folder containing ort wasm file
+    fillvalue?:    number,    // for tests, buffer initial fill value
+): Promise<ONNX_PatchwiseInference|Error> {
+    return ONNX_PatchwiseInference.create(
+        onnxfile,
+        inferencesize,
+        outputsize,
+        'carrot-cells',
+        deno_wasmdir,
+        fillvalue
+    )
+}
+
+
 export type SessionWithResolution = {
     readonly session:   SingleImageSession
     readonly px_per_mm: number
@@ -155,6 +197,7 @@ export type SessionWithResolution = {
 export class SessionCache {
     static async create_or_get_cached_onnx_session(
         modelpath:     string, 
+        modeltype:     ONNXMetaModeltype,
         deno_wasmdir?: string,
     ): Promise<SessionWithResolution|Error> {
         if(modelpath in this.#sessions)
@@ -166,7 +209,7 @@ export class SessionCache {
             return session as Error
         
         const meta:ONNX_TreeringsMeta|Error = 
-            validate_onnx_metadata(session.onnx_bytes)
+            validate_onnx_metadata(session.onnx_bytes, modeltype)
         if(meta instanceof Error)
             return meta as Error
         
@@ -201,23 +244,44 @@ type RawOutput = {
 function validate_onnx_output(raw:unknown): RawOutput|Error {
     if( base.util.is_object(raw)
     &&  base.util.has_property_of_type(raw, 'y', ort.validate_ort_tensor)
-    &&  raw.y.data instanceof Float32Array
-    &&  raw.y.type == 'float32'
     &&  raw.y.dims.length == 3  // [B,H,W]
+    &&  raw.y.dims[0] == 1
     ){
-        return {
-            y: {
-                data:  new Float32Array(raw.y.data),
-                dtype: 'float32',
-                shape: raw.y.dims,
+        if(raw.y.data instanceof Float32Array && raw.y.type == 'float32')
+            return {
+                y: {
+                    data:  new Float32Array(raw.y.data),
+                    dtype: 'float32',
+                    shape: raw.y.dims,
+                }
+            }
+        else if(raw.y.data instanceof Int32Array && raw.y.type == 'int32') {
+            return {
+                y: {
+                    data: convert_int32_to_float32(raw.y.data),
+                    dtype: 'float32',
+                    // data:  new Int32Array(raw.y.data),
+                    // dtype: 'int32',
+                    shape: raw.y.dims,
+                }
             }
         }
+        //else continue to error
     }
     //else
     return new Error('Unexpected onnx output')
 }
 
-function threshold(x: Float32Array, t:number): Uint8Array {
+
+function convert_int32_to_float32(x:Int32Array): Float32Array<ArrayBuffer> {
+    const output = new Float32Array(x.length)
+    for(let i:number = 0; i < x.length; i++)
+        output[i] = x[i]!
+    return output
+}
+
+
+function threshold(x: Float32Array|Int32Array, t:number): Uint8Array {
     const output = new Uint8Array(x.length)
     for(let i:number = 0; i < x.length; i++)
         output[i] = Number(x[i]! > t)
@@ -226,11 +290,14 @@ function threshold(x: Float32Array, t:number): Uint8Array {
 
 
 type ONNX_TreeringsMeta = {
-    // modeltype:  'carrot-treerings'
+    // modeltype:  ONNX_META_MODELTYPE
     'px-per-mm': number
 }
 
-function validate_onnx_metadata(onnxbytes:Uint8Array): ONNX_TreeringsMeta|Error {
+function validate_onnx_metadata(
+    onnxbytes:          Uint8Array, 
+    expected_modeltype: ONNXMetaModeltype,
+): ONNX_TreeringsMeta|Error {
     const model: onnxproto.onnx.ModelProto = 
         onnxproto.onnx.ModelProto.decode(onnxbytes);
 
@@ -240,7 +307,7 @@ function validate_onnx_metadata(onnxbytes:Uint8Array): ONNX_TreeringsMeta|Error 
 
     if(base.util.is_object(metadata)
     && base.util.has_string_property(metadata, 'modeltype')
-    && metadata.modeltype == 'carrot-treerings'
+    && metadata.modeltype == expected_modeltype
     && base.util.has_string_property(metadata, 'px-per-mm')
     && Number.isFinite(Number(metadata["px-per-mm"])) )
         return {"px-per-mm": Number(metadata["px-per-mm"])}
