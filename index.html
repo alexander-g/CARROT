@@ -1,0 +1,117 @@
+<html>
+	<head>
+		<title>CARROT - Cell and Ring Recognition Tool</title>
+		<link rel="stylesheet" href="thirdparty/semantic.min.css" />
+		<script src="thirdparty/jquery-3.4.1.min.js"></script>
+		<script src="thirdparty/semantic.min.js"></script>
+		<script type="module" src="index.tsx.js"></script>
+		<link rel="stylesheet" href="css/box_styles.css" />
+		<style>
+			
+			        .transform-box img {
+			            /* transform-box receives all events, not children images */
+			            pointer-events: none;
+			        }
+			        
+			        .unselectable {
+			            user-drag: none; 
+			            user-select: none;
+			            -moz-user-select: none;
+			            -webkit-user-drag: none;
+			            -webkit-user-select: none;
+			            -ms-user-select: none;
+			        }
+
+			        .ui.table td.active, .ui.table tr.active { 
+			            background: #fff!important;
+			        }
+			        
+		</style>
+		<link rel="icon" href="favicon.ico" />
+		<link rel="stylesheet" href="css/treerings.css" />
+		<script>
+			window.app_config = {"_":[],"mode":"web","static":"./static/","srcdirs":["frontend/","base/frontend/"],"index_tsx":"frontend/index.tsx","extra_bundle":["frontend/lib/carrot_worker.ts"],"copy_globs":["frontend/css/treerings.css","frontend/favicon.ico","frontend/logo.svg"],"stubs":["/home/runner/work/CARROT/CARROT/base/frontend/ts/dep.deno.ts"]}
+		</script>
+	</head>
+	<body id="CARROT">
+		<svg height="0">
+			<defs>
+				<filter id="black-to-transparent">
+					<feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 255 255 255 0 0"></feColorMatrix>
+				</filter>
+				<filter id="white-to-red">
+					<feColorMatrix in="SourceGraphic" type="matrix" values="1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0"></feColorMatrix>
+				</filter>
+			</defs>
+		</svg>
+		  
+		<div class="ui container menu page-wide" style="width: calc(100% - 40px)!important;">
+			<div class="header item" style="padding-top: 0px; padding-bottom: 0px; width: 150px;">
+				<img class="logo" src="logo.svg" style="width:100%; max-height:28px;" />
+			</div>
+			<a class="ui simple dropdown item">
+				<i class="file icon"></i>
+				<span class="text">Files</span>
+				<i class="dropdown icon"></i>
+				<div class="ui menu">
+					<label for="input-images" class="ui icon item">
+						<i class="images outline icon"></i>
+						Load Input Images
+					</label>
+					<input type="file" id="input-images" style="display:none" accept="image/jpeg,image/tiff" readonly multiple />
+					<label for="input-folder" class="ui icon item">
+						<i class="folder outline icon"></i>
+						Load Input Folder
+					</label>
+					<input type="file" id="input-folder" style="display:none" readonly multiple webkitdirectory directory />
+					<div class="ui divider"></div>
+					<label for="input-annotations" class="ui icon item">
+						<i class="images icon"></i>
+						Load Annotations
+					</label>
+					<input type="file" id="input-annotations" style="display:none" accept="application/json, application/zip, application/x-zip-compressed" readonly multiple />
+				</div>
+			</a>
+			<a class="ui simple item" id="settings-button">
+				<i class="wrench icon"></i>
+				<span class="text">Settings</span>
+			</a>
+		</div>
+		<div class="ui container page-wide" id="main-container" style="width: calc(100% - 40px)!important; padding-bottom: 50vh;">
+			<div class="ui hidden section divider whitespace"></div>
+			<div class="ui pointing secondary tabs menu">
+				<a class="active item" data-tab="Detection">Detection</a>
+				<a class="item" data-tab="Training">Training</a>
+			</div>
+			<div class="ui tab unselectable active segment" data-tab="Detection" style="padding:0">
+				<div class="ui icon message">
+					<i class="images outline icon"></i>
+					<div class="content">
+						<div class="header">No Files Loaded</div>
+						<p>
+							Drag and drop images into this window to get started
+						</p>
+					</div>
+				</div>
+			</div>
+			<div data-tab="Training" class="ui tab unselectable">
+				Training is not available in the web version.
+			</div>
+		</div>
+		<div class="ui tiny modal" id="settings-dialog">
+			<div class="header"> Settings </div>
+			<div class="ui form content">
+				<div class="ui divider"></div>
+				<div class="ui form content">
+					<div class="actions">
+						<div class="ui negative button " style="display: none;">Cancel</div>
+						<div class="ui positive right labeled icon button disabled" id="settings-ok-button">
+							Save
+							<i class="checkmark icon"></i>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>
