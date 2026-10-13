@@ -4,9 +4,10 @@
 ***
 
 
-Desktop-version (Windows): [Downloads](http://github.com/alexander-g/CARROT/releases/latest)
+Desktop-version (Windows): [Downloads](https://github.com/alexander-g/CARROT/releases/latest)
 
-Web-version: [http://alexander-g.github.io/CARROT](http://alexander-g.github.io/CARROT)
+Web-version: [https://carrot-qwa.github.io](https://carrot-qwa.github.io)
+
 
 
 ***
