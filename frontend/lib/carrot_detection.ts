@@ -92,9 +92,9 @@ export type TreeringsOnlyData = {
     aoi: AoIRect|null;
 }
 
-// TODO: remove
-/** An old version of saved results that did not contain association data. */
-export type LegacySavedMapOnlyUnfinishedData = 
+/** An old version of saved results that did not contain association data.
+ *  But also used internally. */
+export type BinaryMapOnlyUnfinishedData = 
     TreeringMapOnlyUnfinishedData
     | CellMapOnlyUnfinishedData
     | (TreeringMapOnlyUnfinishedData & CellMapOnlyUnfinishedData);
@@ -143,7 +143,7 @@ export type CARROT_Data = CellsAndTreeringsData
 | CellsOnlyData
 | TreeringMapOnlyUnfinishedData
 | TreeringsOnlyData
-| LegacySavedMapOnlyUnfinishedData
+| BinaryMapOnlyUnfinishedData
 | NoData
 
 
@@ -1327,8 +1327,8 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
 
     override async process(
         input: File, 
-        on_progress?: ((x: base.files.InputResultPair<File, CARROT_Result>
-    ) => void) | undefined): Promise<CARROT_Result> {
+        on_progress?: ((x: base.files.InputResultPair<File, CARROT_Result>) => void) | undefined
+    ): Promise<CARROT_Result> {
         on_progress?.({input, result:new this.ResultClass("processing")})
 
         // TODO: refactor

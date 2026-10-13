@@ -3,9 +3,11 @@
 
 ***
 
-Preliminary version download: [Windows Binaries](https://github.com/alexander-g/CARROT/releases/download/v2022-12-26/2022-12-26_16h39m22s_CARROT.zip)
 
-This is not the final version, expect updates in the future with better models and support for [shrub cross sections](https://arxiv.org/pdf/2212.03022).
+Desktop-version (Windows): [Downloads](http://github.com/alexander-g/CARROT/releases/latest)
+
+Web-version: [http://alexander-g.github.io/CARROT](http://alexander-g.github.io/CARROT)
+
 
 ***
 

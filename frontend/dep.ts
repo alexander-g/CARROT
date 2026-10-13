@@ -11,3 +11,7 @@ export { wasm_postprocessing_initialize,
     type PairedPaths,
     type AreaOfInterest,
 } from "./deps-worker.ts"
+
+
+
+export {default as onnxproto} from 'npm:onnx-proto'

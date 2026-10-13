@@ -9,6 +9,9 @@ on:
       release:
         type: boolean
         default: false
+      deploy:
+        type: boolean
+        default: false
 
 
 
@@ -17,7 +20,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
       - uses: actions/setup-python@v5
@@ -43,11 +46,36 @@ jobs:
         run: python build.py --zip
       
       - name: Archive binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binaries
           path: builds/*.zip
           if-no-files-found: error
+  
+  
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+      
+      - name: deno
+        run: |
+          ./deno.sh task cache
+      
+      - name: build
+        run: |
+          ./build-web.sh
+      
+      - name: Archive Build
+        uses: actions/upload-artifact@v7
+        with:
+          name: pagebuild
+          path: |
+            static/*
+          if-no-files-found: error
+      
 
 
   integration_tests:
@@ -56,12 +84,12 @@ jobs:
     timeout-minutes: 60
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         # NOTE: recursive currently required
         with:
           submodules: 'recursive'
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binaries
           path: build/
@@ -98,7 +126,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binaries
           path: build/
@@ -115,4 +143,39 @@ jobs:
           artifacts: "build/*.zip"
           prerelease: true
           tag: ${{ steps.set_tag.outputs.TAG }}
+
+  deploy:
+    if: ${{ github.event.inputs.deploy == 'true' }}
+    needs: build-web
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: pagebuild
+          path: artifact/
+
+      - name: Release
+        run: |
+          TAGNAME=v$(date +%F)
+          echo $TAGNAME
+
+          git fetch origin gh-pages
+          git checkout gh-pages
+          cp artifact/* ./
+          rm -r artifact
+          ls ./
+
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add ./*
+          git commit -m "$TAGNAME"
+          git tag --force $TAGNAME
+          git push origin gh-pages
+          git push --force origin --tags
+
 
