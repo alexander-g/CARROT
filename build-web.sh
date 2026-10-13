@@ -16,3 +16,6 @@ set -e
     --index_tsx=frontend/index.tsx                 \
     --extra_bundle=frontend/lib/carrot_worker.ts   \
     --copy_globs=frontend/css/treerings.css,frontend/favicon.ico,frontend/logo.svg
+
+# delete the uuid folder
+rm -r static/*-*-*-*
