@@ -166,7 +166,7 @@ jobs:
 
           git fetch origin gh-pages
           git checkout gh-pages
-          cp artifact/* ./
+          cp -r artifact/* ./
           rm -r artifact
           ls ./
 
