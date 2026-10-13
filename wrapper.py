@@ -9,8 +9,15 @@ if ".zip" in path_text or r"\temp\7z" in path_text:
     input("Press Enter to exit...")
     sys.exit(1)
 
-# else run normally
 
+# check for special characters, like umlauts, diactrics etc
+if any(ord(c) > 127 for c in path_text):
+    print("Error: Please make sure the path to this file does not contain special characters")
+    print(f'Current path: "{path_text}"')
+    input("Press Enter to exit...")
+    sys.exit(1)
+    
+# else run normally
 
 
 import subprocess
