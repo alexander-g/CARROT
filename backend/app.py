@@ -25,9 +25,8 @@ from backend.processing import (
     get_cellsmap_og_name,
     get_treeringsmap_name,
     get_treeringsmap_og_name,
-    sam_encode,
 )
-from backend.sam import sam3_encode_decode, ImageSize
+from backend.sam import sam3_encode_decode, sam_encode, sam_crop_encode, ImageSize
 
 
 
@@ -49,6 +48,7 @@ class App(BaseApp):
             return
         
         self.route('/sam_encode/<imagename>')(self.sam_encode)
+        self.route('/sam_encode_crop/<imagename>')(self.sam_encode_crop)
         self.route('/sam3/<imagename>')(self.sam3)
         self.route('/upload_model/<path:path>', methods=['POST'])(self.upload_model)
         self.route('/process/<imagename>')(self.process)
@@ -165,6 +165,24 @@ class App(BaseApp):
                 'X-SHAPE': ','.join(map(str, encoding.shape))
             }
         )
+    
+    def sam_encode_crop(self, imagename:str):
+        args      = flask.request.args
+        cropbox   = args.get('cropbox', type=json.loads)
+        if not isinstance(cropbox, list) or not len(cropbox) == 4:
+            flask.abort(400)
+
+        full_path = self.path_in_cache(imagename, abort_404=False)
+        embedding, _ = sam_crop_encode(full_path, tuple(cropbox))
+        return flask.Response(
+            embedding.tobytes(), 
+            mimetype = 'application/octet-stream',
+            headers  = {
+                'X-DTYPE': 'float32', 
+                'X-SHAPE': ','.join(map(str, embedding.shape))
+            }
+        )
+
     
     def upload_model(self, path:str):
         files = flask.request.files.getlist("files")

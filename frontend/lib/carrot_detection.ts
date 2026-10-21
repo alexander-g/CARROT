@@ -1171,6 +1171,12 @@ extends base.files.ProcessingModuleWithSettings<File, CARROT_Result, CARROT_Sett
     /** Process an image with the segment-anything encoder */
     abstract sam_encode(image:File): Promise<Float32Array|Error>;
 
+    /** Process an image crop with the segment-anything encoder */
+    abstract sam_encode_crop(
+        image:   File, 
+        cropbox: base.boxes.Box
+    ): Promise<Float32Array|Error>
+    
     /** Process an image with the segment-anything v3 model */
     abstract sam3_encode_decode(
         image:File, 
@@ -1424,6 +1430,30 @@ export class CARROT_RemoteBackend extends CARROT_Backend {
         // TODO: verify size of the buffer
         return new Float32Array(await sam_response.arrayBuffer())
     }
+
+    override async sam_encode_crop(
+        image:   File, 
+        cropbox: base.boxes.Box
+    ): Promise<Float32Array | Error> {
+        const upload_ok:Response|Error = 
+            await base.util.upload_file_no_throw(image, `${this.#base_url}/file_upload`)
+        if(upload_ok instanceof Error)
+            return upload_ok as Error
+        
+        const boxtuple:[number,number,number,number] = 
+            [cropbox.x0, cropbox.y0, cropbox.x1, cropbox.y1]
+        const boxtuple_str:string = JSON.stringify(boxtuple)
+        const GET_params:string = 
+            new URLSearchParams({cropbox:boxtuple_str}).toString()
+        const url:string = `${this.#base_url}sam_encode_crop/${image.name}?${GET_params}`
+        const sam_response:Response|Error = await base.util.fetch_no_throw(url)
+        if(sam_response instanceof Error)
+            return sam_response as Error
+        
+        // TODO: verify size of the buffer
+        return new Float32Array(await sam_response.arrayBuffer())
+    }
+
 
     override async sam3_encode_decode(
         image: File, 
