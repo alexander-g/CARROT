@@ -100,6 +100,7 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             } }
             onMouseDown = {this.on_mouse_down}
             //onKeyDown={console.log}  // TODO: 'escape' to cancel
+            preserveAspectRatio = "xMinYMin slice"
         >
             { this.props.$aoi_edit_active.value ? null : treerings_svg }
             
