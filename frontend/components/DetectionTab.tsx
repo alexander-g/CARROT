@@ -121,6 +121,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             <TreeringsSVGOverlay 
                 ref  = { this.svg_overlay_ref }
                 size = { this.$og_imagesize.value ?? {height:0, width:0} }
+                display_size = { this.$imagesize.value ?? {height:0, width:0} }
                 $result = { this.props.$result }
                 $scale  = { this.$scale }
                 $visible = { this.$overlays_visible }

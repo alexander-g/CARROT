@@ -15,8 +15,11 @@ export type PointPair = [Point,Point];
 type Vector = base.util.Vector;
 
 type TreeringsSVGOverlayProps = {
-    /** Size of the corresponding input image, for svg viewbox */
+    /** Original size of the input image (for coordinate reference) */
     size: base.util.ImageSize;
+
+    /** Display size of the image (after browser resize constraints) */
+    display_size: base.util.ImageSize;
 
     /** Result containing treerings to display */
     $result: Signal<CARROT_Result>;
@@ -47,7 +50,7 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
 
 
     $pt_per_px:Signal<number> = 
-        new Signal( this.props.size.width / globalThis.innerWidth );
+        new Signal( this.props.display_size.width / globalThis.innerWidth );
 
     /** Update $pt_per_px after scale changes **with some delay** 
      * to allow for HTML for layout changes. */
@@ -65,17 +68,25 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             ('px_per_um' in resultdata)? resultdata.px_per_um : 1.0;
         const og_size:base.util.ImageSize = 
             ('imagesize' in resultdata)? resultdata.imagesize: props.size;
+        const display_size:base.util.ImageSize = props.display_size;
         const aoi_coordinates:AoIRect|null = 
             ('aoi' in resultdata)? resultdata.aoi : null;
-        
-        const viewbox = `0 0 ${og_size.width} ${og_size.height}`
+
+        const scale_x:number = display_size.width / og_size.width;
+        const scale_y:number = display_size.height / og_size.height;
+
+        const scale_point = (p: Point): Point => ({ x: p.x * scale_x, y: p.y * scale_y });
+        const scale_points = (points: PointPair[]): PointPair[] => 
+            points.map(([p0, p1]) => [scale_point(p0), scale_point(p1)]);
+
+        const viewbox = `0 0 ${display_size.width} ${display_size.height}`
         const treerings_svg: JSX.Element[]|undefined = 
             treerings.map( 
                 (ring:TreeringInfo, i:number) => 
                     <TreeringComponent 
                         index           = { i }
-                        treering_points = { ring.coordinates } 
-                        imagesize       = { og_size } 
+                        treering_points = { scale_points(ring.coordinates) } 
+                        imagesize       = { display_size } 
                         parentsvg       = { this.ref.current }
                         year            = { ring.year }
                         on_new_year     = { this.on_new_year }
@@ -86,14 +97,14 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
                     /> 
             )
 
-        return <>
+return <>
         <svg 
             class   = "overlay" 
             viewBox = {viewbox} 
+            preserveAspectRatio = "xMinYMin meet"
             ref     = {this.ref}
             style   = { {
                 pointerEvents: props.$aoi_edit_active?.value ? 'all' : 'none',
-                // NOTE: cursor only active with pointer events
                 cursor: 'crosshair',
                 ...base.styles.overlay_css,
                 ...super.get_display_css(),
@@ -106,7 +117,7 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             {/* AoI overlay that is currently edited and not yet in the result */}
             <IntermediateAoIOverlay 
                 ref       = {this.drawing_aoi_ref} 
-                imagesize = {this.props.size}
+                imagesize = {display_size}
                 $active   = {this.props.$aoi_edit_active}
                 $pt_per_px  = { this.$pt_per_px }
                 px_per_um   = { px_per_um }
@@ -115,11 +126,11 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
             {
                 aoi_coordinates?
                 <AoIOverlay 
-                    $coordinates = { signals.computed( () => aoi_coordinates ) }
+                    $coordinates = { signals.computed( () => aoi_coordinates.map(scale_point) ) }
                     $pt_per_px   = { this.$pt_per_px }
                     px_per_um    = { px_per_um }
                     show_size_labels = {false}
-                    imagesize    = { this.props.size }
+                    imagesize    = { display_size }
                     $active = {
                         // active when not editing
                         signals.computed( () => !this.props.$aoi_edit_active.value ) 
@@ -135,7 +146,7 @@ class TreeringsSVGOverlay extends base.ui_util.MaybeHidden<TreeringsSVGOverlayPr
         const px_width:number = 
             this.ref.current?.getBoundingClientRect().width 
             ?? window.innerWidth * 0.9;
-        const pt_width:number  = this.props.size.width;
+        const pt_width:number  = this.props.display_size.width;
         const pt_per_px:number = pt_width / px_width
         if(isFinite(pt_per_px) && pt_per_px != 0)
             this.$pt_per_px.value  = pt_per_px;
