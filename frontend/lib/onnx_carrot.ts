@@ -220,7 +220,11 @@ export class CARROT_ONNXBackend extends CARROT_Backend {
         return backend.postprocess_result(r, input)
     }
 
-    override async sam_encode(image:File): Promise<Float32Array|Error> {
+
+    override async sam_encode_crop(
+        image:   File, 
+        cropbox: base.boxes.Box
+    ): Promise<Float32Array | Error> {
         return new Error('Not implemented')
     }
 

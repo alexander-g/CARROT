@@ -1,14 +1,16 @@
-import { run_backend_as_subprocess, wait_until_port_available } from "./util.ts"
+import { 
+    run_backend_as_subprocess, 
+    wait_until_port_available,
+    HARDCODED_HOST,
+    HARDCODED_PORT,
+    HARDCODED_URL,
+} from "./util.ts"
 import { fetch_no_throw, upload_file_no_throw  } from "../../base/frontend/ts/util.ts"
 import { CARROT_Result, CARROT_RemoteBackend } from "../../frontend/lib/carrot_detection.ts"
 import { CARROT_SettingsHandler, CARROT_Settings } from "../../frontend/lib/carrot_settings.ts";
 
 import { asserts, path } from "../testcases_deno/dep.ts"
 
-
-const HARDCODED_HOST = '127.0.0.1'
-const HARDCODED_PORT = 5000
-const HARDCODED_URL  = `http://${HARDCODED_HOST}:${HARDCODED_PORT}`
 
 
 const IMAGEPATH0: string = path.fromFileUrl(import.meta.resolve('../testcases/assets/ELD_QURO_635A_3_crop.jpg'))

@@ -108,6 +108,8 @@ jobs:
       - name: Run integration tests
         shell: bash
         run: |
+          ./onnx/fetch-onnxruntime-wasm.ts
+          
           MAINEXE=$(find build/extracted -name CARROT.exe)
           if [ -z "$MAINEXE" ]; then
             echo "CARROT.exe not found in artifact" >&2

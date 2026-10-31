@@ -9,8 +9,8 @@ import {
     type AoIRect,
     type Sam3Output,
 } from "../lib/carrot_detection.ts"
-import { TreeringsSVGOverlay, PointPair } from "./TreeringsSVGOverlay.tsx"
-import * as onnx_sam                      from "../lib/onnx_sam.ts"
+import { TreeringsSVGOverlay } from "./TreeringsSVGOverlay.tsx"
+import * as onnx_sam           from "../lib/onnx_sam.ts"
 import { CURSORS_B64, base64_to_uint8 }   from "./cursors.ts"
 import { 
     CARROT_ModelTypes, 
@@ -46,21 +46,6 @@ type GenericBackend = base.files.ProcessingModule<File, CARROT_Result>;
 /** Global sam onnx session because only one model */
 let sam_onnx_session:onnx_sam.ONNX_SamSession|undefined = undefined;
 
-const HARDCODED_SAM_DECODER_FILENAME = 'sam_decoder_vit_b.onnx'
-//const HARDCODED_SAM_MAX_SIZE_PX = 4096;
-const HARDCODED_SAM_MAX_SIZE_PX = 1024*5;
-
-
-const HARDCODED_SAM_URLS = {
-    'sam': {
-        'encoder': `https://github.com/alexander-g/segment-anything/releases/download/v2025-09-17/sam_encoder_vit_b.torchscript`,
-        'decoder': `https://github.com/alexander-g/segment-anything/releases/download/v2025-09-17/${HARDCODED_SAM_DECODER_FILENAME}`,
-    },
-    'sam3': {
-        'encoder': `https://github.com/alexander-g/sam3-onnx/releases/download/v2026-03-13/sam3_image_encoder_full.onnx`,
-        'decoder': `https://github.com/alexander-g/sam3-onnx/releases/download/v2026-03-13/sam3_decoder_with_box_feats.onnx`,
-    }
-}
 
 
 
@@ -102,7 +87,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
         }
     } )
 
-    $image_too_large_for_sam:Signal<boolean> = new Signal(false)
     $aoi_disabled:Readonly<Signal<boolean>>  = signals.computed(
         () => !('treeringmap' in this.props.$result.value.data)
     )
@@ -177,19 +161,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             <SAM_Modal ref={this.sam_modal_ref} />
         </>
     }
-
-    override async componentDidMount(): Promise<void> {
-        const imsize:base.util.ImageSize|Error = 
-            await base.imagetools.read_image_size(this.props.input)
-        if(imsize instanceof Error)
-            return
-        
-        this.$image_too_large_for_sam.value = (
-            imsize.width > HARDCODED_SAM_MAX_SIZE_PX
-            || imsize.height > HARDCODED_SAM_MAX_SIZE_PX
-        )
-    }
-
 
     /** CSS filter: brightness() of the input image 
      *  - set to 70% when a result gets loaded
@@ -269,7 +240,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 $active_modality   = { this.$active_editing_mode }
                 $drawing_mode      = { this.$drawing_mode }
                 $brush_size        = { this.$editing_brush_size }
-                $too_large_for_sam = { this.$image_too_large_for_sam }
                 $aoi_disabled      = { this.$aoi_disabled }
                 $can_show_sam3_propgate = { 
                     signals.computed( () => this.#$last_sam3_box.value != null ) 
@@ -374,8 +344,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     #sam_downloaded: boolean  = is_sam_downloaded($available_models.value).sam
     #sam3_downloaded: boolean = is_sam_downloaded($available_models.value).sam3
 
-    #sam_embeddings?:Float32Array;
-    #sam_orig_im_size?:base.util.ImageSize;
 
     /** Download SAM (v1) if needed, send image to flask for encoding, 
      *  create a new ONNX session for the decoder. */
@@ -388,9 +356,7 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             return;
         }
         
-        if(sam_onnx_session != undefined
-        && this.#sam_embeddings != undefined
-        && this.#sam_orig_im_size != undefined)
+        if(sam_onnx_session != undefined)
             return;
         
         // TODO: check if image not too large, incl px/um
@@ -416,37 +382,9 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             this.#sam_downloaded = ok;
         }
 
-
-        await this.sam_modal_ref.current!.show_initializing()
-        const imsize:base.util.ImageSize|Error = 
-            await base.imagetools.read_image_size(this.props.input)
-        if(imsize instanceof Error){
-            await this.sam_modal_ref.current!.show_error(
-                "Failed to initialize Segment Anything"
-            )
-            // back to previous mode
-            this.$drawing_mode.value = prev_mode;
-            return;
-        }
-        this.#sam_orig_im_size = imsize;
-        
-
-        // send input file to flask via CARROT_Backend
-        const embedding:Float32Array|Error = 
-            await backend.sam_encode(this.props.input)
-        if(embedding instanceof Error){
-            await this.sam_modal_ref.current!.show_error(
-                "Failed to initialize Segment Anything"
-            )
-            // back to previous mode
-            this.$drawing_mode.value = prev_mode;
-            return;
-        }
         
         const session:Error|onnx_sam.ONNX_SamSession = 
-            await onnx_sam.ONNX_SamSession.initialize(
-                `models/sam/${HARDCODED_SAM_DECODER_FILENAME}`
-            )
+            await onnx_sam.create_onnx_sam_session_hardcoded_from_local_origin()
         if(session instanceof Error){
             // TODO: unlock modal / show error
             console.error('ONNX session error: ', session)
@@ -458,11 +396,17 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             return
         }
 
-        this.#sam_embeddings = embedding;
+        await this.sam_modal_ref.current?.show_instructions('sam')
+
+        // global
         sam_onnx_session = session;
 
         await this.sam_modal_ref.current!.close()
     }
+
+
+
+    #sam3_instructions_already_shown:boolean = false
 
     /** Download SAM3 if needed. */
     on_sam3_activate = async (prev_mode:DrawingMode) => {
@@ -497,6 +441,11 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             this.#sam3_downloaded = ok;
         }
 
+        if(!this.#sam3_instructions_already_shown){
+            await this.sam_modal_ref.current?.show_instructions('sam3')
+            this.#sam3_instructions_already_shown = true
+        }
+
         await this.sam_modal_ref.current!.close()
     }
 
@@ -504,7 +453,8 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     async _download_sam(samversion:'sam'|'sam3'): Promise<boolean> {
         await this.sam_modal_ref.current!.show_downloading()
 
-        const {encoder:encoderurl, decoder:decoderurl} = HARDCODED_SAM_URLS[samversion];
+        const {encoder:encoderurl, decoder:decoderurl} = 
+            onnx_sam.HARDCODED_SAM_URLS[samversion];
 
         const encoderfilename:string = base.util.file_basename(encoderurl);
         const decoderfilename:string = base.util.file_basename(decoderurl)
@@ -546,27 +496,50 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     }
 
     on_sam1_new_box = async (box:Box) => {
-        // send embeddings + box to onnx
-        if(!this.#sam_embeddings 
-        || !sam_onnx_session 
-        || !this.#sam_orig_im_size){
+        if(!sam_onnx_session){
             console.error('Cannot run SAM decoder. Not preprocessed')
             return;
         }
 
-        const output:onnx_sam.SamOutput|Error = 
-            await sam_onnx_session.process_box(
-                this.#sam_embeddings, 
-                box, 
-                this.#sam_orig_im_size
+        const backend:GenericBackend|CARROT_Backend|null = 
+            this.props.$processingmodule.value
+        if(!(backend instanceof CARROT_Backend)){
+            console.error('Processing backend is not a CARROT backend', backend)
+            return;
+        }
+    
+        const box_at_og_size:Box =
+            onnx_sam.scale_box(box, this.$imagesize.value!, this.$og_imagesize.value!)
+
+        const result0:CARROT_Result = this.props.$result.value;
+        const output: onnx_sam.SamOutputOnCrop|Error = 
+            await onnx_sam.sam_process_box_on_crop(
+                this.props.input, 
+                box_at_og_size, 
+                sam_onnx_session, 
+                async (...args) => {
+                    // TODO: awkward
+                    this.props.$result.value = new CARROT_Result('processing');
+
+                    const output: Float32Array|Error = 
+                        await backend.sam_encode_crop(...args)
+                    
+                    return output
+                },
+                this.$imagesize.value!
             )
+        this.props.$result.value = result0
         if(output instanceof Error){
             console.error('SAM decoder returned error:', output)
             return;
         }
 
-        console.log('SAM:', box, output.mask.shape)
-        this.canvas_ref.current!.sam_paste_result(output.mask.data, this.#sam_orig_im_size)
+        console.log('SAM:', box, box_at_og_size, output.mask.shape)
+        this.canvas_ref.current!.sam_paste_result(
+            output.mask.data, 
+            onnx_sam.box_size(output.cropbox), 
+            output.cropbox
+        )
     }
 
     /** User has drawn a box in SAM3 mode, apply on a patch around the box first. */
@@ -756,8 +729,6 @@ type EditMenuProps = {
     /** Callback issued when user requests to set the AoI the the full image */
     on_set_aoi_to_full_image: () => void;
 
-    /** @input If true, the "Segment Anything" button will be disabled */
-    $too_large_for_sam: Readonly<Signal<boolean>>;
 
     /** @input If true, "Edit Area of Interest" will be disabled */
     $aoi_disabled: Readonly<Signal<boolean>>;
@@ -858,7 +829,6 @@ class EditMenu extends preact.Component<EditMenuProps> {
                     $active_modality   = {props.$active_modality}
                     $drawing_mode      = {props.$drawing_mode}
                     $brush_size        = {props.$brush_size}
-                    $too_large_for_sam = {props.$too_large_for_sam}
                     on_undo            = {props.on_undo}
                 />
                 <EditSubMenu_AoI 
@@ -934,8 +904,6 @@ type EditSubMenu_CellsTreeringsProps = {
     /** Called when user clicks on the undo button */
     on_undo: () => unknown;
 
-    /** @input If true, the "Segment Anything" button will be disabled */
-    $too_large_for_sam: Readonly<Signal<boolean>>;
 }
 
 /** A part of the editing menu that is only shown when editing cells or treerings */
@@ -950,9 +918,6 @@ class EditSubMenu_CellsTreerings extends preact.Component<EditSubMenu_CellsTreer
     brush_size_slider:preact.RefObject<HTMLDivElement> = preact.createRef()
 
     render(): JSX.Element {
-        const sam_button_tooltip:string|undefined = 
-            this.props.$too_large_for_sam.value? "Image too large" : undefined;
-
         return <>
             <MenuDivider $visible={this.$active} />
             <MenuDivider $visible={this.$active} />
@@ -984,8 +949,6 @@ class EditSubMenu_CellsTreerings extends preact.Component<EditSubMenu_CellsTreer
                     () => this.props.$drawing_mode.value == 'sam'
                 ) }
                 on_click = {() => this.props.$drawing_mode.value = 'sam'}
-                tooltip  = { sam_button_tooltip }
-                $disabled = { this.props.$too_large_for_sam }
             />
             <MenuButton 
                 label = 'Segment Anything 3'
@@ -1352,13 +1315,21 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
     }
 
 
-    sam_paste_result(mask:Uint8Array, size:ImageSize) {
+    sam_paste_result(mask:Uint8Array, size:ImageSize, box?:Box) {
         const ctx:CanvasRenderingContext2D|null = this.ref.current!.getContext('2d')
         if(ctx == null)
             return;
-        
-        const canvasdata:ImageData = ctx.getImageData(0, 0, size.width, size.height)
-        const rgba:Uint8ClampedArray = canvasdata.data;
+
+        const x0: number = box?.x0 ?? 0
+        const y0: number = box?.y0 ?? 0
+        const x1: number = box?.x1 ?? size.width
+        const y1: number = box?.y1 ?? size.height
+        const w: number = x1 - x0
+        const h: number = y1 - y0
+    
+        const canvasdata: ImageData = ctx.getImageData(x0, y0, w, h)
+        const rgba: Uint8ClampedArray = canvasdata.data;
+    
 
         //alpha blending
         for (let i:number = 0, p:number = 0; i < mask.length; i++, p += 4) {
@@ -1370,7 +1341,7 @@ class EditCanvas extends preact.Component<EditCanvasProps> {
             }
             // else transparent
         }
-        ctx.putImageData(canvasdata, 0, 0)
+        ctx.putImageData(canvasdata, x0, y0)
     }
 
     _paste_cursor(
@@ -1592,12 +1563,9 @@ function interpolate_points(a: Point, b: Point, step: number): Point[] {
 }
 
 
-type SAM_Modal_States = 
-    'download-required'|'downloading'|'initializing'|'error';
-
 type SAM_Modal_State = {
     samversion: 'sam'|'sam3',
-    state: 'download-required'|'downloading'|'initializing'|'error'
+    state: 'download-required'|'downloading'|'initializing'|'instructions'|'error'
 }
 
 
@@ -1629,6 +1597,8 @@ class SAM_Modal extends preact.Component {
                         this.#downloading_description() :
                     (state.state == 'initializing')?
                         this.#initializing_description() :
+                    (state.state == 'instructions')?
+                        this.#instructions_description(state.samversion) :
                     (state.state == 'error')?
                         this.#error_description() :
                         null
@@ -1647,7 +1617,8 @@ class SAM_Modal extends preact.Component {
                     style = { this.#$OK_visible.value }
                     type  = "button"
                 >
-                    Download
+                    {/* Download */}
+                    { this.#$OK_button_text }
                     <i class="angle right icon"></i>
                 </button>
             </div>
@@ -1680,7 +1651,7 @@ class SAM_Modal extends preact.Component {
         return promise;
     }
 
-    async show_downloading(percent:number = 0) {
+    show_downloading(percent:number = 0) {
         this.$state.value = {
             state:'downloading',
             samversion: this.$state.value.samversion
@@ -1705,6 +1676,24 @@ class SAM_Modal extends preact.Component {
             onDeny:    () => false,
             onApprove: () => false,
         }).modal('show')
+    }
+
+    show_instructions(samversion:'sam'|'sam3') {
+        this.$state.value = {
+            state:'instructions',
+            samversion: samversion
+        };;
+
+        const promise = new Promise(
+            (resolve: (value:boolean) => void) => {
+                $(this.ref.current).modal({
+                    closable: true, 
+                    onDeny:    () => resolve(false),
+                    onApprove: () => resolve(false),
+                }).modal('show');
+            }
+        )
+        return promise;
     }
 
     close() {
@@ -1804,6 +1793,53 @@ class SAM_Modal extends preact.Component {
         </div>
     }
 
+    #instructions_description_sam1(): JSX.Element {
+        return <div 
+            class = "description" 
+            style = {{
+                width:   '100%',
+                display: 'flex',
+                flexDirection: 'column'
+            }}
+        >
+            Instructions:
+            <div class="ui bulleted list">
+                <div class="item">Drag to draw a box around a cell</div>
+                <div class="item">Image area around the box will get encoded </div>
+                <div class="item">Subsequent nearby boxes will be processed almost instantly</div>
+            </div>
+        </div>
+    }
+
+    #instructions_description_sam3(): JSX.Element {
+        return <div 
+            class = "description" 
+            style = {{
+                width:   '100%',
+                display: 'flex',
+                flexDirection: 'column'
+            }}
+        >
+            Instructions:
+            <div class="ui bulleted list">
+                <div class="item">Drag to draw a box around a cell</div>
+                <div class="item">All visually similar nearby cells will be detected</div>
+                <div class="item">Use the 'Propagate' button to apply to the full image</div>
+            </div>
+        </div>
+    }
+
+    #instructions_description(samversion:'sam'|'sam3'): JSX.Element {
+        if(samversion == 'sam3')
+            return this.#instructions_description_sam3()
+        else if(samversion == 'sam')
+            return this.#instructions_description_sam1()
+        else {
+            console.log(`Error: unexpected sam version "${samversion}"`)
+            return <div/>
+        }
+    }
+
     #$cancel_visible:Readonly<Signal<JSX.CSSProperties>> = signals.computed(
         () => { 
             return {
@@ -1820,8 +1856,16 @@ class SAM_Modal extends preact.Component {
             return {
                 display: base.ui_util.boolean_to_display_css(
                     this.$state.value.state == 'download-required'
+                    || this.$state.value.state == 'instructions'
                 )
             }
+        }
+    )
+
+    #$OK_button_text: Readonly<Signal<string>> = signals.computed(
+        () => {
+            return (this.$state.value.state == 'download-required') 
+                    ? 'Download' : 'Continue'
         }
     )
 }

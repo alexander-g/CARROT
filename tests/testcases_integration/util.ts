@@ -5,6 +5,13 @@ import { wait } from "../../base/tests/testcases_deno/util.ts";
 export { wait };
 
 
+export const HARDCODED_HOST = '127.0.0.1'
+export const HARDCODED_PORT = 5000
+export const HARDCODED_URL  = `http://${HARDCODED_HOST}:${HARDCODED_PORT}`
+
+
+
+
 const DEFAULT_CMD: string[] = ['python', '-u', 'main.py']
 const CMD: string[] = resolve_cmd(
     Deno.env.get('CMD'),
