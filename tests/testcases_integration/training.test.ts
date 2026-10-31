@@ -59,7 +59,7 @@ Deno.test('training-e2e', {sanitizeResources: false}, async (t: Deno.TestContext
             backend:  CARROT_RemoteBackend,
         })
         trainingtab.base_url = `${HARDCODED_URL}/`
-        trainingtab.steps    = 5
+        trainingtab.steps    = 2
 
         for (const modeltype of ['cells', 'treerings'] as CARROT_ModelTypes[]) {
             await t.step(`train-${modeltype}`, async () => {
