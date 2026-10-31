@@ -27,15 +27,6 @@ jobs:
         with:
           python-version: '3.13'
           cache: 'pip' # caching pip dependencies
-
-      - name: WORKAROUND UNTIL I HAVE A BETTER SOLUTION
-        run: |
-          pwd
-          ls
-          ls carrot_ml
-          ls carrot_ml/ultralytics
-          cp -r traininglib_/traininglib ./traininglib
-          ls traininglib/datalib.py
       
       - name: Install requirements
         run: |

@@ -43,6 +43,7 @@ rc = subprocess.call(' '.join([
     '--exclude-module=tkinter',
     '--hidden-import=ultralytics',
     f'--paths={os.path.abspath("carrot_ml/ultralytics/")}',
+    f'--paths={os.path.abspath("traininglib_/")}',
     '--exclude-module=_bootlocale',
     '--additional-hooks-dir=./hooks',
     '--icon=frontend/favicon.ico',
