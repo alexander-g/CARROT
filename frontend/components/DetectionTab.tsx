@@ -396,11 +396,17 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             return
         }
 
-        // this.#sam_embeddings = embedding;
+        await this.sam_modal_ref.current?.show_instructions('sam')
+
+        // global
         sam_onnx_session = session;
 
         await this.sam_modal_ref.current!.close()
     }
+
+
+
+    #sam3_instructions_already_shown:boolean = false
 
     /** Download SAM3 if needed. */
     on_sam3_activate = async (prev_mode:DrawingMode) => {
@@ -433,6 +439,11 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
                 return;
             }
             this.#sam3_downloaded = ok;
+        }
+
+        if(!this.#sam3_instructions_already_shown){
+            await this.sam_modal_ref.current?.show_instructions('sam3')
+            this.#sam3_instructions_already_shown = true
         }
 
         await this.sam_modal_ref.current!.close()
@@ -485,16 +496,6 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
     }
 
     on_sam1_new_box = async (box:Box) => {
-        // TODO: no embeddings is acceptable now, need to check if we have embeddings for this box, if not compute new ones
-
-        // // send embeddings + box to onnx
-        // if(!this.#sam_embeddings 
-        // || !sam_onnx_session 
-        // || !this.#sam_orig_im_size){
-        //     console.error('Cannot run SAM decoder. Not preprocessed')
-        //     return;
-        // }
-
         if(!sam_onnx_session){
             console.error('Cannot run SAM decoder. Not preprocessed')
             return;
@@ -507,28 +508,38 @@ class CARROT_Content extends base.SingleFileContent<CARROT_Result>{
             return;
         }
     
+        const box_at_og_size:Box =
+            onnx_sam.scale_box(box, this.$imagesize.value!, this.$og_imagesize.value!)
 
-        // const output:onnx_sam.SamOutput|Error = 
-        //     await sam_onnx_session.process_box(
-        //         this.#sam_embeddings, 
-        //         box, 
-        //         this.#sam_orig_im_size
-        //     )
+        const result0:CARROT_Result = this.props.$result.value;
         const output: onnx_sam.SamOutputOnCrop|Error = 
             await onnx_sam.sam_process_box_on_crop(
                 this.props.input, 
-                box, 
+                box_at_og_size, 
                 sam_onnx_session, 
-                backend.sam_encode_crop.bind(backend)
+                async (...args) => {
+                    // TODO: awkward
+                    this.props.$result.value = new CARROT_Result('processing');
+
+                    const output: Float32Array|Error = 
+                        await backend.sam_encode_crop(...args)
+                    
+                    return output
+                },
+                this.$imagesize.value!
             )
+        this.props.$result.value = result0
         if(output instanceof Error){
             console.error('SAM decoder returned error:', output)
             return;
         }
 
-        console.log('SAM:', box, output.mask.shape)
-        //this.canvas_ref.current!.sam_paste_result(output.mask.data, this.#sam_orig_im_size)
-        this.canvas_ref.current!.sam_paste_result(output.mask.data, onnx_sam.box_size(output.cropbox), output.cropbox)
+        console.log('SAM:', box, box_at_og_size, output.mask.shape)
+        this.canvas_ref.current!.sam_paste_result(
+            output.mask.data, 
+            onnx_sam.box_size(output.cropbox), 
+            output.cropbox
+        )
     }
 
     /** User has drawn a box in SAM3 mode, apply on a patch around the box first. */
@@ -1552,12 +1563,9 @@ function interpolate_points(a: Point, b: Point, step: number): Point[] {
 }
 
 
-type SAM_Modal_States = 
-    'download-required'|'downloading'|'initializing'|'error';
-
 type SAM_Modal_State = {
     samversion: 'sam'|'sam3',
-    state: 'download-required'|'downloading'|'initializing'|'error'
+    state: 'download-required'|'downloading'|'initializing'|'instructions'|'error'
 }
 
 
@@ -1589,6 +1597,8 @@ class SAM_Modal extends preact.Component {
                         this.#downloading_description() :
                     (state.state == 'initializing')?
                         this.#initializing_description() :
+                    (state.state == 'instructions')?
+                        this.#instructions_description(state.samversion) :
                     (state.state == 'error')?
                         this.#error_description() :
                         null
@@ -1607,7 +1617,8 @@ class SAM_Modal extends preact.Component {
                     style = { this.#$OK_visible.value }
                     type  = "button"
                 >
-                    Download
+                    {/* Download */}
+                    { this.#$OK_button_text }
                     <i class="angle right icon"></i>
                 </button>
             </div>
@@ -1640,7 +1651,7 @@ class SAM_Modal extends preact.Component {
         return promise;
     }
 
-    async show_downloading(percent:number = 0) {
+    show_downloading(percent:number = 0) {
         this.$state.value = {
             state:'downloading',
             samversion: this.$state.value.samversion
@@ -1665,6 +1676,24 @@ class SAM_Modal extends preact.Component {
             onDeny:    () => false,
             onApprove: () => false,
         }).modal('show')
+    }
+
+    show_instructions(samversion:'sam'|'sam3') {
+        this.$state.value = {
+            state:'instructions',
+            samversion: samversion
+        };;
+
+        const promise = new Promise(
+            (resolve: (value:boolean) => void) => {
+                $(this.ref.current).modal({
+                    closable: true, 
+                    onDeny:    () => resolve(false),
+                    onApprove: () => resolve(false),
+                }).modal('show');
+            }
+        )
+        return promise;
     }
 
     close() {
@@ -1764,6 +1793,53 @@ class SAM_Modal extends preact.Component {
         </div>
     }
 
+    #instructions_description_sam1(): JSX.Element {
+        return <div 
+            class = "description" 
+            style = {{
+                width:   '100%',
+                display: 'flex',
+                flexDirection: 'column'
+            }}
+        >
+            Instructions:
+            <div class="ui bulleted list">
+                <div class="item">Drag to draw a box around a cell</div>
+                <div class="item">Image area around the box will get encoded </div>
+                <div class="item">Subsequent nearby boxes will be processed almost instantly</div>
+            </div>
+        </div>
+    }
+
+    #instructions_description_sam3(): JSX.Element {
+        return <div 
+            class = "description" 
+            style = {{
+                width:   '100%',
+                display: 'flex',
+                flexDirection: 'column'
+            }}
+        >
+            Instructions:
+            <div class="ui bulleted list">
+                <div class="item">Drag to draw a box around a cell</div>
+                <div class="item">All visually similar nearby cells will be detected</div>
+                <div class="item">Use the 'Propagate' button to apply to the full image</div>
+            </div>
+        </div>
+    }
+
+    #instructions_description(samversion:'sam'|'sam3'): JSX.Element {
+        if(samversion == 'sam3')
+            return this.#instructions_description_sam3()
+        else if(samversion == 'sam')
+            return this.#instructions_description_sam1()
+        else {
+            console.log(`Error: unexpected sam version "${samversion}"`)
+            return <div/>
+        }
+    }
+
     #$cancel_visible:Readonly<Signal<JSX.CSSProperties>> = signals.computed(
         () => { 
             return {
@@ -1780,8 +1856,16 @@ class SAM_Modal extends preact.Component {
             return {
                 display: base.ui_util.boolean_to_display_css(
                     this.$state.value.state == 'download-required'
+                    || this.$state.value.state == 'instructions'
                 )
             }
+        }
+    )
+
+    #$OK_button_text: Readonly<Signal<string>> = signals.computed(
+        () => {
+            return (this.$state.value.state == 'download-required') 
+                    ? 'Download' : 'Continue'
         }
     )
 }

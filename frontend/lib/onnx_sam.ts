@@ -51,7 +51,8 @@ export async function sam_process_box_on_crop<C extends NewEmbeddingFn>(
     image:             File, 
     box:               Box,
     onnx_sam_session:  ONNX_SamSession,
-    new_embeddings_fn: C & (Parameters<C> extends Parameters<NewEmbeddingFn> ? unknown : never)
+    new_embeddings_fn: C & (Parameters<C> extends Parameters<NewEmbeddingFn> ? unknown : never),
+    displaysize?:      ImageSize,
 ): Promise<SamOutputOnCrop|Error> {
     const imsize:ImageSize|Error = await base.imagetools.read_image_size(image)
     if(imsize instanceof Error)
@@ -87,8 +88,12 @@ export async function sam_process_box_on_crop<C extends NewEmbeddingFn>(
         cropbox = cache_for_this_file[cached_box_index]!.box
     }
 
-    const box_relative_to_crop: Box = box_relative_to_box(box, cropbox)
-    const cropboxsize: base.util.Size = box_size(cropbox)
+    displaysize = displaysize ?? imsize
+    const box_at_displaysize: Box     = scale_box(box, imsize, displaysize)
+    const cropbox_at_displaysize: Box = scale_box(cropbox, imsize, displaysize)
+    const box_relative_to_crop: Box   = 
+        box_relative_to_box(box_at_displaysize, cropbox_at_displaysize)
+    const cropboxsize: base.util.Size = box_size(cropbox_at_displaysize)
     const result: SamOutput|Error = await onnx_sam_session.process_box(
         embedding, 
         box_relative_to_crop, 
@@ -97,7 +102,7 @@ export async function sam_process_box_on_crop<C extends NewEmbeddingFn>(
     if(result instanceof Error)
         return result as Error
 
-    return {cropbox, mask:result.mask}
+    return {cropbox:cropbox_at_displaysize, mask:result.mask}
 }
 
 type EmbeddingAndBox = {
@@ -361,4 +366,14 @@ function clip_box_to_imagesize(box:Box, imagesize:ImageSize): Box {
     }
 }
 
+export function scale_box(box:Box, from_size:ImageSize, to_size:ImageSize): Box {
+    const scale_w:number = to_size.width / from_size.width
+    const scale_h:number = to_size.height / from_size.height
+    return {
+        x0: box.x0 * scale_w,
+        y0: box.y0 * scale_h,
+        x1: box.x1 * scale_w,
+        y1: box.y1 * scale_h,
+    }
+}
 
