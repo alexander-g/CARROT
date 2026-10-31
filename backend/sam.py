@@ -13,6 +13,7 @@ from traininglib import datalib
 from base.backend import GLOBALS
 from base.backend.processing import ImageSize
 from base.backend.pubsub import PubSub
+from base.backend.paths import path_to_main_module
 
 
 # x0,y0,x1,y1
@@ -32,7 +33,8 @@ HARDCODED_SAM_ENCODER_PATH = 'models/sam/sam_encoder_vit_b.torchscript'
 
 def sam_encode(imagepath:str) -> np.ndarray:
     '''Encode a full image with the SAM (v1) encoder and return image features'''
-    sam_encoder = torch.jit.load(HARDCODED_SAM_ENCODER_PATH)
+    encoderpath = os.path.join(path_to_main_module(), HARDCODED_SAM_ENCODER_PATH)
+    sam_encoder = torch.jit.load(encoderpath)
     imagedata   = torch.as_tensor(
         np.array(PIL.Image.open(imagepath).convert('RGB'))
     )
@@ -45,7 +47,8 @@ def sam_crop_encode(imagepath:str, cropbox:Box) -> tp.Tuple[np.ndarray, Box]:
     full_image  = PIL.Image.open(imagepath).convert('RGB')
     image_size  = ImageSize(*full_image.size)
     image_crop  = full_image.crop(cropbox)
-    sam_encoder = torch.jit.load(HARDCODED_SAM_ENCODER_PATH)
+    encoderpath = os.path.join(path_to_main_module(), HARDCODED_SAM_ENCODER_PATH)
+    sam_encoder = torch.jit.load(encoderpath)
     imagedata   = torch.as_tensor( np.array(image_crop) )
     with GLOBALS.processing_lock:
         features = sam_encoder(imagedata).detach().numpy()

@@ -15,7 +15,7 @@ ALLOW_RUN=$( [[
 ]] && echo 'cmd.exe,taskkill' || echo 'python' )
 
 ./deno.sh test                  \
-    --allow-read                \
+    --allow-read=./             \
     --allow-write=/tmp          \
     --allow-env=CMD             \
     --allow-run=$ALLOW_RUN      \
