@@ -33,6 +33,7 @@ def start_training(
     trainingtype: tp.Literal['cells', 'treerings'], 
     cachedir:     str,
     settings,
+    steps:        tp.Optional[int] = None,
 ):
     locked = GLOBALS.processing_lock.acquire(blocking=False)
     if not locked:
@@ -54,7 +55,7 @@ def start_training(
             yolo_pretrained = find_or_download_yolo_pretrained(
                 treerings_yolo.YOLO26S_SEMANTIC_PRETRAINED_WEIGHTS_URL
             )
-            steps = 1000
+            steps = steps or 1000
             newmodel = treerings_yolo.start_training_from_carrot(
                 filepairs,
                 cachedir,
@@ -68,7 +69,7 @@ def start_training(
             yolo_pretrained = find_or_download_yolo_pretrained(
                 cells_yolo.YOLO26S_SEGMENT_PRETRAINED_WEIGHTS_URL
             )
-            steps = 100
+            steps = steps or 100
             newmodel = cells_yolo.start_training_from_carrot(
                 filepairs,
                 cachedir,

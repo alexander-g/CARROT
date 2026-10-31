@@ -128,13 +128,14 @@ class App(BaseApp):
             flask.abort(404)
         
         cachedir = os.path.join(self.cache_path, 'training')
-        # learning rate & epochs, ne?
+        steps    = options.get('steps', None)
         ok = backend.training.start_training(
             imagefiles, 
             targetfiles, 
             trainingtype,
             cachedir,
-            self.settings
+            self.settings,
+            steps = steps,
         )
         return ok
 
