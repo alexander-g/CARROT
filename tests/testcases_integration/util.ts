@@ -37,10 +37,10 @@ export async function run_backend_as_subprocess(
         new Deno.Command(
             cmd[0]!,
             {
-                args: cmd.slice(1),
-                cwd: opts?.cwd,
-                env: opts?.env ?? {'LD_LIBRARY_PATH': ''},
-                stdin: 'null',
+                args:   cmd.slice(1),
+                cwd:    opts?.cwd,
+                env:    {'LD_LIBRARY_PATH': '', ...opts?.env},
+                stdin:  'null',
                 stdout: 'inherit',
                 stderr: 'inherit',
             },

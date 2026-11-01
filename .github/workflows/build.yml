@@ -19,23 +19,30 @@ jobs:
   build:
     runs-on: windows-latest
 
+    outputs:
+      carrot_ml_uptodate: ${{ steps.set_flag.outputs.carrot_ml_uptodate }}
+    
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
+
+      - name: check carrot-ml version
+        shell: bash
+        run: |
+          cd carrot_ml
+          git fetch origin
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then 
+            echo "carrot-ml repo not up to date"; 
+            echo "carrot_ml_uptodate=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "carrot_ml_uptodate=1" >> "$GITHUB_OUTPUT"
+          fi
+      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
           cache: 'pip' # caching pip dependencies
-
-      - name: WORKAROUND UNTIL I HAVE A BETTER SOLUTION
-        run: |
-          pwd
-          ls
-          ls carrot_ml
-          ls carrot_ml/ultralytics
-          cp -r traininglib_/traininglib ./traininglib
-          ls traininglib/datalib.py
       
       - name: Install requirements
         run: |
@@ -180,4 +187,18 @@ jobs:
           git push origin gh-pages
           git push --force origin --tags
 
+
+  # as own job for minimal permissions
+  comment-in-pr:
+    needs: build
+    if: ${{ github.event_name == 'pull_request' && needs.build.outputs.carrot_ml_uptodate == 0 }}
+    runs-on: ubuntu-latest
+    permissions: 
+      pull-requests: write 
+    steps:
+      - name: Comment to PR
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          message: "carrot-ml submodule is not up-to-date"
+          comment-tag: carrotmlcheck
 

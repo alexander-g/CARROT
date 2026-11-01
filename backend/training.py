@@ -16,7 +16,7 @@ from base.backend.app import get_models_path
 from carrot_ml.src import treeringmodel as treerings
 from carrot_ml.src import maskrcnn_celldetection as cells
 
-sys.path.append('./carrot_ml/ultralytics/')
+sys.path.append('./carrot_ml/vendor/ultralytics/')
 from carrot_ml.src import treerings_yolo
 from carrot_ml.src import cells_yolo
 
@@ -33,6 +33,7 @@ def start_training(
     trainingtype: tp.Literal['cells', 'treerings'], 
     cachedir:     str,
     settings,
+    steps:        tp.Optional[int] = None,
 ):
     locked = GLOBALS.processing_lock.acquire(blocking=False)
     if not locked:
@@ -49,12 +50,16 @@ def start_training(
         px_per_mm = settings.micrometer_factor * 1000
         os.makedirs(cachedir, exist_ok=True)
         outputfile = _get_temporary_modelname(cachedir, trainingtype)
+        kw = {'_min_epochs': int(os.environ.get('CARROT_TRAINING_MIN_EPOCHS', 0))} \
+            if 'CARROT_TRAINING_MIN_EPOCHS' in os.environ \
+            else {}
+        
 
         if trainingtype == 'treerings':
             yolo_pretrained = find_or_download_yolo_pretrained(
                 treerings_yolo.YOLO26S_SEMANTIC_PRETRAINED_WEIGHTS_URL
             )
-            steps = 1000
+            steps = steps or 1000
             newmodel = treerings_yolo.start_training_from_carrot(
                 filepairs,
                 cachedir,
@@ -63,12 +68,13 @@ def start_training(
                 steps  = steps,
                 progress_callback = training_progress_callback,
                 weightsfile       = yolo_pretrained,
+                **kw
             )
         elif trainingtype == 'cells':
             yolo_pretrained = find_or_download_yolo_pretrained(
                 cells_yolo.YOLO26S_SEGMENT_PRETRAINED_WEIGHTS_URL
             )
-            steps = 100
+            steps = steps or 100
             newmodel = cells_yolo.start_training_from_carrot(
                 filepairs,
                 cachedir,
@@ -77,6 +83,7 @@ def start_training(
                 steps  = steps,
                 progress_callback = training_progress_callback,
                 weightsfile       = yolo_pretrained,
+                **kw
             )
         else:
             raise NotImplementedError(trainingtype)
