@@ -16,7 +16,7 @@ from base.backend.app import get_models_path
 from carrot_ml.src import treeringmodel as treerings
 from carrot_ml.src import maskrcnn_celldetection as cells
 
-sys.path.append('./carrot_ml/ultralytics/')
+sys.path.append('./carrot_ml/vendor/ultralytics/')
 from carrot_ml.src import treerings_yolo
 from carrot_ml.src import cells_yolo
 
