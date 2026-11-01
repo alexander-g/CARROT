@@ -50,6 +50,10 @@ def start_training(
         px_per_mm = settings.micrometer_factor * 1000
         os.makedirs(cachedir, exist_ok=True)
         outputfile = _get_temporary_modelname(cachedir, trainingtype)
+        kw = {'_min_epochs': int(os.environ.get('CARROT_TRAINING_MIN_EPOCHS', 0))} \
+            if 'CARROT_TRAINING_MIN_EPOCHS' in os.environ \
+            else {}
+        
 
         if trainingtype == 'treerings':
             yolo_pretrained = find_or_download_yolo_pretrained(
@@ -64,6 +68,7 @@ def start_training(
                 steps  = steps,
                 progress_callback = training_progress_callback,
                 weightsfile       = yolo_pretrained,
+                **kw
             )
         elif trainingtype == 'cells':
             yolo_pretrained = find_or_download_yolo_pretrained(
@@ -78,6 +83,7 @@ def start_training(
                 steps  = steps,
                 progress_callback = training_progress_callback,
                 weightsfile       = yolo_pretrained,
+                **kw
             )
         else:
             raise NotImplementedError(trainingtype)

@@ -74,5 +74,7 @@ Deno.test('training-e2e', {sanitizeResources: false}, async (t: Deno.TestContext
                 asserts.assertEquals(appstate.$settings.value?.active_models[modeltype], new_modelname)
             })
         }
-    })
+    },
+    // options:
+    {env:{'CARROT_TRAINING_MIN_EPOCHS':'5'}})
 })
