@@ -151,55 +151,6 @@ def convert_box_to_relative_cxcywh(box:Box, relative_to:Box) -> Box:
     return (cx/W, cy/H, w/W, h/H) 
 
 
-def find_suitable_cropbox(
-    imagesize: ImageSize, 
-    objectbox: Box, 
-    acceptable_fraction: tp.Tuple[float, float] = (0.05, 0.15)
-) -> IntBox:
-    '''Compute a box that will be used to crop the original image and the
-       objectbox will be  with the acceptable range of the crop size.'''
-    im_w, im_h = imagesize.width, imagesize.height
-    ox0, oy0, ox1, oy1 = objectbox
-
-    oW = abs(ox1 - ox0)
-    oH = abs(oy1 - oy0)
-
-    min_w = im_w * min(acceptable_fraction)
-    max_w = im_w * max(acceptable_fraction)
-    min_h = im_h * min(acceptable_fraction)
-    max_h = im_h * max(acceptable_fraction)
-
-    crop_w:float = im_w
-    crop_h:float = im_h
-    
-    if oW < min_w:
-        crop_w = oW / max(acceptable_fraction)
-    if oW > max_w:
-        crop_w = oW / min(acceptable_fraction)
-    if oH < min_h:
-        crop_h = oH / max(acceptable_fraction)
-    if oH > max_w:
-        crop_h = oH / min(acceptable_fraction)
-    
-
-    crop_w = np.clip(crop_w, 1, im_w)
-    crop_h = np.clip(crop_h, 1, im_h)
-
-    if crop_w == im_w and crop_h == im_h:
-        return (0, 0, im_w, im_h)
-    
-    center_x = (ox0 + ox1) / 2
-    center_y = (oy0 + oy1) / 2
-    crop_x0  = center_x - crop_w / 2
-    crop_x0  = int( np.clip(crop_x0, 0, im_w) )
-    crop_y0  = center_y - crop_h / 2
-    crop_y0  = int( np.clip(crop_y0, 0, im_h) )
-
-    crop_x1  = int( crop_x0 + crop_w )
-    crop_y1  = int( crop_y0 + crop_h )
-
-    return (crop_x0, crop_y0, crop_x1, crop_y1)
-
 
 def find_suitable_grid(
     imagesize: ImageSize, 

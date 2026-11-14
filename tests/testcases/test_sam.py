@@ -4,7 +4,6 @@ sys.path.append('./')
 
 from backend.sam import (
     find_suitable_grid,
-    find_suitable_cropbox,
     postprocess_sam3_masks,
 )
 from base.backend.processing import ImageSize
@@ -12,27 +11,6 @@ from base.backend.processing import ImageSize
 import numpy as np
 
 
-
-def test_suitable_cropbox():
-    cropbox0 = find_suitable_cropbox(
-        imagesize = ImageSize(width=1600, height=1200),
-        objectbox = (100,100,260,260),
-        acceptable_fraction = (0.1, 0.2),
-    )
-    # full image
-    assert cropbox0 == (0,0, 1600, 1200)
-
-
-    cropbox1 = find_suitable_cropbox(
-        imagesize = ImageSize(width=1600, height=1200),
-        objectbox = (100,100,200,200),
-        acceptable_fraction = (0.1, 0.2),
-    )
-    assert (np.array(cropbox1) >= 0).all()
-    assert cropbox1[2] > cropbox1[0]
-    assert cropbox1[3] > cropbox1[1]
-    assert 0.1 <= 100/(cropbox1[2] - cropbox1[0]) <= 0.2
-    assert 0.1 <= 100/(cropbox1[3] - cropbox1[1]) <= 0.2
 
 
 def test_suitable_grid():

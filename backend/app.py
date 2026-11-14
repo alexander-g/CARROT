@@ -47,7 +47,6 @@ class App(BaseApp):
         if self.is_reloader:
             return
         
-        self.route('/sam_encode/<imagename>')(self.sam_encode)
         self.route('/sam_encode_crop/<imagename>')(self.sam_encode_crop)
         self.route('/sam3/<imagename>')(self.sam3)
         self.route('/upload_model/<path:path>', methods=['POST'])(self.upload_model)
@@ -154,18 +153,6 @@ class App(BaseApp):
         self.settings.active_models[trainingtype] = newname
         return 'OK'
     
-    def sam_encode(self, imagename:str):
-        full_path = self.path_in_cache(imagename, abort_404=False)
-        encoding = sam_encode(full_path)
-
-        return flask.Response(
-            encoding.tobytes(), 
-            mimetype = 'application/octet-stream',
-            headers  = {
-                'X-DTYPE': 'float32', 
-                'X-SHAPE': ','.join(map(str, encoding.shape))
-            }
-        )
     
     def sam_encode_crop(self, imagename:str):
         args      = flask.request.args
