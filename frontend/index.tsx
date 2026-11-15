@@ -1,7 +1,8 @@
-import { base, JSX } from "./dep.ts"
+import { base, JSX, preact, Signal } from "./dep.ts"
 
 import { CARROT_State } from "./components/state.ts";
 import { CARROT_DetectionTab } from "./components/DetectionTab.tsx";
+import { LandingScreen } from "./components/LandingScreen.tsx";
 import { CARROT_SettingsHandler, CARROT_WebSettingsHandler } from "./lib/carrot_settings.ts";
 import { 
     CARROT_Backend,
@@ -63,6 +64,22 @@ const CARROT_WebBaseApp = base.create_App({
 
 function WithOverrides(Base:typeof CARROT_DesktopBaseApp|typeof CARROT_WebBaseApp) {
     return class CARROT_App extends Base {
+        $landing_visible: Signal<boolean> = new Signal(true)
+
+        override render(): JSX.Element {
+            const body: JSX.Element = super.render()
+            return preact.cloneElement(
+                body,
+                {},
+                body.props.children,
+                <LandingScreen
+                    $visible        = { this.$landing_visible }
+                    input_filetypes = { this.appstate.InputClass.filetypes }
+                    on_new_files    = { this.on_new_files.bind(this) }
+                />,
+            )
+        }
+
         // overriding to pass processingmodule to appstate.set_files + more
         override async on_new_files(files: FileList | File[]): Promise<boolean> {
             const backend = 
@@ -76,8 +93,10 @@ function WithOverrides(Base:typeof CARROT_DesktopBaseApp|typeof CARROT_WebBaseAp
                 is_CARROT_Backend(backend)? backend : undefined;
             const changed:boolean = await this.appstate.set_files(files, carrotbackend)
 
-            if(changed && this.appstate.$files.value.length > 0)
+            if(changed && this.appstate.$files.value.length > 0) {
+                this.$landing_visible.value = false
                 this.settings_modal.current!.show_modal(/*cancel_ok=*/false)
+            }
             
             return changed;
         }
